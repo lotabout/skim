@@ -1,0 +1,7 @@
+[package]
+name = "fzf-rs"
+version = "0.1.0"
+authors = ["Mark Wallace <lotabout@gmail.com>"]
+
+[dependencies]
+ncurses = "*"
