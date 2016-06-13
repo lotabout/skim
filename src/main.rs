@@ -30,6 +30,12 @@ enum Event{
     EV_MATCHER_RESET_QUERY,
     EV_MATCHER_UPDATE_PROCESS,
     EV_MATCHER_FINISHED,
+    EV_QUERY_MOVE_CURSOR,
+    EV_QUERY_CHANGE,
+    EV_INPUT_TOGGLE,
+    EV_INPUT_UP,
+    EV_INPUT_DOWN,
+    EV_INPUT_SELECT,
 }
 
 // matcher will receive two events:
@@ -49,7 +55,7 @@ struct Matcher {
     item_pos: usize,
     query: String,
 }
-    
+
 
 impl Matcher {
     pub fn new(rx_source: Receiver<String>, tx_output: Sender<String>,
@@ -95,7 +101,9 @@ impl Matcher {
             for (e, val) in (*self.eb_req).wait() {
                 match e {
                     Event::EV_MATCHER_NEW_ITEM => { self.read_new_item();}
-                    Event::EV_MATCHER_RESET_QUERY => {self.reset_query(*val.downcast().unwrap());}
+                    Event::EV_MATCHER_RESET_QUERY => {
+                        self.reset_query(&val.downcast::<String>().unwrap());
+                    }
                     _ => {}
                 }
             }
@@ -106,90 +114,49 @@ impl Matcher {
 }
 
 //==============================================================================
-struct Display {
-    max_y: i32,
-    max_x: i32,
+// Input: fetch the query string, handle key event
+
+struct Input {
+    query: Vec<char>,
+    index: usize, // index in chars
+    pos: usize, // position in bytes
+    eb: Arc<EventBox<Event>>,
 }
 
-impl Display {
-    pub fn new() -> Self {
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
-
-        Display {
-            max_y: max_y,
-            max_x: max_x,
-        }
-    }
-
-    pub fn print_info(& self, msg: &str) {
-        // XX/YY file(s)
-        mv(self.max_y-2, 0);
-        clrtoeol();
-        addstr(msg);
-    }
-
-    pub fn print_query(&self, query: &str, cursor: i32) {
-        // > query
-        mv(self.max_y-1, 0);
-        clrtoeol();
-        printw("> ");
-        printw(query);
-        mv(self.max_y-1, cursor+2);
-    }
-
-    pub fn prepare_print_line(&self) {
-        mv(self.max_y-2, 2);
-    }
-
-    pub fn print_line(&self, line: &str) {
-        let y = getcury(stdscr);
-        mv(y, 2);
-        addstr(line);
-        mv(y-1, 2);
-    }
-
-    pub fn refresh(&self) {
-        refresh();
-    }
-}
-
-//==============================================================================
-// Queryer: fetch the query string
-
-
-#[derive(Debug)]
-struct Queryer {
-    query: String,
-    pos: u32, // point to the last character of the query string
-}
-
-impl Queryer {
-    pub fn new() -> Self {
-        Queryer {
-            query: String::new(),
+impl Input {
+    pub fn new(eb: Arc<EventBox<Event>>) -> Self {
+        Input {
+            query: Vec::new(),
+            index: 0,
             pos: 0,
+            eb: eb,
         }
+    }
+
+    fn get_query(&self) -> String {
+        self.query.iter().cloned().collect::<String>()
     }
 
     fn add_char (&mut self, ch: char) {
-        let orig = mem::replace(&mut self.query, String::new());
-        self.query.push_str(orig.chars().take(self.pos as usize).collect::<String>().as_ref());
-        self.query.push(ch);
-        self.query.push_str(orig.chars().skip(self.pos as usize).collect::<String>().as_ref());
-        self.pos += 1;
+        self.query.insert(self.index, ch);
+        self.index += 1;
+        self.pos += if ch.len_utf8() > 1 {2} else {1};
     }
 
     fn delete_char(&mut self) {
-        if self.pos == 0 {
+        if self.index == 0 {
             return;
         }
 
-        let orig = mem::replace(&mut self.query, String::new());
-        self.query.push_str(orig.chars().take((self.pos-1) as usize).collect::<String>().as_ref());
-        self.query.push_str(orig.chars().skip(self.pos as usize).collect::<String>().as_ref());
-        self.pos -= 1;
+        let ch = self.query.remove(self.index-1);
+        self.index -= 1;
+        self.pos -= if ch.len_utf8() > 1 {2} else {1};
+    }
+
+    pub fn run(&mut self) {
+        loop {
+            self.handle_char();
+        }
     }
 
     // fetch input from curses and turn it into query.
@@ -207,8 +174,14 @@ impl Queryer {
                 /* Enable attributes and output message. */
                 let ch = char::from_u32(c as u32).expect("Invalid char");
                 match ch {
-                    '\x7F' => { self.delete_char(); } // backspace
-                    ch => { self.add_char(ch); } // other characters
+                    '\x7F' => { // backspace
+                        self.delete_char();
+                        self.eb.set(Event::EV_QUERY_CHANGE, Box::new((self.get_query(), self.pos)));
+                    }
+                    ch => { // other characters
+                        self.add_char(ch);
+                        self.eb.set(Event::EV_QUERY_CHANGE, Box::new((self.get_query(), self.pos)));
+                    }
                 }
             }
 
@@ -228,7 +201,7 @@ struct Reader {
     tx: Sender<String>,    // sender to send the string read from command output
 }
 
-    
+
 
 impl Reader {
 
@@ -282,6 +255,102 @@ impl Reader {
 }
 
 //==============================================================================
+// Model: data structure for display the result
+struct Model {
+    query: String,
+    query_cursor: i32,
+    num_matched: u64,
+    num_total: u64,
+    matched_items: Vec<String>,
+    item_start_pos: i64,
+    line_cursor: i32,
+    max_y: i32,
+    max_x: i32,
+}
+
+impl Model {
+    pub fn new() -> Self {
+        let mut max_y = 0;
+        let mut max_x = 0;
+        getmaxyx(stdscr, &mut max_y, &mut max_x);
+
+        Model {
+            query: String::new(),
+            query_cursor: 0,
+            num_matched: 0,
+            num_total: 0,
+            matched_items: Vec::new(),
+            item_start_pos: 0,
+            line_cursor: 0,
+            max_y: max_y,
+            max_x: max_x,
+        }
+    }
+
+    pub fn update_query(&mut self, query: String, cursor: i32) {
+        self.query = query;
+        self.query_cursor = cursor;
+    }
+
+    pub fn update_process_info(&mut self, matched: u64, total: u64) {
+        self.num_matched = matched;
+        self.num_total = total;
+    }
+
+    pub fn push_item(&mut self, item: String) {
+        self.matched_items.push(item);
+    }
+
+    pub fn move_line_cursor(&mut self, diff: i32) {
+        self.line_cursor += diff;
+    }
+
+    pub fn print_query(&self) {
+        // > query
+        mv(self.max_y-1, 0);
+        clrtoeol();
+        printw("> ");
+        addstr(&self.query);
+        mv(self.max_y-1, self.query_cursor+2);
+    }
+
+    pub fn print_info(&self) {
+        mv(self.max_y-2, 0);
+        clrtoeol();
+        printw(format!("  {}/{}", self.num_matched, self.num_total).as_str());
+    }
+
+    pub fn print_items(&self) {
+        let mut y = self.max_y - 2;
+        for item in self.matched_items.iter() {
+            mv(y, 2);
+
+            let shown_str: String = item.chars().take((self.max_x-1) as usize).collect();
+            addstr(&shown_str);
+
+            y -= 1;
+            if y <= 0 {
+                break;
+            }
+        }
+    }
+
+    pub fn refresh(&self) {
+        refresh();
+    }
+
+    pub fn display(&self) {
+        self.print_items();
+        self.print_info();
+        self.print_query();
+        self.refresh();
+    }
+}
+
+//==============================================================================
+// Display: for printing the result
+
+//==============================================================================
 
 fn main() {
     // initialize ncurses
@@ -292,16 +361,22 @@ fn main() {
     keypad(stdscr, true);
     noecho();
 
+    let mut model = Model::new();
 
     let eb = Arc::new(EventBox::new());
-    let eb_clone_reader = eb.clone();
-    let eb_clone_matcher = eb.clone();
     let (tx_source, rx_source) = channel();
     let (tx_matched, rx_matched) = channel();
+
+    let eb_clone_reader = eb.clone();
     let mut reader = Reader::new(Some(&"find ."), eb_clone_reader, tx_source);
+
     let eb_matcher = Arc::new(EventBox::new());
     let eb_matcher_clone = eb_matcher.clone();
+    let eb_clone_matcher = eb.clone();
     let mut matcher = Matcher::new(rx_source, tx_matched, eb_matcher_clone, eb_clone_matcher);
+
+    let eb_clone_input = eb.clone();
+    let mut input = Input::new(eb_clone_input);
 
     // start running
     thread::spawn(move || {
@@ -312,71 +387,44 @@ fn main() {
         matcher.run();
     });
 
-    let mut items = vec![];
+    thread::spawn(move || {
+        input.run();
+    });
 
     loop {
         for (e, val) in eb.wait() {
             match e {
                 Event::EV_READER_NEW => {
                     //printw("READER_NEW!\n");
-                    eb_matcher.set(Event::EV_MATCHER_NEW_ITEM, Box::new(0));
+                    eb_matcher.set(Event::EV_MATCHER_NEW_ITEM, Box::new(true));
                 }
+
                 Event::EV_READER_FIN => {
                     //printw("READER_FIN\n");
                 }
+
                 Event::EV_MATCHER_UPDATE_PROCESS => {
-                    printw(format!("UPDATE_PROCESS: {}\n", items.len()).as_str());
                     while let Ok(string) = rx_matched.try_recv() {
-                        items.push(string);
+                        model.push_item(string);
                     }
                 }
+
+                Event::EV_QUERY_CHANGE => {
+                    let (query, pos) : (String, usize) = *val.downcast().unwrap();
+                    let modified = query == model.query;
+                    model.update_query(query.clone(), pos as i32);
+
+                    if modified {
+                        eb_matcher.set(Event::EV_MATCHER_RESET_QUERY, Box::new(model.query.clone()));
+                    }
+                }
+
                 _ => {
                     printw(format!("{}\n", e as i32).as_str());
                 }
             }
         }
-
-        // print items
-        let mut y = 0;
-        for string in items.iter() {
-            mv(y, 0);
-            printw(string);
-            y += 1;
-        }
-
+        model.display();
         refresh();
     };
-
-    //let disp = Display::new();
-    //disp.init();
-    //disp.print_info(&matcher);
-    //disp.print_query(&matcher);
-    //disp.refresh();
-
-    //let mut queryer = Queryer::new();
-
-    //loop {
-        //queryer.handle_char();
-        //addstr(&queryer.query);
-        //addstr(format!("pos: {}", queryer.pos).as_ref());
-        //addch('\n' as u64);
-        //refresh();
-    //}
-
-    // displayer
-    //let displayer_mtx_item = mtx_item.clone();
-    //let displayer = thread::spawn(move || {
-        //loop {
-            //let mut items = displayer_mtx_item.lock().unwrap();
-            //if (*items).len() > 0 {
-                //println!("Got: {:?}", *items);
-                //*items = vec![];
-            //}
-        //}
-    //});
-
-    //getch();
-    //endwin();
-    //th_reader.join();
-    //displayer.join();
 }
