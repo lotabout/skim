@@ -29,23 +29,22 @@ use std::sync::{Condvar, Mutex};
 use std::collections::HashMap;
 use std::any::Any;
 use std::mem;
-
-pub type EventType = i32;
+use std::hash::Hash;
 
 pub type Value = Box<Any + 'static + Send>;
-pub type Events = HashMap<EventType, Value>;
+pub type Events<T> = HashMap<T, Value>;
 
-struct EventData {
-    events: Events,
-    ignore: Events,
+struct EventData<T> {
+    events: Events<T>,
+    ignore: Events<T>,
 }
 
-pub struct EventBox {
-    mutex: Mutex<EventData>,
+pub struct EventBox<T> {
+    mutex: Mutex<EventData<T>>,
     cond: Condvar,
 }
 
-impl EventBox {
+impl<T: Hash + Eq + Copy> EventBox<T> {
     pub fn new() -> Self {
         EventBox {
             mutex: Mutex::new(EventData{events: HashMap::new(), ignore: HashMap::new()}),
@@ -55,7 +54,7 @@ impl EventBox {
 
     /// wait: wait for an event(any) to fire
     /// if any event is triggered, run callback on events vector
-    pub fn wait(&self) -> Events {
+    pub fn wait(&self) -> Events<T> {
         let mut data = self.mutex.lock().unwrap();
         let events = mem::replace(&mut data.events, HashMap::new());
         let num_of_events = events.len();
@@ -66,7 +65,7 @@ impl EventBox {
     }
 
     /// set: fires an event
-    pub fn set(&self, e: EventType, value: Value) {
+    pub fn set(&self, e: T, value: Value) {
         let mut data = self.mutex.lock().unwrap();
         {
             let val = data.events.entry(e).or_insert(Box::new(0));
@@ -84,13 +83,13 @@ impl EventBox {
     }
 
     // peek at the event box to check whether event had been set or not
-    pub fn peek(&self, event: EventType) -> bool {
+    pub fn peek(&self, event: T) -> bool {
         let data = self.mutex.lock().unwrap();
         data.events.contains_key(&event)
     }
 
     // remove events from ignore table
-    pub fn watch(&self, events: &Vec<EventType>) {
+    pub fn watch(&self, events: &Vec<T>) {
         let mut data = self.mutex.lock().unwrap();
         for e in events {
             data.ignore.remove(e);
@@ -98,14 +97,14 @@ impl EventBox {
     }
 
     // add events from ignore table
-    pub fn unwatch(&self, events: &Vec<EventType>) {
+    pub fn unwatch(&self, events: &Vec<T>) {
         let mut data = self.mutex.lock().unwrap();
         for e in events {
             data.ignore.insert(*e, Box::new(true));
         }
     }
 
-    pub fn wait_for(&self, event: EventType) -> Value {
+    pub fn wait_for(&self, event: T) -> Value {
         'event_found: loop {
             for (e, val) in self.wait() {
                 if e == event {
@@ -114,6 +113,11 @@ impl EventBox {
             }
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        let data = self.mutex.lock().unwrap();
+        data.events.len() == 0
+    }
 }
 
 #[cfg(test)]
@@ -121,7 +125,6 @@ mod test {
     use super::*;
     use std::thread;
     use std::sync::{Arc, Mutex};
-    use std::mem;
     use std::time::Duration;
 
     #[test]
@@ -132,8 +135,8 @@ mod test {
         // their thread number, the sum up the value and compare it in
         // the main thread.
 
-        let mut eb = Arc::new(EventBox::new());
-        let mut counter = Arc::new(Mutex::new(0));
+        let eb = Arc::new(EventBox::new());
+        let counter = Arc::new(Mutex::new(0));
         for i in 1..(NUM_OF_EVENTS+1) {
             let eb_clone = eb.clone();
             let counter_clone = counter.clone();
@@ -146,15 +149,16 @@ mod test {
 
         // wait till all events are set
         loop {
-            let mut count = counter.lock().unwrap();
+            thread::sleep(Duration::from_millis(100));
+            let count = counter.lock().unwrap();
             if *count == NUM_OF_EVENTS {
                 break;
             }
-            thread::sleep(Duration::from_millis(100));
         }
 
+
         let mut total: i32 = 0;
-        for (e, val) in eb.wait() {
+        for (_, val) in eb.wait() {
             total += *val.downcast().unwrap();
         }
 
@@ -163,8 +167,8 @@ mod test {
 
     #[test]
     fn test_wait_for() {
-        let mut eb = Arc::new(EventBox::new());
-        let mut eb2 = eb.clone();
+        let eb = Arc::new(EventBox::new());
+        let eb2 = eb.clone();
 
         thread::spawn(move || {
             eb2.set(10, Box::new(20));
@@ -177,14 +181,14 @@ mod test {
     #[test]
     fn test_unwatch_set() {
         const NUM_OF_EVENTS: i32 = 4;
-        let mut eb = Arc::new(EventBox::new());
+        let eb = Arc::new(EventBox::new());
 
         // this time, we ignore event NO. NUM_OF_EVENTS
         // note that unwatch will not trigger the event notification, but the
         // value are actually set.
         eb.unwatch(&vec![NUM_OF_EVENTS]);
 
-        let mut counter = Arc::new(Mutex::new(0));
+        let counter = Arc::new(Mutex::new(0));
         for i in 1..(NUM_OF_EVENTS+1) {
             let eb_clone = eb.clone();
             let counter_clone = counter.clone();
@@ -197,15 +201,15 @@ mod test {
 
         // wait till all events are set
         loop {
-            let mut count = counter.lock().unwrap();
+            thread::sleep(Duration::from_millis(100));
+            let count = counter.lock().unwrap();
             if *count == NUM_OF_EVENTS {
                 break;
             }
-            thread::sleep(Duration::from_millis(100));
         }
 
         let mut total: i32 = 0;
-        for (e, val) in eb.wait() {
+        for (_, val) in eb.wait() {
             total += *val.downcast().unwrap();
         }
 
@@ -226,7 +230,7 @@ mod test {
         let which_one_clone = which_one.clone();
 
         let wait = thread::spawn(move || {
-            for (e, val) in eb.wait() {
+            for (_, _) in eb.wait() {
                 let mut data = which_one.lock().unwrap();
                 assert_eq!(2, *data);
             }
