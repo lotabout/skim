@@ -24,27 +24,26 @@ struct FZF {
 //==============================================================================
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 enum Event{
-    EV_READER_NEW,
-    EV_READER_FIN,
-    EV_MATCHER_NEW_ITEM,
-    EV_MATCHER_RESET_QUERY,
-    EV_MATCHER_UPDATE_PROCESS,
-    EV_MATCHER_FINISHED,
-    EV_QUERY_MOVE_CURSOR,
-    EV_QUERY_CHANGE,
-    EV_INPUT_TOGGLE,
-    EV_INPUT_UP,
-    EV_INPUT_DOWN,
-    EV_INPUT_SELECT,
+    EvReaderNewItem,
+    EvReaderFinished,
+    EvMatcherNewItem,
+    EvMatcherResetQuery,
+    EvMatcherUpdateProcess,
+    EvMatcherFinished,
+    EvQueryChange,
+    EvInputToggle,
+    EvInputUp,
+    EvInputDown,
+    EvInputSelect,
 }
 
 // matcher will receive two events:
-// 1. EV_MATCHER_NEW_ITEM, to reset the input strings
-// 2. EV_MATCHER_RESET_QUERY, to interrupt current processing.
+// 1. EvMatcherNewItem, to reset the input strings
+// 2. EvMatcherResetQuery, to interrupt current processing.
 //
 // will send two events:
-// 1. EV_MATCHER_UPDATE_PROCESS, to notify the matched/total items
-// 2. EV_MATCHER_FINISHED.
+// 1. EvMatcherUpdateProcess, to notify the matched/total items
+// 2. EvMatcherFinished.
 
 struct Matcher {
     rx_source: Receiver<String>, // channel to retrieve strings from reader
@@ -53,6 +52,7 @@ struct Matcher {
     eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
     items: Vec<String>,
     item_pos: usize,
+    num_matched: u64,
     query: String,
 }
 
@@ -60,23 +60,37 @@ struct Matcher {
 impl Matcher {
     pub fn new(rx_source: Receiver<String>, tx_output: Sender<String>,
                eb_req: Arc<EventBox<Event>>, eb_notify: Arc<EventBox<Event>>) -> Self {
-        Matcher{
+        Matcher {
             rx_source: rx_source,
             tx_output: tx_output,
             eb_req: eb_req,
             eb_notify: eb_notify,
             items: Vec::new(),
             item_pos: 0,
+            num_matched: 0,
             query: String::new(),
         }
+    }
+
+    fn match_str(&self, item: &str) -> bool {
+        if self.query == "" {
+            return true;
+        }
+
+        item.starts_with(&self.query)
     }
 
     pub fn process(&mut self) {
         for string in self.items[self.item_pos..].into_iter() {
             // process the matcher
             //self.tx_output.send(string.clone());
-            (*self.eb_notify).set(Event::EV_MATCHER_UPDATE_PROCESS, Box::new(0));
-            self.tx_output.send(string.clone());
+            if self.match_str(string) {
+                self.num_matched += 1;
+                self.tx_output.send(string.clone());
+            }
+
+
+            (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, self.items.len() as u64)));
 
             self.item_pos += 1;
             if (self.item_pos % 100) == 99 && !self.eb_req.is_empty() {
@@ -94,14 +108,16 @@ impl Matcher {
     fn reset_query(&mut self, query: &str) {
         self.query.clear();
         self.query.push_str(query);
+        self.num_matched = 0;
+        self.item_pos = 0;
     }
 
     pub fn run(&mut self) {
         loop {
             for (e, val) in (*self.eb_req).wait() {
                 match e {
-                    Event::EV_MATCHER_NEW_ITEM => { self.read_new_item();}
-                    Event::EV_MATCHER_RESET_QUERY => {
+                    Event::EvMatcherNewItem => { self.read_new_item();}
+                    Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
                     }
                     _ => {}
@@ -176,11 +192,16 @@ impl Input {
                 match ch {
                     '\x7F' => { // backspace
                         self.delete_char();
-                        self.eb.set(Event::EV_QUERY_CHANGE, Box::new((self.get_query(), self.pos)));
+                        self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
                     }
+
+                    '\x0A' => { // enter
+                        self.eb.set(Event::EvInputSelect, Box::new(true));
+                    }
+
                     ch => { // other characters
                         self.add_char(ch);
-                        self.eb.set(Event::EV_QUERY_CHANGE, Box::new((self.get_query(), self.pos)));
+                        self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
                     }
                 }
             }
@@ -248,9 +269,9 @@ impl Reader {
                 }
                 Err(_err) => { break; }
             }
-            self.eb.set(Event::EV_READER_NEW, Box::new(0));
+            self.eb.set(Event::EvReaderNewItem, Box::new(0));
         }
-        self.eb.set(Event::EV_READER_FIN, Box::new(0));
+        self.eb.set(Event::EvReaderFinished, Box::new(0));
     }
 }
 
@@ -301,6 +322,10 @@ impl Model {
         self.matched_items.push(item);
     }
 
+    pub fn clear_items(&mut self) {
+        self.matched_items.clear();
+    }
+
     pub fn move_line_cursor(&mut self, diff: i32) {
         self.line_cursor += diff;
     }
@@ -308,16 +333,14 @@ impl Model {
     pub fn print_query(&self) {
         // > query
         mv(self.max_y-1, 0);
-        clrtoeol();
-        printw("> ");
+        addstr("> ");
         addstr(&self.query);
         mv(self.max_y-1, self.query_cursor+2);
     }
 
     pub fn print_info(&self) {
         mv(self.max_y-2, 0);
-        clrtoeol();
-        printw(format!("  {}/{}", self.num_matched, self.num_total).as_str());
+        addstr(format!("  {}/{}", self.num_matched, self.num_total).as_str());
     }
 
     pub fn print_items(&self) {
@@ -340,6 +363,7 @@ impl Model {
     }
 
     pub fn display(&self) {
+        erase();
         self.print_items();
         self.print_info();
         self.print_query();
@@ -391,32 +415,36 @@ fn main() {
         input.run();
     });
 
-    loop {
+    'outer: loop {
         for (e, val) in eb.wait() {
             match e {
-                Event::EV_READER_NEW => {
-                    //printw("READER_NEW!\n");
-                    eb_matcher.set(Event::EV_MATCHER_NEW_ITEM, Box::new(true));
+                Event::EvReaderNewItem | Event::EvReaderFinished => {
+                    eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
                 }
 
-                Event::EV_READER_FIN => {
-                    //printw("READER_FIN\n");
-                }
+                Event::EvMatcherUpdateProcess => {
+                    let (matched, total) : (u64, u64) = *val.downcast().unwrap();
+                    model.update_process_info(matched, total);
 
-                Event::EV_MATCHER_UPDATE_PROCESS => {
                     while let Ok(string) = rx_matched.try_recv() {
                         model.push_item(string);
                     }
                 }
 
-                Event::EV_QUERY_CHANGE => {
+                Event::EvQueryChange => {
                     let (query, pos) : (String, usize) = *val.downcast().unwrap();
-                    let modified = query == model.query;
+                    let modified = query != model.query;
                     model.update_query(query.clone(), pos as i32);
 
                     if modified {
-                        eb_matcher.set(Event::EV_MATCHER_RESET_QUERY, Box::new(model.query.clone()));
+                        model.clear_items();
+                        eb_matcher.set(Event::EvMatcherResetQuery, Box::new(model.query.clone()));
                     }
+                }
+
+                Event::EvInputSelect => {
+                    // break out of the loop and output the selected item.
+                    break 'outer;
                 }
 
                 _ => {
@@ -427,4 +455,6 @@ fn main() {
         model.display();
         refresh();
     };
+
+    endwin();
 }
