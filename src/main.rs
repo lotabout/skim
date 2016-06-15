@@ -6,23 +6,17 @@ mod item;
 
 use std::io::{stdin, Read, BufRead, BufReader};
 use std::error::Error;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 use std::thread;
-use std::process::{Command, Stdio, exit};
+use std::process::{Command, Stdio};
 use std::char;
-use std::mem;
-use std::sync::mpsc::{Sender, Receiver, channel};
+use std::cmp;
+use std::sync::mpsc::{Sender, channel};
 use util::eventbox::EventBox;
 
 use ncurses::*;
 
 use item::{Item, MatchedItem};
-
-//==============================================================================
-
-struct FZF {
-    query: String,
-}
 
 //==============================================================================
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -32,7 +26,6 @@ enum Event{
     EvMatcherNewItem,
     EvMatcherResetQuery,
     EvMatcherUpdateProcess,
-    EvMatcherFinished,
     EvQueryChange,
     EvInputToggle,
     EvInputUp,
@@ -88,7 +81,7 @@ impl Matcher {
             //self.tx_output.send(string.clone());
             if self.match_str(&item.text) {
                 self.num_matched += 1;
-                self.tx_output.send(MatchedItem::new(self.item_pos));
+                let _ = self.tx_output.send(MatchedItem::new(self.item_pos));
             }
 
 
@@ -175,8 +168,6 @@ impl Input {
     fn handle_char(&mut self) {
         let ch = wget_wch(stdscr);
 
-        let orig_query = self.query.clone();
-
         match ch {
             Some(WchResult::KeyCode(_)) => {
                 // will later handle readline-like shortcuts
@@ -195,6 +186,18 @@ impl Input {
                         self.eb.set(Event::EvInputSelect, Box::new(true));
                     }
 
+                    '\x09' => { // tab
+                        self.eb.set(Event::EvInputToggle, Box::new(true));
+                    }
+
+                    '\x10' => { // ctrl-p
+                        self.eb.set(Event::EvInputUp, Box::new(true));
+                    }
+
+                    '\x0E' => { // ctrl-n
+                        self.eb.set(Event::EvInputDown, Box::new(true));
+                    }
+
                     ch => { // other characters
                         self.add_char(ch);
                         self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
@@ -210,15 +213,11 @@ impl Input {
 //==============================================================================
 // Reader: fetch a list of lines from stdin or command output
 
-const READER_LINES_CACHED: usize = 100;
-
 struct Reader {
     cmd: Option<&'static str>, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
     tx: Sender<Item>,    // sender to send the string read from command output
 }
-
-
 
 impl Reader {
 
@@ -261,7 +260,7 @@ impl Reader {
                             input.pop();
                         }
                     }
-                    self.tx.send(Item::new(input));
+                    let _ = self.tx.send(Item::new(input));
                 }
                 Err(_err) => { break; }
             }
@@ -275,13 +274,14 @@ impl Reader {
 // Model: data structure for display the result
 struct Model {
     query: String,
-    query_cursor: i32,
+    query_cursor: i32,  // > qu<query_cursor>ery
     num_matched: u64,
     num_total: u64,
-    items: Arc<RwLock<Vec<Item>>>,
+    items: Arc<RwLock<Vec<Item>>>, // all items
     matched_items: Vec<MatchedItem>,
-    item_start_pos: i64,
-    line_cursor: i32,
+    item_cursor: usize, // the index of matched item currently highlighted.
+    line_cursor: usize, // line No.
+    item_start_pos: usize, // for screen scroll.
     max_y: i32,
     max_x: i32,
 }
@@ -299,11 +299,28 @@ impl Model {
             num_total: 0,
             items: Arc::new(RwLock::new(Vec::new())),
             matched_items: Vec::new(),
+            item_cursor: 0,
+            line_cursor: (max_y - 3) as usize,
             item_start_pos: 0,
-            line_cursor: 0,
             max_y: max_y,
             max_x: max_x,
         }
+    }
+
+    pub fn output(&self) {
+        let items = self.items.read().unwrap();
+        for item in items.iter() {
+            if item.selected {
+                println!("{}", item.text);
+            }
+        }
+        //println!("{:?}", items[self.matched_items[self.item_cursor].index].text);
+        //items[self.matched_items[self.item_cursor].index].selected = s;
+    }
+
+    pub fn toggle_select(&self, selected: Option<bool>) {
+        let mut items = self.items.write().unwrap();
+        items[self.matched_items[self.item_cursor].index].toggle_select(selected);
     }
 
     pub fn update_query(&mut self, query: String, cursor: i32) {
@@ -325,7 +342,29 @@ impl Model {
     }
 
     pub fn move_line_cursor(&mut self, diff: i32) {
-        self.line_cursor += diff;
+
+        let y = self.line_cursor as i32 + diff;
+        let item_y = cmp::max(0, self.item_cursor as i32 - diff);
+        let screen_height = (self.max_y - 3) as usize;
+
+        match y {
+            y if y < 0 => {
+                self.line_cursor = 0;
+                self.item_cursor = cmp::min(item_y as usize, self.matched_items.len()-1);
+                self.item_start_pos = self.item_cursor - screen_height;
+            }
+
+            y if y > screen_height as i32 => {
+                self.line_cursor = screen_height;
+                self.item_cursor = cmp::max(0, item_y as usize);
+                self.item_start_pos = self.item_cursor;
+            }
+
+            y => {
+                self.line_cursor = y as usize;
+                self.item_cursor = item_y as usize;
+            }
+        }
     }
 
     pub fn print_query(&self) {
@@ -341,17 +380,35 @@ impl Model {
         addstr(format!("  {}/{}", self.num_matched, self.num_total).as_str());
     }
 
+    fn print_item(&self, item: &Item) {
+        let shown_str: String = item.text.chars().take((self.max_x-1) as usize).collect();
+        if item.selected {
+            printw(">");
+        } else {
+            printw(" ");
+        }
+
+        addstr(&shown_str);
+    }
+
     pub fn print_items(&self) {
         let items = self.items.read().unwrap();
-        let mut y = self.max_y - 2;
-        for item in self.matched_items.iter() {
-            mv(y, 2);
 
-            let shown_str: String = items[item.index].text.chars().take((self.max_x-1) as usize).collect();
-            addstr(&shown_str);
+        let mut y = self.max_y - 3;
+        for matched in self.matched_items[self.item_start_pos..].into_iter() {
+            mv(y, 0);
+            let is_current_line = y == self.line_cursor as i32;
+
+            if is_current_line {
+                printw(">");
+            } else {
+                printw(" ");
+            }
+
+            self.print_item(&items[matched.index]);
 
             y -= 1;
-            if y <= 0 {
+            if y < 0 {
                 break;
             }
         }
@@ -430,8 +487,8 @@ fn main() {
                     let (matched, total) : (u64, u64) = *val.downcast().unwrap();
                     model.update_process_info(matched, total);
 
-                    while let Ok(matchedItem) = rx_matched.try_recv() {
-                        model.push_item(matchedItem);
+                    while let Ok(matched_item) = rx_matched.try_recv() {
+                        model.push_item(matched_item);
                     }
                 }
 
@@ -451,6 +508,17 @@ fn main() {
                     break 'outer;
                 }
 
+                Event::EvInputToggle => {
+                    model.toggle_select(None);
+                    model.move_line_cursor(1);
+                }
+                Event::EvInputUp=> {
+                    model.move_line_cursor(-1);
+                }
+                Event::EvInputDown=> {
+                    model.move_line_cursor(1);
+                }
+
                 _ => {
                     printw(format!("{}\n", e as i32).as_str());
                 }
@@ -461,4 +529,5 @@ fn main() {
     };
 
     endwin();
+    model.output();
 }
