@@ -2,10 +2,11 @@ extern crate libc;
 extern crate ncurses;
 
 mod util;
+mod item;
 
 use std::io::{stdin, Read, BufRead, BufReader};
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::process::{Command, Stdio, exit};
 use std::char;
@@ -14,6 +15,8 @@ use std::sync::mpsc::{Sender, Receiver, channel};
 use util::eventbox::EventBox;
 
 use ncurses::*;
+
+use item::{Item, MatchedItem};
 
 //==============================================================================
 
@@ -46,11 +49,10 @@ enum Event{
 // 2. EvMatcherFinished.
 
 struct Matcher {
-    rx_source: Receiver<String>, // channel to retrieve strings from reader
-    tx_output: Sender<String>,   // channel to send output to
+    tx_output: Sender<MatchedItem>,   // channel to send output to
     eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
     eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
-    items: Vec<String>,
+    items: Arc<RwLock<Vec<Item>>>,
     item_pos: usize,
     num_matched: u64,
     query: String,
@@ -58,14 +60,13 @@ struct Matcher {
 
 
 impl Matcher {
-    pub fn new(rx_source: Receiver<String>, tx_output: Sender<String>,
+    pub fn new(items: Arc<RwLock<Vec<Item>>>, tx_output: Sender<MatchedItem>,
                eb_req: Arc<EventBox<Event>>, eb_notify: Arc<EventBox<Event>>) -> Self {
         Matcher {
-            rx_source: rx_source,
             tx_output: tx_output,
             eb_req: eb_req,
             eb_notify: eb_notify,
-            items: Vec::new(),
+            items: items,
             item_pos: 0,
             num_matched: 0,
             query: String::new(),
@@ -81,27 +82,22 @@ impl Matcher {
     }
 
     pub fn process(&mut self) {
-        for string in self.items[self.item_pos..].into_iter() {
+        let items = self.items.read().unwrap();
+        for item in items[self.item_pos..].into_iter() {
             // process the matcher
             //self.tx_output.send(string.clone());
-            if self.match_str(string) {
+            if self.match_str(&item.text) {
                 self.num_matched += 1;
-                self.tx_output.send(string.clone());
+                self.tx_output.send(MatchedItem::new(self.item_pos));
             }
 
 
-            (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, self.items.len() as u64)));
+            (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64)));
 
             self.item_pos += 1;
             if (self.item_pos % 100) == 99 && !self.eb_req.is_empty() {
                 break;
             }
-        }
-    }
-
-    fn read_new_item(&mut self) {
-        while let Ok(string) = self.rx_source.try_recv() {
-            self.items.push(string);
         }
     }
 
@@ -116,7 +112,7 @@ impl Matcher {
         loop {
             for (e, val) in (*self.eb_req).wait() {
                 match e {
-                    Event::EvMatcherNewItem => { self.read_new_item();}
+                    Event::EvMatcherNewItem => {}
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
                     }
@@ -219,14 +215,14 @@ const READER_LINES_CACHED: usize = 100;
 struct Reader {
     cmd: Option<&'static str>, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
-    tx: Sender<String>,    // sender to send the string read from command output
+    tx: Sender<Item>,    // sender to send the string read from command output
 }
 
 
 
 impl Reader {
 
-    pub fn new(cmd: Option<&'static str>, eb: Arc<EventBox<Event>>, tx: Sender<String>) -> Self {
+    pub fn new(cmd: Option<&'static str>, eb: Arc<EventBox<Event>>, tx: Sender<Item>) -> Self {
         Reader{cmd: cmd, eb: eb, tx: tx}
     }
 
@@ -265,7 +261,7 @@ impl Reader {
                             input.pop();
                         }
                     }
-                    self.tx.send(input);
+                    self.tx.send(Item::new(input));
                 }
                 Err(_err) => { break; }
             }
@@ -282,7 +278,8 @@ struct Model {
     query_cursor: i32,
     num_matched: u64,
     num_total: u64,
-    matched_items: Vec<String>,
+    items: Arc<RwLock<Vec<Item>>>,
+    matched_items: Vec<MatchedItem>,
     item_start_pos: i64,
     line_cursor: i32,
     max_y: i32,
@@ -300,6 +297,7 @@ impl Model {
             query_cursor: 0,
             num_matched: 0,
             num_total: 0,
+            items: Arc::new(RwLock::new(Vec::new())),
             matched_items: Vec::new(),
             item_start_pos: 0,
             line_cursor: 0,
@@ -318,7 +316,7 @@ impl Model {
         self.num_total = total;
     }
 
-    pub fn push_item(&mut self, item: String) {
+    pub fn push_item(&mut self, item: MatchedItem) {
         self.matched_items.push(item);
     }
 
@@ -344,11 +342,12 @@ impl Model {
     }
 
     pub fn print_items(&self) {
+        let items = self.items.read().unwrap();
         let mut y = self.max_y - 2;
         for item in self.matched_items.iter() {
             mv(y, 2);
 
-            let shown_str: String = item.chars().take((self.max_x-1) as usize).collect();
+            let shown_str: String = items[item.index].text.chars().take((self.max_x-1) as usize).collect();
             addstr(&shown_str);
 
             y -= 1;
@@ -397,7 +396,8 @@ fn main() {
     let eb_matcher = Arc::new(EventBox::new());
     let eb_matcher_clone = eb_matcher.clone();
     let eb_clone_matcher = eb.clone();
-    let mut matcher = Matcher::new(rx_source, tx_matched, eb_matcher_clone, eb_clone_matcher);
+    let items = model.items.clone();
+    let mut matcher = Matcher::new(items, tx_matched, eb_matcher_clone, eb_clone_matcher);
 
     let eb_clone_input = eb.clone();
     let mut input = Input::new(eb_clone_input);
@@ -419,6 +419,10 @@ fn main() {
         for (e, val) in eb.wait() {
             match e {
                 Event::EvReaderNewItem | Event::EvReaderFinished => {
+                    let mut items = model.items.write().unwrap();
+                    while let Ok(string) = rx_source.try_recv() {
+                        items.push(string);
+                    }
                     eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
                 }
 
@@ -426,8 +430,8 @@ fn main() {
                     let (matched, total) : (u64, u64) = *val.downcast().unwrap();
                     model.update_process_info(matched, total);
 
-                    while let Ok(string) = rx_matched.try_recv() {
-                        model.push_item(string);
+                    while let Ok(matchedItem) = rx_matched.try_recv() {
+                        model.push_item(matchedItem);
                     }
                 }
 
