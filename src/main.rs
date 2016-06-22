@@ -7,6 +7,7 @@ mod input;
 mod matcher;
 mod event;
 mod model;
+mod score;
 
 use std::sync::Arc;
 use std::thread;

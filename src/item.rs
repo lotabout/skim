@@ -1,6 +1,7 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
+use std;
 pub struct Item {
     pub text: String,
     pub selected: bool,
@@ -22,26 +23,29 @@ impl Item {
     }
 }
 
+pub type Score = (usize, usize); // score (matched-len, start pos)
+pub type Range = (usize, usize); // (start, end), end is excluded
+
 pub struct MatchedItem {
     pub index: usize,                       // index of current item in items
-    pub rank: [i32; 5],                   // the scores in different criteria
-    pub matched_range_bytes: (i32, i32),  // range of bytes that metched the pattern
+    pub score: Score,
+    pub matched_range_chars: Range,  // range of chars that metched the pattern
 }
 
 impl MatchedItem {
     pub fn new(index: usize) -> Self {
         MatchedItem {
             index: index,
-            rank: [0, 0, 0, 0, 0],
-            matched_range_bytes: (0, 0),
+            score: (std::usize::MAX, 0),
+            matched_range_chars: (0, 0),
         }
     }
 
-    pub fn set_matched_range(&mut self, start: i32, end: i32) {
-        self.matched_range_bytes = (start, end);
+    pub fn set_matched_range(&mut self, range: Range) {
+        self.matched_range_chars = range;
     }
 
-    pub fn set_rank(&mut self, pos: usize, val: i32) {
-        self.rank[pos] = val;
+    pub fn set_score(&mut self, score: Score) {
+        self.score = score;
     }
 }

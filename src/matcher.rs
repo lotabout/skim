@@ -7,6 +7,7 @@ use std::sync::mpsc::Sender;
 use event::Event;
 use item::{Item, MatchedItem};
 use util::eventbox::EventBox;
+use score;
 
 pub struct Matcher {
     tx_output: Sender<MatchedItem>,   // channel to send output to
@@ -41,14 +42,28 @@ impl Matcher {
         item.starts_with(&self.query)
     }
 
+    fn match_item(&self, index: usize, item: &str) -> Option<MatchedItem> {
+        let matched_result = score::compute_match_length(item, &self.query);
+        if matched_result == None {
+            return None;
+        }
+
+        let (matched_start, matched_len) = matched_result.unwrap();
+
+        let mut item = MatchedItem::new(index);
+        item.set_matched_range((matched_start as usize, (matched_start + matched_len) as usize));
+        item.set_score((matched_len, matched_start));
+        Some(item)
+    }
+
     pub fn process(&mut self) {
         let items = self.items.read().unwrap();
         for item in items[self.item_pos..].into_iter() {
             // process the matcher
             //self.tx_output.send(string.clone());
-            if self.match_str(&item.text) {
+            if let Some(matched) = self.match_item(self.item_pos, &item.text) {
                 self.num_matched += 1;
-                let _ = self.tx_output.send(MatchedItem::new(self.item_pos));
+                let _ = self.tx_output.send(matched);
             }
 
             self.item_pos += 1;
