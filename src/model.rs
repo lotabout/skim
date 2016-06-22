@@ -55,6 +55,10 @@ impl Model {
 
     pub fn toggle_select(&self, selected: Option<bool>) {
         let mut items = self.items.write().unwrap();
+        if items.len() <= 0 {
+            return;
+        }
+
         items[self.matched_items[self.item_cursor].index].toggle_select(selected);
     }
 

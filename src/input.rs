@@ -3,11 +3,11 @@
 
 use std::sync::Arc;
 use std::char;
+use std::io::prelude::*;
+use std::fs::File;
 
 use util::eventbox::EventBox;
 use event::Event;
-
-use ncurses::*;
 
 pub struct Input {
     query: Vec<char>,
@@ -47,53 +47,40 @@ impl Input {
     }
 
     pub fn run(&mut self) {
-        loop {
-            self.handle_char();
+        let f = File::open("/dev/tty").unwrap();
+        for c in f.chars() {
+            self.handle_char(c.unwrap());
         }
     }
 
     // fetch input from curses and turn it into query.
-    fn handle_char(&mut self) {
-        let ch = wget_wch(stdscr);
-
+    fn handle_char(&mut self, ch: char) {
         match ch {
-            Some(WchResult::KeyCode(_)) => {
-                // will later handle readline-like shortcuts
+            '\x7F' => { // backspace
+                self.delete_char();
+                self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
             }
 
-            Some(WchResult::Char(c)) => {
-                /* Enable attributes and output message. */
-                let ch = char::from_u32(c as u32).expect("Invalid char");
-                match ch {
-                    '\x7F' => { // backspace
-                        self.delete_char();
-                        self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
-                    }
-
-                    '\x0A' => { // enter
-                        self.eb.set(Event::EvInputSelect, Box::new(true));
-                    }
-
-                    '\x09' => { // tab
-                        self.eb.set(Event::EvInputToggle, Box::new(true));
-                    }
-
-                    '\x10' => { // ctrl-p
-                        self.eb.set(Event::EvInputUp, Box::new(true));
-                    }
-
-                    '\x0E' => { // ctrl-n
-                        self.eb.set(Event::EvInputDown, Box::new(true));
-                    }
-
-                    ch => { // other characters
-                        self.add_char(ch);
-                        self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
-                    }
-                }
+            '\x0D' => { // enter
+                self.eb.set(Event::EvInputSelect, Box::new(true));
             }
 
-            None => { }
+            '\x09' => { // tab
+                self.eb.set(Event::EvInputToggle, Box::new(true));
+            }
+
+            '\x10' => { // ctrl-p
+                self.eb.set(Event::EvInputUp, Box::new(true));
+            }
+
+            '\x0E' => { // ctrl-n
+                self.eb.set(Event::EvInputDown, Box::new(true));
+            }
+
+            ch => { // other characters
+                self.add_char(ch);
+                self.eb.set(Event::EvQueryChange, Box::new((self.get_query(), self.pos)));
+            }
         }
     }
 }

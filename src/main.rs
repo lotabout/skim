@@ -1,3 +1,4 @@
+#![feature(io)]
 extern crate ncurses;
 mod util;
 mod item;
