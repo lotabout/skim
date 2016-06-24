@@ -122,15 +122,28 @@ impl Model {
         addstr(format!("  {}/{}", self.num_matched, self.num_total).as_str());
     }
 
-    fn print_item(&self, item: &Item) {
-        let shown_str: String = item.text.chars().take((self.max_x-1) as usize).collect();
+    fn print_item(&self, item: &Item, matched: &MatchedItem) {
+        //let shown_str: String = item.text.chars().take((self.max_x-1) as usize).collect();
         if item.selected {
             printw(">");
         } else {
             printw(" ");
         }
 
-        addstr(&shown_str);
+        for (idx, ch) in item.text.chars().enumerate() {
+            if idx == matched.matched_range_chars.0 {
+                attron(A_BOLD());
+            }
+            if idx == matched.matched_range_chars.1 {
+                attroff(A_BOLD());
+            }
+            addch(ch as u64);
+            if idx >= (self.max_x - 3) as usize {
+                break;
+            }
+        }
+
+        //addstr(&shown_str);
     }
 
     pub fn print_items(&self) {
@@ -151,7 +164,7 @@ impl Model {
                 printw(" ");
             }
 
-            self.print_item(&items[matched.index]);
+            self.print_item(&items[matched.index], matched);
 
             y -= 1;
             if y < 0 {
