@@ -8,6 +8,7 @@ mod matcher;
 mod event;
 mod model;
 mod score;
+mod orderedvec;
 
 use std::sync::Arc;
 use std::thread;
