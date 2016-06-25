@@ -9,7 +9,7 @@ pub struct OrderedVec<T: Ord> {
     index_min: usize,
 }
 
-impl<T> OrderedVec<T> where T: Ord{
+impl<T> OrderedVec<T> where T: Ord {
     pub fn new() -> Self {
         OrderedVec {
             heap: BinaryHeap::new(),
@@ -20,7 +20,7 @@ impl<T> OrderedVec<T> where T: Ord{
     }
 
     pub fn push(&mut self, item: T) {
-        if self.index_min > 0 && item > self.vec[self.index_min-1] {
+        if self.index_min > 0 && item >= self.vec[self.index_min-1] {
             self.vec.push(item);
             self.sorted = false;
         } else {
@@ -30,7 +30,7 @@ impl<T> OrderedVec<T> where T: Ord{
 
     pub fn get(&mut self, index: usize) -> Option<&T> {
         if !self.sorted {
-            self.vec.sort();
+            self.vec.sort_by(|a, b| b.cmp(a));
         }
 
         if index >= self.vec.len() + self.heap.len() {
