@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use std::sync::mpsc::Sender;
 use event::Event;
-use item::{Item, MatchedItem};
+use item::{Item, MatchedItem, MatchedRange};
 use util::eventbox::EventBox;
 use score;
 
@@ -43,16 +43,17 @@ impl Matcher {
     }
 
     fn match_item(&self, index: usize, item: &str) -> Option<MatchedItem> {
-        let matched_result = score::compute_match_length(item, &self.query);
+        //let matched_result = score::compute_match_length(item, &self.query);
+        let matched_result = score::fuzzy_match(item, &self.query);
         if matched_result == None {
             return None;
         }
 
-        let (matched_start, matched_len) = matched_result.unwrap();
+        let (score, matched_range) = matched_result.unwrap();
 
         let mut item = MatchedItem::new(index);
-        item.set_matched_range((matched_start as usize, (matched_start + matched_len) as usize));
-        item.set_score((matched_len, matched_start));
+        item.set_matched_range(MatchedRange::Chars(matched_range));
+        item.set_score(score);
         Some(item)
     }
 
@@ -67,7 +68,7 @@ impl Matcher {
             }
 
             self.item_pos += 1;
-            if (self.item_pos % 100) == 99 && !self.eb_req.is_empty() {
+            if (self.item_pos % 1000) == 999 && !self.eb_req.is_empty() {
                 break;
             }
         }

@@ -25,27 +25,33 @@ impl Item {
     }
 }
 
-pub type Score = (usize, usize); // score (matched-len, start pos)
-pub type Range = (usize, usize); // (start, end), end is excluded
+pub type Score = i32;
+
+
+#[derive(PartialEq, Eq)]
+pub enum MatchedRange {
+    Range(usize, usize),
+    Chars(Vec<usize>),
+}
 
 #[derive(Eq)]
 pub struct MatchedItem {
     pub index: usize,                       // index of current item in items
     pub score: Score,
-    pub matched_range_chars: Range,  // range of chars that metched the pattern
+    pub matched_range: Option<MatchedRange>,  // range of chars that metched the pattern
 }
 
 impl MatchedItem {
     pub fn new(index: usize) -> Self {
         MatchedItem {
             index: index,
-            score: (std::usize::MAX, 0),
-            matched_range_chars: (0, 0),
+            score: -200000,
+            matched_range: None,
         }
     }
 
-    pub fn set_matched_range(&mut self, range: Range) {
-        self.matched_range_chars = range;
+    pub fn set_matched_range(&mut self, range: MatchedRange) {
+        self.matched_range = Some(range);
     }
 
     pub fn set_score(&mut self, score: Score) {
@@ -55,7 +61,7 @@ impl MatchedItem {
 
 impl Ord for MatchedItem {
     fn cmp(&self, other: &MatchedItem) -> Ordering {
-        other.score.cmp(&self.score)
+        self.score.cmp(&other.score)
     }
 }
 

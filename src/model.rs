@@ -3,7 +3,7 @@
 
 
 use std::sync::{Arc, RwLock};
-use item::{Item, MatchedItem};
+use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
 use std::cmp;
 use std::cell::RefCell;
@@ -130,20 +130,35 @@ impl Model {
             printw(" ");
         }
 
-        for (idx, ch) in item.text.chars().enumerate() {
-            if idx == matched.matched_range_chars.0 {
-                attron(A_BOLD());
+        match matched.matched_range {
+            Some(MatchedRange::Chars(ref matched_indics)) => {
+                let mut matched_indics_iter = matched_indics.iter().peekable();
+                for (idx, ch) in item.text.chars().enumerate() {
+                    if let Some(&&index) = matched_indics_iter.peek() {
+                        if idx == index {
+                            attron(A_UNDERLINE());
+                            addch(ch as u64);
+                            attroff(A_UNDERLINE());
+                            let _ = matched_indics_iter.next();
+                        } else {
+                            addch(ch as u64);
+                        }
+                    } else {
+                        addch(ch as u64);
+                    }
+                    if idx >= (self.max_x - 3) as usize {
+                        break;
+                    }
+                }
             }
-            if idx == matched.matched_range_chars.1 {
-                attroff(A_BOLD());
+            Some(MatchedRange::Range(_, _)) => {
+                // pass
             }
-            addch(ch as u64);
-            if idx >= (self.max_x - 3) as usize {
-                break;
+            None => {
+                // pass
             }
         }
 
-        //addstr(&shown_str);
     }
 
     pub fn print_items(&self) {
