@@ -34,14 +34,6 @@ impl Matcher {
         }
     }
 
-    fn match_str(&self, item: &str) -> bool {
-        if self.query == "" {
-            return true;
-        }
-
-        item.starts_with(&self.query)
-    }
-
     fn match_item(&self, index: usize, item: &str) -> Option<MatchedItem> {
         //let matched_result = score::compute_match_length(item, &self.query);
         let matched_result = score::fuzzy_match(item, &self.query);
