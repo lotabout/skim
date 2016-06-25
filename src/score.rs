@@ -5,22 +5,33 @@
 
 use std::cmp::max;
 use std::cell::RefCell;
-const BONUS_ADJACENCY: i32 = 5;
-const BONUS_SEPARATOR: i32 = 10;
-const BONUS_CAMEL: i32 = 10;
-const PENALTY_LEADING: i32 = -3; // penalty applied for every letter before the first match
-const PENALTY_MAX_LEADING: i32 = -9; // maxing penalty for leading letters
-const PENALTY_UNMATCHED: i32 = -1;
+const BONUS_UPPER_MATCH: i32 = 10;
+const BONUS_ADJACENCY: i32 = 10;
+const BONUS_SEPARATOR: i32 = 20;
+const BONUS_CAMEL: i32 = 20;
+const PENALTY_CASE_UNMATCHED: i32 = -1;
+const PENALTY_LEADING: i32 = -6; // penalty applied for every letter before the first match
+const PENALTY_MAX_LEADING: i32 = -18; // maxing penalty for leading letters
+const PENALTY_UNMATCHED: i32 = -2;
 
 // judge how many scores the current index should get
-fn fuzzy_score(string: &Vec<char>, index: usize, is_first: bool) -> i32 {
+fn fuzzy_score(string: &Vec<char>, index: usize, pattern: &Vec<char>, pattern_idx: usize) -> i32 {
     let mut score = 0;
+
+    let pattern_char = pattern[pattern_idx];
+    let cur = string[index];
+
+    if pattern_char.is_uppercase() && cur.is_uppercase() && pattern_char == cur {
+        score += BONUS_UPPER_MATCH;
+    } else {
+        score += PENALTY_CASE_UNMATCHED;
+    }
+
     if index == 0 {
-        return 0;
+        return score + if cur.is_uppercase() {BONUS_CAMEL} else {0};
     }
 
     let prev = string[index-1];
-    let cur = string[index];
 
     // apply bonus for matches after a separator
     if prev == ' ' || prev == '_' || prev == '-' || prev == '/' || prev == '\\' {
@@ -32,7 +43,7 @@ fn fuzzy_score(string: &Vec<char>, index: usize, is_first: bool) -> i32 {
         score += BONUS_CAMEL;
     }
 
-    if is_first {
+    if pattern_idx == 0 {
         score += max((index as i32) * PENALTY_LEADING, PENALTY_MAX_LEADING);
     }
 
@@ -46,20 +57,21 @@ pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i32, Vec<usize>)>{
 
     let choice_chars: Vec<char> = choice.chars().collect();
     let choice_lower = choice.to_lowercase();
-    let pattern_chars: Vec<char> = pattern.to_lowercase().chars().collect();
+    let pattern_chars: Vec<char> = pattern.chars().collect();
+    let pattern_chars_lower: Vec<char> = pattern.to_lowercase().chars().collect();
 
     let mut scores = vec![];
     let mut picked = vec![];
 
     let mut prev_matched_idx = -1; // to ensure that the pushed char are able to match the pattern
-    for pattern_idx in 0..pattern_chars.len() {
-        let pattern_char = pattern_chars[pattern_idx];
+    for pattern_idx in 0..pattern_chars_lower.len() {
+        let pattern_char = pattern_chars_lower[pattern_idx];
         let vec_cell = RefCell::new(vec![]);
         {
             let mut vec = vec_cell.borrow_mut();
             for (idx, ch) in choice_lower.chars().enumerate() {
                 if ch == pattern_char && (idx as i32) > prev_matched_idx {
-                    vec.push((idx, fuzzy_score(&choice_chars, idx, pattern_idx == 0), 0)); // (char_idx, score, vec_idx back_ref)
+                    vec.push((idx, fuzzy_score(&choice_chars, idx, &pattern_chars, pattern_idx), 0)); // (char_idx, score, vec_idx back_ref)
                 }
             }
 
@@ -110,30 +122,11 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_compute_match_length() {
-        let choice_1 = "I am a 中国人.";
-        let query_1 = "a人";
-        assert_eq!(super::compute_match_length(&choice_1, &query_1), Some((2, 8)));
-
-        let choice_2 = "Choice did not matter";
-        let query_2 = "";
-        assert_eq!(super::compute_match_length(&choice_2, &query_2), Some((0, 0)));
-
-        let choice_3 = "abcdefg";
-        let query_3 = "hi";
-        assert_eq!(super::compute_match_length(&choice_3, &query_3), None);
-
-        let choice_4 = "Partial match did not count";
-        let query_4 = "PP";
-        assert_eq!(compute_match_length(&choice_4, &query_4), None);
-    }
-
-    #[test]
     fn teset_fuzzy_match() {
         // the score in this test doesn't actually matter, but the index matters.
         let choice_1 = "1111121";
         let query_1 = "21";
-        assert_eq!(fuzzy_match(&choice_1, &query_1), Some((-4, vec![5,6])));
+        assert_eq!(fuzzy_match(&choice_1, &query_1), Some((-10, vec![5,6])));
 
         let choice_2 = "Ca";
         let query_2 = "ac";
@@ -145,6 +138,6 @@ mod test {
 
         let choice_4 = "AaBbCc";
         let query_4 = "abc";
-        assert_eq!(fuzzy_match(&choice_4, &query_4), Some((28, vec![0,2,4])));
+        assert_eq!(fuzzy_match(&choice_4, &query_4), Some((53, vec![0,2,4])));
     }
 }
