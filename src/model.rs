@@ -123,7 +123,7 @@ impl Model {
     }
 
     fn print_item(&self, item: &Item, matched: &MatchedItem) {
-        //let shown_str: String = item.text.chars().take((self.max_x-1) as usize).collect();
+        //printw(format!("{}", matched.score).as_ref());
         if item.selected {
             printw(">");
         } else {

@@ -16,7 +16,7 @@ const PENALTY_UNMATCHED: i32 = -1;
 fn fuzzy_score(string: &Vec<char>, index: usize, is_first: bool) -> i32 {
     let mut score = 0;
     if index == 0 {
-        return BONUS_SEPARATOR;
+        return 0;
     }
 
     let prev = string[index-1];
