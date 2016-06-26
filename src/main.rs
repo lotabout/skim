@@ -1,4 +1,5 @@
 #![feature(io)]
+extern crate libc;
 extern crate ncurses;
 mod util;
 mod item;
@@ -13,15 +14,17 @@ mod orderedvec;
 use std::sync::Arc;
 use std::thread;
 use std::sync::mpsc::channel;
+use std::mem;
+use std::ptr;
 use util::eventbox::EventBox;
 
 use ncurses::*;
-
 use event::Event;
 use input::Input;
 use reader::Reader;
 use matcher::Matcher;
 use model::Model;
+use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 
 fn main() {
     // initialize ncurses
@@ -33,7 +36,6 @@ fn main() {
     noecho();
 
     let mut model = Model::new();
-
     let eb = Arc::new(EventBox::new());
     let (tx_source, rx_source) = channel();
     let (tx_matched, rx_matched) = channel();
@@ -49,6 +51,24 @@ fn main() {
 
     let eb_clone_input = eb.clone();
     let mut input = Input::new(eb_clone_input);
+
+    // register terminal resize event, `pthread_sigmask` should be run before any thread.
+    let mut sigset = unsafe {mem::uninitialized()};
+    unsafe {
+        sigemptyset(&mut sigset);
+        sigaddset(&mut sigset, libc::SIGWINCH);
+        pthread_sigmask(libc::SIG_SETMASK, &mut sigset, ptr::null_mut());
+    }
+
+    let eb_clone_resize = eb.clone();
+    thread::spawn(move || {
+        // listen to the resize event;
+        loop {
+            let mut sig = 0;
+            let _errno = unsafe {sigwait(&mut sigset, &mut sig)};
+            eb_clone_resize.set(Event::EvResize, Box::new(true));
+        }
+    });
 
     // start running
     thread::spawn(move || {
@@ -109,6 +129,9 @@ fn main() {
                 }
                 Event::EvInputDown=> {
                     model.move_line_cursor(1);
+                }
+                Event::EvResize => {
+                    model.resize();
                 }
 
                 _ => {

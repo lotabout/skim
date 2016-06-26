@@ -210,4 +210,16 @@ impl Model {
         self.print_query();
         self.refresh();
     }
+
+    // the terminal resizes, so we need to recalculate the margins.
+    pub fn resize(&mut self) {
+        clear();
+        endwin();
+        refresh();
+        let mut max_y = 0;
+        let mut max_x = 0;
+        getmaxyx(stdscr, &mut max_y, &mut max_x);
+        self.max_y = max_y;
+        self.max_x = max_x;
+    }
 }

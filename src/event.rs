@@ -12,4 +12,5 @@ pub enum Event {
     EvInputUp,
     EvInputDown,
     EvInputSelect,
+    EvResize,
 }
