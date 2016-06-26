@@ -6,21 +6,12 @@ use std::cmp::Ordering;
 
 pub struct Item {
     pub text: String,
-    pub selected: bool,
 }
 
 impl Item {
     pub fn new(text: String) -> Self {
         Item {
             text: text,
-            selected: false,
-        }
-    }
-
-    pub fn toggle_select(&mut self, selected: Option<bool>) {
-        match selected {
-            Some(s) => {self.selected = s;}
-            None => {self.selected = !self.selected;}
         }
     }
 }

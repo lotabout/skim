@@ -7,6 +7,7 @@ use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
 use std::cmp;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use orderedvec::OrderedVec;
 
 pub struct Model {
@@ -15,6 +16,7 @@ pub struct Model {
     num_matched: u64,
     num_total: u64,
     pub items: Arc<RwLock<Vec<Item>>>, // all items
+    selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
@@ -35,6 +37,7 @@ impl Model {
             num_matched: 0,
             num_total: 0,
             items: Arc::new(RwLock::new(Vec::new())),
+            selected_indics: HashSet::new(),
             matched_items: RefCell::new(OrderedVec::new()),
             item_cursor: 0,
             line_cursor: (max_y - 3) as usize,
@@ -45,24 +48,32 @@ impl Model {
     }
 
     pub fn output(&self) {
+        let mut selected = self.selected_indics.iter().collect::<Vec<&usize>>();
+        selected.sort();
         let items = self.items.read().unwrap();
-        for item in items.iter() {
-            if item.selected {
-                println!("{}", item.text);
-            }
+        for index in selected {
+            println!("{}", items[*index].text);
         }
-        //println!("{:?}", items[self.matched_items[self.item_cursor].index].text);
-        //items[self.matched_items[self.item_cursor].index].selected = s;
     }
 
-    pub fn toggle_select(&self, selected: Option<bool>) {
-        let mut items = self.items.write().unwrap();
+    pub fn toggle_select(&mut self, selected: Option<bool>) {
         let mut matched_items = self.matched_items.borrow_mut();
-        if items.len() <= 0 {
-            return;
+        let index = matched_items.get(self.item_cursor).unwrap().index;
+        match selected {
+            Some(true) => {
+                let _ = self.selected_indics.insert(index);
+            }
+            Some(false) => {
+                let _ = self.selected_indics.remove(&index);
+            }
+            None => {
+                if self.selected_indics.contains(&index) {
+                    let _ = self.selected_indics.remove(&index);
+                } else {
+                    let _ = self.selected_indics.insert(index);
+                }
+            }
         }
-
-        items[matched_items.get(self.item_cursor).unwrap().index].toggle_select(selected);
     }
 
     pub fn update_query(&mut self, query: String, cursor: i32) {
@@ -124,7 +135,7 @@ impl Model {
 
     fn print_item(&self, item: &Item, matched: &MatchedItem) {
         //printw(format!("{}", matched.score).as_ref());
-        if item.selected {
+        if self.selected_indics.contains(&matched.index) {
             printw(">");
         } else {
             printw(" ");

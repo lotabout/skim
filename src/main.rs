@@ -96,7 +96,7 @@ fn main() {
 
                 Event::EvInputSelect => {
                     // break out of the loop and output the selected item.
-                    model.toggle_select(None);
+                    model.toggle_select(Some(true));
                     break 'outer;
                 }
 
