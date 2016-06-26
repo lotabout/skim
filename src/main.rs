@@ -67,11 +67,11 @@ fn main() {
         for (e, val) in eb.wait() {
             match e {
                 Event::EvReaderNewItem | Event::EvReaderFinished => {
+                    eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
                     let mut items = model.items.write().unwrap();
                     while let Ok(string) = rx_source.try_recv() {
                         items.push(string);
                     }
-                    eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
                 }
 
                 Event::EvMatcherUpdateProcess => {
