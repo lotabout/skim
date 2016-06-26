@@ -9,6 +9,7 @@ use std::cmp;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use orderedvec::OrderedVec;
+use curses::*;
 
 pub struct Model {
     pub query: String,
@@ -23,13 +24,12 @@ pub struct Model {
     item_start_pos: usize, // for screen scroll.
     max_y: i32,
     max_x: i32,
+    curses: Curses,
 }
 
 impl Model {
-    pub fn new() -> Self {
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
+    pub fn new(curses: Curses) -> Self {
+        let (max_y, max_x) = curses.get_maxyx();
 
         Model {
             query: String::new(),
@@ -44,6 +44,7 @@ impl Model {
             item_start_pos: 0,
             max_y: max_y,
             max_x: max_x,
+            curses: curses,
         }
     }
 
@@ -134,7 +135,6 @@ impl Model {
     }
 
     fn print_item(&self, item: &Item, matched: &MatchedItem) {
-        //printw(format!("{}", matched.score).as_ref());
         if self.selected_indics.contains(&matched.index) {
             printw(">");
         } else {
@@ -147,9 +147,10 @@ impl Model {
                 for (idx, ch) in item.text.chars().enumerate() {
                     if let Some(&&index) = matched_indics_iter.peek() {
                         if idx == index {
-                            attron(A_UNDERLINE());
+                            let attr = self.curses.get_color(COLOR_MATCHED, false);
+                            attron(attr);
                             addch(ch as u64);
-                            attroff(A_UNDERLINE());
+                            attroff(attr);
                             let _ = matched_indics_iter.next();
                         } else {
                             addch(ch as u64);
@@ -184,11 +185,9 @@ impl Model {
             mv(y, 0);
             let is_current_line = y == self.line_cursor as i32;
 
-            if is_current_line {
-                printw(">");
-            } else {
-                printw(" ");
-            }
+            let mut label = if is_current_line {">"} else {" "};
+
+            self.curses.cprint(COLOR_CURSOR, true, label);
 
             self.print_item(&items[matched.index], matched);
 

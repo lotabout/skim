@@ -10,6 +10,7 @@ mod event;
 mod model;
 mod score;
 mod orderedvec;
+mod curses;
 
 use std::sync::Arc;
 use std::thread;
@@ -25,17 +26,15 @@ use reader::Reader;
 use matcher::Matcher;
 use model::Model;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
+use curses::{ColorTheme, Curses};
 
 fn main() {
-    // initialize ncurses
-    let local_conf = LcCategory::all;
-    setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
-    initscr();
-    raw();
-    keypad(stdscr, true);
-    noecho();
 
-    let mut model = Model::new();
+    let theme = curses::ColorTheme::new();
+    let mut curse = Curses::new();
+    curse.init(Some(&theme), false, false);
+
+    let mut model = Model::new(curse);
     let eb = Arc::new(EventBox::new());
     let (tx_source, rx_source) = channel();
     let (tx_matched, rx_matched) = channel();
