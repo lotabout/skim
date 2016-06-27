@@ -19,6 +19,7 @@ pub struct Model {
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
+    processed_percentage: u64,
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     item_start_pos: usize, // for screen scroll.
@@ -39,6 +40,7 @@ impl Model {
             items: Arc::new(RwLock::new(Vec::new())),
             selected_indics: HashSet::new(),
             matched_items: RefCell::new(OrderedVec::new()),
+            processed_percentage: 100,
             item_cursor: 0,
             line_cursor: (max_y - 3) as usize,
             item_start_pos: 0,
@@ -82,9 +84,10 @@ impl Model {
         self.query_cursor = cursor;
     }
 
-    pub fn update_process_info(&mut self, matched: u64, total: u64) {
+    pub fn update_process_info(&mut self, matched: u64, total: u64, processed: u64) {
         self.num_matched = matched;
         self.num_total = total;
+        self.processed_percentage = (processed+1)*100/(total+1);
     }
 
     pub fn push_item(&mut self, item: MatchedItem) {
@@ -131,12 +134,14 @@ impl Model {
 
     pub fn print_info(&self) {
         mv(self.max_y-2, 0);
-        addstr(format!("  {}/{}", self.num_matched, self.num_total).as_str());
+        addstr(format!("  {}/{}{}", self.num_matched, self.num_total,
+                       if self.processed_percentage == 100 {"".to_string()} else {format!("({}%)", self.processed_percentage)}
+                       ).as_str());
     }
 
     fn print_item(&self, matched: &MatchedItem, is_current: bool) {
         let items = self.items.read().unwrap();
-        let ref item = items[matched.index]; 
+        let ref item = items[matched.index];
 
         let is_selected = self.selected_indics.contains(&matched.index);
 
@@ -152,16 +157,13 @@ impl Model {
                 for (idx, ch) in item.text.chars().enumerate() {
                     if let Some(&&index) = matched_indics_iter.peek() {
                         if idx == index {
-                            let attr = self.curses.get_color(COLOR_MATCHED, false);
-                            attron(attr);
-                            addch(ch as u64);
-                            attroff(attr);
+                            self.curses.caddch(COLOR_MATCHED, is_current, ch);
                             let _ = matched_indics_iter.next();
                         } else {
-                            addch(ch as u64);
+                            self.curses.caddch(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current, ch)
                         }
                     } else {
-                        addch(ch as u64);
+                        self.curses.caddch(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current, ch)
                     }
                     if idx >= (self.max_x - 3) as usize {
                         break;

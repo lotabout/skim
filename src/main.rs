@@ -94,8 +94,8 @@ fn main() {
                 }
 
                 Event::EvMatcherUpdateProcess => {
-                    let (matched, total) : (u64, u64) = *val.downcast().unwrap();
-                    model.update_process_info(matched, total);
+                    let (matched, total, processed) : (u64, u64, u64) = *val.downcast().unwrap();
+                    model.update_process_info(matched, total, processed);
 
                     while let Ok(matched_item) = rx_matched.try_recv() {
                         model.push_item(matched_item);

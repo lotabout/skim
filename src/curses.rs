@@ -99,6 +99,13 @@ impl Curses {
         addstr(text);
         attroff(attr);
     }
+
+    pub fn caddch(&self, pair: i16, is_bold: bool, ch: char) {
+        let attr = self.get_color(pair, is_bold);
+        attron(attr);
+        addch(ch as u64);
+        attroff(attr);
+    }
 }
 
 // use default if x is COLOR_UNDEFINED, else use x

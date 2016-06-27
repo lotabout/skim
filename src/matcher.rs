@@ -64,7 +64,7 @@ impl Matcher {
                 break;
             }
         }
-        (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64)));
+        (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64, self.item_pos as u64)));
     }
 
     fn reset_query(&mut self, query: &str) {
