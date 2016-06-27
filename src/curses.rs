@@ -40,9 +40,9 @@ impl Curses {
 
         if let Some(theme) = theme {
             let base_theme = if tigetnum("colors") >= 256 {
-                Dark256
+                DARK256
             } else {
-                Default16
+                DEFAULT16
             };
 
             self.init_pairs(&base_theme, &theme, is_black);
@@ -182,7 +182,7 @@ impl ColorTheme {
     }
 }
 
-const Default16: ColorTheme = ColorTheme {
+const DEFAULT16: ColorTheme = ColorTheme {
     use_default:   true,
     fg:            15,
     bg:            0,
@@ -198,7 +198,7 @@ const Default16: ColorTheme = ColorTheme {
     header:        COLOR_CYAN,
 };
 
-const Dark256: ColorTheme = ColorTheme {
+const DARK256: ColorTheme = ColorTheme {
     use_default:   true,
     fg:            15,
     bg:            0,
@@ -214,7 +214,7 @@ const Dark256: ColorTheme = ColorTheme {
     header:        109,
 };
 
-const Light256: ColorTheme = ColorTheme {
+const LIGHT256: ColorTheme = ColorTheme {
     use_default:   true,
     fg:            15,
     bg:            0,

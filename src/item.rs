@@ -19,13 +19,13 @@ impl Item {
 pub type Score = i32;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum MatchedRange {
     Range(usize, usize),
     Chars(Vec<usize>),
 }
 
-#[derive(Eq)]
+#[derive(Eq, Clone)]
 pub struct MatchedItem {
     pub index: usize,                       // index of current item in items
     pub score: Score,
