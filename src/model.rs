@@ -134,11 +134,16 @@ impl Model {
         addstr(format!("  {}/{}", self.num_matched, self.num_total).as_str());
     }
 
-    fn print_item(&self, item: &Item, matched: &MatchedItem) {
-        if self.selected_indics.contains(&matched.index) {
-            printw(">");
+    fn print_item(&self, matched: &MatchedItem, is_current: bool) {
+        let items = self.items.read().unwrap();
+        let ref item = items[matched.index]; 
+
+        let is_selected = self.selected_indics.contains(&matched.index);
+
+        if is_selected {
+            self.curses.cprint(COLOR_SELECTED, true, ">");
         } else {
-            printw(" ");
+            self.curses.cprint(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false, " ");
         }
 
         match matched.matched_range {
@@ -174,7 +179,6 @@ impl Model {
     }
 
     pub fn print_items(&self) {
-        let items = self.items.read().unwrap();
         let mut matched_items = self.matched_items.borrow_mut();
 
         let mut y = self.max_y - 3;
@@ -189,7 +193,7 @@ impl Model {
 
             self.curses.cprint(COLOR_CURSOR, true, label);
 
-            self.print_item(&items[matched.index], matched);
+            self.print_item(matched, is_current_line);
 
             y -= 1;
             if y < 0 {
