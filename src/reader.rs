@@ -4,7 +4,7 @@
 extern crate libc;
 
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::io::{stdin, BufRead, BufReader};
 use std::sync::mpsc::Sender;
 use std::error::Error;
@@ -15,13 +15,13 @@ use item::Item;
 pub struct Reader {
     cmd: Option<&'static str>, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
-    tx: Sender<Item>,    // sender to send the string read from command output
+    items: Arc<RwLock<Vec<Item>>>, // all items
 }
 
 impl Reader {
 
-    pub fn new(cmd: Option<&'static str>, eb: Arc<EventBox<Event>>, tx: Sender<Item>) -> Self {
-        Reader{cmd: cmd, eb: eb, tx: tx}
+    pub fn new(cmd: Option<&'static str>, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
+        Reader{cmd: cmd, eb: eb, items: items}
     }
 
     // invoke find comand.
@@ -59,7 +59,8 @@ impl Reader {
                             input.pop();
                         }
                     }
-                    let _ = self.tx.send(Item::new(input));
+                    let mut items = self.items.write().unwrap();
+                    items.push(Item::new(input));
                 }
                 Err(_err) => { break; }
             }

@@ -36,17 +36,18 @@ fn main() {
 
     let mut model = Model::new(curse);
     let eb = Arc::new(EventBox::new());
-    let (tx_source, rx_source) = channel();
     let (tx_matched, rx_matched) = channel();
-
-    let eb_clone_reader = eb.clone();
-    let mut reader = Reader::new(Some(&"find ."), eb_clone_reader, tx_source);
 
     let eb_matcher = Arc::new(EventBox::new());
     let eb_matcher_clone = eb_matcher.clone();
     let eb_clone_matcher = eb.clone();
     let items = model.items.clone();
     let mut matcher = Matcher::new(items, tx_matched, eb_matcher_clone, eb_clone_matcher);
+
+    let eb_clone_reader = eb.clone();
+    let items = model.items.clone();
+    let mut reader = Reader::new(Some(&"find ."), eb_clone_reader, items);
+
 
     let eb_clone_input = eb.clone();
     let mut input = Input::new(eb_clone_input);
@@ -87,10 +88,6 @@ fn main() {
             match e {
                 Event::EvReaderNewItem | Event::EvReaderFinished => {
                     eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
-                    let mut items = model.items.write().unwrap();
-                    while let Ok(string) = rx_source.try_recv() {
-                        items.push(string);
-                    }
                 }
 
                 Event::EvMatcherUpdateProcess => {
