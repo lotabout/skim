@@ -14,6 +14,7 @@ mod curses;
 
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 use std::sync::mpsc::channel;
 use std::mem;
 use std::ptr;
@@ -99,13 +100,20 @@ fn main() {
                     }
                 }
 
+                Event::EvMatcherStart => {
+                    model.clear_items();
+                }
+
+                Event::EvMatcherEnd => {
+                    // do nothing
+                }
+
                 Event::EvQueryChange => {
                     let (query, pos) : (String, usize) = *val.downcast().unwrap();
                     let modified = query != model.query;
                     model.update_query(query.clone(), pos as i32);
 
                     if modified {
-                        model.clear_items();
                         eb_matcher.set(Event::EvMatcherResetQuery, Box::new(model.query.clone()));
                     }
                 }
@@ -137,6 +145,7 @@ fn main() {
         }
         model.display();
         refresh();
+        thread::sleep(Duration::from_millis(30));
     };
 
     endwin();

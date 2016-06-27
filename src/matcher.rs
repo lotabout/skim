@@ -35,7 +35,6 @@ impl Matcher {
     }
 
     fn match_item(&self, index: usize, item: &str) -> Option<MatchedItem> {
-        //let matched_result = score::compute_match_length(item, &self.query);
         let matched_result = score::fuzzy_match(item, &self.query);
         if matched_result == None {
             return None;
@@ -50,21 +49,26 @@ impl Matcher {
     }
 
     pub fn process(&mut self) {
-        let items = self.items.read().unwrap();
-        for item in items[self.item_pos..].into_iter() {
-            // process the matcher
-            //self.tx_output.send(string.clone());
-            if let Some(matched) = self.match_item(self.item_pos, &item.text) {
-                self.num_matched += 1;
-                let _ = self.tx_output.send(matched);
+        loop {
+            let items = self.items.read().unwrap();
+            if let Some(item) = items.get(self.item_pos) {
+                if let Some(matched) = self.match_item(self.item_pos, &item.text) {
+                    self.num_matched += 1;
+                    let _ = self.tx_output.send(matched);
+                }
+            } else {
+                (*self.eb_notify).set(Event::EvMatcherEnd, Box::new(true));
+                break;
             }
 
             self.item_pos += 1;
-            if (self.item_pos % 1000) == 999 && !self.eb_req.is_empty() {
+            (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64, self.item_pos as u64)));
+
+            // check if the current process need to be stopped
+            if !self.eb_req.is_empty() {
                 break;
             }
         }
-        (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64, self.item_pos as u64)));
     }
 
     fn reset_query(&mut self, query: &str) {
@@ -81,6 +85,7 @@ impl Matcher {
                     Event::EvMatcherNewItem => {}
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
+                        (*self.eb_notify).set(Event::EvMatcherStart, Box::new(true));
                     }
                     _ => {}
                 }
