@@ -148,7 +148,7 @@ fn main() {
             }
         }
         thread::sleep(Duration::from_millis(10));
-        model.display();
+        //model.display();
         if need_refresh {
             model.refresh();
         }
