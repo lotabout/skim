@@ -5,7 +5,7 @@
 use std::sync::{Arc, RwLock};
 use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
-use std::cmp;
+use std::cmp::{min, max};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use orderedvec::OrderedVec;
@@ -14,17 +14,20 @@ use curses::*;
 pub struct Model {
     pub query: String,
     query_cursor: i32,  // > qu<query_cursor>ery
+
     num_matched: u64,
     num_total: u64,
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
     processed_percentage: u64,
+
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     item_start_pos: usize, // for screen scroll.
     max_y: i32,
     max_x: i32,
+
     curses: Curses,
 }
 
@@ -110,19 +113,19 @@ impl Model {
     pub fn move_line_cursor(&mut self, diff: i32) {
 
         let y = self.line_cursor as i32 + diff;
-        let item_y = cmp::max(0, self.item_cursor as i32 - diff);
+        let item_y = max(0, self.item_cursor as i32 - diff);
         let screen_height = (self.max_y - 3) as usize;
 
         match y {
             y if y < 0 => {
                 self.line_cursor = 0;
-                self.item_cursor = cmp::min(item_y as usize, self.matched_items.borrow().len()-1);
+                self.item_cursor = min(item_y as usize, self.matched_items.borrow().len()-1);
                 self.item_start_pos = self.item_cursor - screen_height;
             }
 
             y if y > screen_height as i32 => {
                 self.line_cursor = screen_height;
-                self.item_cursor = cmp::max(0, item_y as usize);
+                self.item_cursor = max(0, item_y as usize);
                 self.item_start_pos = self.item_cursor;
             }
 
@@ -162,8 +165,20 @@ impl Model {
 
         match matched.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
+                let matched_end_pos = if matched_indics.len() > 0 {matched_indics[matched_indics.len()-1]} else {item.text.len()-1};
+                let (text, mut idx) = reshape_string(&item.text.chars().collect::<Vec<char>>(), (self.max_x-3) as usize, 0, matched_end_pos);
                 let mut matched_indics_iter = matched_indics.iter().peekable();
-                for (idx, ch) in item.text.chars().enumerate() {
+
+                // skip indics
+                while let Some(&&index) = matched_indics_iter.peek() {
+                    if idx > index {
+                        let _ = matched_indics_iter.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                for &ch in text.iter() {
                     if let Some(&&index) = matched_indics_iter.peek() {
                         if idx == index {
                             self.curses.caddch(COLOR_MATCHED, is_current, ch);
@@ -174,9 +189,7 @@ impl Model {
                     } else {
                         self.curses.caddch(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current, ch)
                     }
-                    if idx >= (self.max_x - 3) as usize {
-                        break;
-                    }
+                    idx += 1;
                 }
             }
             Some(MatchedRange::Range(_, _)) => {
@@ -235,4 +248,129 @@ impl Model {
         self.max_y = max_y;
         self.max_x = max_x;
     }
+}
+
+// helper functions
+
+// wide character will take two unit
+fn display_width(text: &[char]) -> usize {
+    text.iter()
+        .map(|c| {if c.len_utf8() > 1 {2} else {1}})
+        .fold(0, |acc, n| acc + n)
+}
+
+
+// calculate from left to right, stop when the width exceeds
+fn left_fixed(text: &[char], width: usize) -> usize {
+    if width <= 0 {
+        return 0;
+    }
+
+    let mut w = 0;
+    for (idx, &c) in text.iter().enumerate() {
+        w += if c.len_utf8() > 1 {2} else {1};
+        if w > width {
+            return idx-1;
+        }
+    }
+    return text.len()-1;
+}
+
+fn right_fixed(text: &[char], width: usize) -> usize {
+    if width <= 0 {
+        return text.len()-1;
+    }
+
+    let mut w = 0;
+    for (idx, &c) in text.iter().enumerate().rev() {
+        w += if c.len_utf8() > 1 {2} else {1};
+        if w > width {
+            return idx+1;
+        }
+    }
+    return 0;
+
+}
+
+// return a string and its left position in original string
+// matched_end_pos is char-wise
+fn reshape_string(text: &Vec<char>,
+                  container_width: usize,
+                  text_start_pos: usize,
+                  matched_end_pos: usize) -> (Vec<char>, usize) {
+    let full_width = display_width(&text[text_start_pos..]);
+
+    if full_width <= container_width {
+        return (text[text_start_pos..].iter().map(|x| *x).collect(), text_start_pos);
+    }
+
+    let mut ret = Vec::new();
+    let mut ret_pos = 0;
+
+    // trim right, so that 'String' -> 'Str..'
+    let right_pos = 1 + max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));
+    let mut left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-2);
+    ret_pos = left_pos;
+
+    if left_pos > text_start_pos {
+        left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-4);
+        ret.push('.'); ret.push('.');
+        ret_pos = left_pos - 2;
+    }
+
+    // so we should print [left_pos..(right_pos+1)]
+    for ch in text[left_pos..right_pos].iter() {
+        ret.push(*ch);
+    }
+    ret.push('.'); ret.push('.');
+    (ret, ret_pos)
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_display_width() {
+        assert_eq!(super::display_width(&"abcdefg".to_string().chars().collect::<Vec<char>>()), 7);
+        assert_eq!(super::display_width(&"This is 中国".to_string().chars().collect::<Vec<char>>()), 12);
+    }
+
+    #[test]
+    fn test_left_fixed() {
+        assert_eq!(super::left_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 3);
+        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 1);
+        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 0);
+    }
+
+    #[test]
+    fn test_right_fixed() {
+        assert_eq!(super::right_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 2);
+        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 0);
+        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 1);
+    }
+
+    #[test]
+    fn test_reshape_string() {
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 1, 7),
+                   ("..67..".to_string().chars().collect::<Vec<char>>(), 4));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         12, 1, 7),
+                   ("123456789".to_string().chars().collect::<Vec<char>>(), 1));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 0, 6),
+                   ("..56..".to_string().chars().collect::<Vec<char>>(), 3));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         8, 0, 4),
+                   ("012345..".to_string().chars().collect::<Vec<char>>(), 0));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         10, 0, 4),
+                   ("0123456789".to_string().chars().collect::<Vec<char>>(), 0));
+    }
+
+
+
 }
