@@ -61,7 +61,12 @@ impl Model {
 
     pub fn toggle_select(&mut self, selected: Option<bool>) {
         let mut matched_items = self.matched_items.borrow_mut();
-        let index = matched_items.get(self.item_cursor).unwrap().index;
+        let matched = matched_items.get(self.item_cursor);
+        if matched == None {
+            return;
+        }
+
+        let index = matched.unwrap().index;
         match selected {
             Some(true) => {
                 let _ = self.selected_indics.insert(index);
@@ -77,6 +82,10 @@ impl Model {
                 }
             }
         }
+    }
+
+    pub fn get_num_selected(&self) -> usize {
+        self.selected_indics.len()
     }
 
     pub fn update_query(&mut self, query: String, cursor: i32) {

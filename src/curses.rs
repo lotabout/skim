@@ -103,7 +103,7 @@ impl Curses {
     pub fn caddch(&self, pair: i16, is_bold: bool, ch: char) {
         let attr = self.get_color(pair, is_bold);
         attron(attr);
-        addch(ch as u64);
+        addstr(&ch.to_string()); // to support wide character
         attroff(attr);
     }
 }
