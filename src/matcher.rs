@@ -108,6 +108,7 @@ impl Matcher {
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
                         (*self.eb_notify).set(Event::EvMatcherStart, Box::new(true));
+                        let _ = (*self.eb_req).wait_for(Event::EvMatcherStartReceived);
                     }
                     _ => {}
                 }

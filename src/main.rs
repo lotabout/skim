@@ -85,6 +85,7 @@ fn main() {
     });
 
     'outer: loop {
+        let mut need_refresh = true;
         for (e, val) in eb.wait() {
             match e {
                 Event::EvReaderNewItem | Event::EvReaderFinished => {
@@ -101,7 +102,10 @@ fn main() {
                 }
 
                 Event::EvMatcherStart => {
+                    while let Ok(_) = rx_matched.try_recv() {}
                     model.clear_items();
+                    eb_matcher.set(Event::EvMatcherStartReceived, Box::new(true));
+                    need_refresh = false;
                 }
 
                 Event::EvMatcherEnd => {
@@ -143,9 +147,11 @@ fn main() {
                 }
             }
         }
+        thread::sleep(Duration::from_millis(10));
         model.display();
-        refresh();
-        thread::sleep(Duration::from_millis(30));
+        if need_refresh {
+            model.refresh();
+        }
     };
 
     endwin();

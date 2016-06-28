@@ -213,7 +213,6 @@ impl Model {
         self.print_items();
         self.print_info();
         self.print_query();
-        self.refresh();
     }
 
     // the terminal resizes, so we need to recalculate the margins.
