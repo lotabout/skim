@@ -8,6 +8,7 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use util::eventbox::EventBox;
 use event::Event;
@@ -85,6 +86,8 @@ impl KeyBoard {
         let ch = self.getch(true).unwrap();
         self.buf.push_back(ch);
 
+        // sleep for a short time to make sure the chars(if any) are ready to read.
+        thread::sleep(Duration::from_millis(1));
         while let Some(ch) = self.getch(false) {
             self.buf.push_back(ch);
         }
