@@ -11,6 +11,7 @@ mod model;
 mod score;
 mod orderedvec;
 mod curses;
+mod query;
 
 use std::sync::Arc;
 use std::thread;
@@ -35,9 +36,10 @@ fn main() {
     let mut curse = Curses::new();
     curse.init(Some(&theme), false, false);
 
-    let mut model = Model::new(curse);
     let eb = Arc::new(EventBox::new());
     let (tx_matched, rx_matched) = channel();
+    let eb_model = eb.clone();
+    let mut model = Model::new(eb_model, curse);
 
     let eb_matcher = Arc::new(EventBox::new());
     let eb_matcher_clone = eb_matcher.clone();
@@ -113,34 +115,38 @@ fn main() {
                 }
 
                 Event::EvQueryChange => {
-                    let (query, pos) : (String, usize) = *val.downcast().unwrap();
-                    let modified = query != model.query;
-                    model.update_query(query.clone(), pos as i32);
-
-                    if modified {
-                        eb_matcher.set(Event::EvMatcherResetQuery, Box::new(model.query.clone()));
-                    }
+                    eb_matcher.set(Event::EvMatcherResetQuery, val);
                 }
 
-                Event::EvInputSelect => {
+                Event::EvInputInvalid => {
+                    // ignore
+                }
+
+                Event::EvInputKey => {
+                    // ignore for now
+                }
+
+                Event::EvResize => { model.resize(); }
+
+                // Actions
+                Event::EvActAddChar => {
+                    let ch: char = *val.downcast().unwrap();
+                    model.act_add_char(ch);
+                }
+                Event::EvActToggleDown => {
+                    model.toggle_select(None);
+                    model.move_line_cursor(1);
+                }
+                Event::EvActUp => { model.move_line_cursor(-1); }
+                Event::EvActDown => { model.move_line_cursor(1); }
+                Event::EvActBackwardChar => { model.act_backward_char(); }
+                Event::EvActBackwardDeleteChar => { model.act_backward_delete_char(); }
+                Event::EvActSelect => {
                     // break out of the loop and output the selected item.
                     if model.get_num_selected() <= 0 { model.toggle_select(Some(true)); }
                     break 'outer;
                 }
-
-                Event::EvInputToggle => {
-                    model.toggle_select(None);
-                    model.move_line_cursor(1);
-                }
-                Event::EvInputUp=> {
-                    model.move_line_cursor(-1);
-                }
-                Event::EvInputDown=> {
-                    model.move_line_cursor(1);
-                }
-                Event::EvResize => {
-                    model.resize();
-                }
+                Event::EvActQuit => { break 'outer; }
 
                 _ => {
                     printw(format!("{}\n", e as i32).as_str());
@@ -148,7 +154,7 @@ fn main() {
             }
         }
         thread::sleep(Duration::from_millis(10));
-        //model.display();
+        model.display();
         if need_refresh {
             model.refresh();
         }

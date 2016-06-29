@@ -10,10 +10,14 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use orderedvec::OrderedVec;
 use curses::*;
+use input::Key;
+use query::Query;
+use util::eventbox::EventBox;
+use event::Event;
 
 pub struct Model {
-    pub query: String,
-    query_cursor: i32,  // > qu<query_cursor>ery
+    eb: Arc<EventBox<Event>>,
+    pub query: Query,
 
     num_matched: u64,
     num_total: u64,
@@ -32,12 +36,12 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(curses: Curses) -> Self {
+    pub fn new(eb: Arc<EventBox<Event>>, curses: Curses) -> Self {
         let (max_y, max_x) = curses.get_maxyx();
 
         Model {
-            query: String::new(),
-            query_cursor: 0,
+            eb: eb,
+            query: Query::new(),
             num_matched: 0,
             num_total: 0,
             items: Arc::new(RwLock::new(Vec::new())),
@@ -91,11 +95,6 @@ impl Model {
         self.selected_indics.len()
     }
 
-    pub fn update_query(&mut self, query: String, cursor: i32) {
-        self.query = query;
-        self.query_cursor = cursor;
-    }
-
     pub fn update_process_info(&mut self, matched: u64, total: u64, processed: u64) {
         self.num_matched = matched;
         self.num_total = total;
@@ -140,8 +139,8 @@ impl Model {
         // > query
         mv(self.max_y-1, 0);
         addstr("> ");
-        addstr(&self.query);
-        mv(self.max_y-1, self.query_cursor+2);
+        addstr(&self.query.get_query());
+        mv(self.max_y-1, (self.query.pos+2) as i32);
     }
 
     pub fn print_info(&self) {
@@ -248,8 +247,28 @@ impl Model {
         self.max_y = max_y;
         self.max_x = max_x;
     }
+
+    pub fn act_add_char(&mut self, ch: char) {
+        let changed = self.query.add_char(ch);
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_backward_char(&mut self) {
+        let _ = self.query.backward_char();
+    }
+
+    pub fn act_backward_delete_char(&mut self) {
+        let changed = self.query.backward_delete_char();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
 }
 
+//==============================================================================
 // helper functions
 
 // wide character will take two unit
