@@ -42,6 +42,7 @@ fn main() {
     let mut opts = Options::new();
     opts.optopt("b", "bind", "comma seperated keybindings", "ctrl-j:accept,ctrl-k:kill-line");
     opts.optflag("h", "help", "print this help menu");
+    opts.optflag("m", "multi", "Enable Multiple Selection");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -62,6 +63,7 @@ fn main() {
     let (tx_matched, rx_matched) = channel();
     let eb_model = eb.clone();
     let mut model = Model::new(eb_model, curse);
+    if options.opt_present("m") {model.multi_selection = true;}
 
     let eb_matcher = Arc::new(EventBox::new());
     let eb_matcher_clone = eb_matcher.clone();
@@ -160,7 +162,8 @@ fn main() {
                 Event::EvActAbort => { break 'outer; }
                 Event::EvActAccept => {
                     // break out of the loop and output the selected item.
-                    if model.get_num_selected() <= 0 { model.act_toggle(Some(true)); }
+                    //if model.get_num_selected() <= 0 { model.act_toggle(Some(true)); }
+                    model.act_accept();
                     break 'outer;
                 }
                 Event::EvActBackwardChar       => {model.act_backward_char();}
@@ -185,17 +188,17 @@ fn main() {
                 Event::EvActPageUp             => {model.act_move_page(1);}
                 Event::EvActPreviousHistory    => {}
                 Event::EvActSelectAll          => {model.act_select_all();}
-                Event::EvActToggle             => {model.act_toggle(None);}
+                Event::EvActToggle             => {model.act_toggle();}
                 Event::EvActToggleAll          => {model.act_toggle_all();}
                 Event::EvActToggleDown         => {
-                    model.act_toggle(None);
+                    model.act_toggle();
                     model.act_move_line_cursor(-1);
                 }
                 Event::EvActToggleIn           => {}
                 Event::EvActToggleOut          => {}
                 Event::EvActToggleSort         => {}
                 Event::EvActToggleUp           => {
-                    model.act_toggle(None);
+                    model.act_toggle();
                     model.act_move_line_cursor(1);
                 }
                 Event::EvActUnixLineDiscard    => {model.act_line_discard();}

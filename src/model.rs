@@ -40,7 +40,9 @@ pub struct Model {
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
+
     processed_percentage: u64,
+    pub multi_selection: bool,
 
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
@@ -51,7 +53,7 @@ pub struct Model {
     width: usize,
     height: usize,
 
-    tabstop: usize,
+    pub tabstop: usize,
     curses: Curses,
 }
 
@@ -68,6 +70,7 @@ impl Model {
             selected_indics: HashSet::new(),
             matched_items: RefCell::new(OrderedVec::new()),
             processed_percentage: 100,
+            multi_selection: false,
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
@@ -234,6 +237,12 @@ impl Model {
     //============================================================================
     // Actions
 
+    pub fn act_accept(&mut self) {
+        if self.multi_selection {return;}
+        let index = self.item_cursor;
+        self.selected_indics.insert(index);
+    }
+     
     pub fn act_add_char(&mut self, ch: char) {
         let changed = self.query.add_char(ch);
         if changed {
@@ -312,6 +321,8 @@ impl Model {
     }
 
     pub fn act_select_all(&mut self) {
+        if !self.multi_selection {return;}
+
         let mut matched_items = self.matched_items.borrow_mut();
         for i in 0..matched_items.len() {
             self.selected_indics.insert(i);
@@ -319,6 +330,8 @@ impl Model {
     }
 
     pub fn act_toggle_all(&mut self) {
+        if !self.multi_selection {return;}
+
         let mut matched_items = self.matched_items.borrow_mut();
         let selected = mem::replace(&mut self.selected_indics, HashSet::new());
         for i in 0..matched_items.len() {
@@ -328,33 +341,18 @@ impl Model {
         }
     }
 
-    pub fn act_toggle(&mut self, selected: Option<bool>) {
+    pub fn act_toggle(&mut self) {
+        if !self.multi_selection {return;}
+
         let mut matched_items = self.matched_items.borrow_mut();
-        let matched = matched_items.get(self.item_cursor);
-        if matched == None {
-            return;
-        }
-
-        let index = matched.unwrap().index;
-        match selected {
-            Some(true) => {
-                let _ = self.selected_indics.insert(index);
-            }
-            Some(false) => {
-                let _ = self.selected_indics.remove(&index);
-            }
-            None => {
-                if self.selected_indics.contains(&index) {
-                    let _ = self.selected_indics.remove(&index);
-                } else {
-                    let _ = self.selected_indics.insert(index);
-                }
+        if let Some(matched) = matched_items.get(self.item_cursor) {
+            let item_index = matched.index;
+            if self.selected_indics.contains(&item_index) {
+                self.selected_indics.remove(&item_index);
+            } else {
+                self.selected_indics.insert(item_index);
             }
         }
-    }
-
-    pub fn get_num_selected(&self) -> usize {
-        self.selected_indics.len()
     }
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
