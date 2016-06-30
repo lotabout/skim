@@ -118,8 +118,10 @@ fn main() {
         let mut need_refresh = true;
         for (e, val) in eb.wait() {
             match e {
-                Event::EvReaderNewItem | Event::EvReaderFinished => {
+                Event::EvReaderNewItem => {
                     eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
+                    let reading: bool = *val.downcast().unwrap();
+                    model.reading = reading;
                 }
 
                 Event::EvMatcherUpdateProcess => {

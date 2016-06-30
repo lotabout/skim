@@ -14,6 +14,8 @@ use query::Query;
 use util::eventbox::EventBox;
 use event::Event;
 use std::mem;
+use std::time::{Instant, Duration};
+use std::thread;
 
 // The whole screen is:
 //
@@ -31,6 +33,10 @@ use std::mem;
 //                  +---------------------------------------+
 //
 
+const SPINNER_DURATION: u32 = 200;
+const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+
+
 pub struct Model {
     eb: Arc<EventBox<Event>>,
     pub query: Query,
@@ -44,6 +50,7 @@ pub struct Model {
     processed_percentage: u64,
     pub multi_selection: bool,
     pub prompt: String,
+    pub reading: bool,
 
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
@@ -56,11 +63,13 @@ pub struct Model {
 
     pub tabstop: usize,
     curses: Curses,
+    timer: Instant,
 }
 
 impl Model {
     pub fn new(eb: Arc<EventBox<Event>>, curses: Curses) -> Self {
         let (max_y, max_x) = curses.get_maxyx();
+        let timer = Instant::now();
 
         Model {
             eb: eb,
@@ -73,6 +82,7 @@ impl Model {
             processed_percentage: 100,
             multi_selection: false,
             prompt: "> ".to_string(),
+            reading: false,
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
@@ -82,6 +92,7 @@ impl Model {
             height: (max_y - 2) as usize,
             tabstop: 8,
             curses: curses,
+            timer: timer,
         }
     }
 
@@ -118,7 +129,17 @@ impl Model {
 
     pub fn print_info(&self) {
         mv(self.max_y-2, 0);
-        addstr(format!("  {}/{}{} ", self.num_matched, self.num_total,
+
+        if self.reading {
+            let time = self.timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
+            self.print_char(SPINNERS[index as usize], COLOR_SPINNER, true);
+        } else {
+            self.print_char(' ', COLOR_NORMAL, false);
+        }
+
+        addstr(format!(" {}/{}{} ", self.num_matched, self.num_total,
                        if self.processed_percentage == 100 {"".to_string()} else {format!("({}%)", self.processed_percentage)},
                        ).as_str());
     }

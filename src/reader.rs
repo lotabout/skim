@@ -63,9 +63,9 @@ impl Reader {
                 }
                 Err(_err) => { break; }
             }
-            self.eb.set(Event::EvReaderNewItem, Box::new(0));
+            self.eb.set(Event::EvReaderNewItem, Box::new(true));
         }
-        self.eb.set(Event::EvReaderFinished, Box::new(0));
+        self.eb.set(Event::EvReaderNewItem, Box::new(false));
     }
 }
 
