@@ -268,9 +268,11 @@ impl Model {
     // Actions
 
     pub fn act_accept(&mut self) {
-        if self.multi_selection {return;}
-        let index = self.item_cursor;
-        self.selected_indics.insert(index);
+        let mut matched_items = self.matched_items.borrow_mut();
+        if let Some(matched) = matched_items.get(self.item_cursor) {
+            let item_index = matched.index;
+            self.selected_indics.insert(item_index);
+        }
     }
 
     pub fn act_add_char(&mut self, ch: char) {
