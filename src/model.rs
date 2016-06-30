@@ -13,6 +13,23 @@ use curses::*;
 use query::Query;
 use util::eventbox::EventBox;
 use event::Event;
+use std::mem;
+
+// The whole screen is:
+//
+//                  +---------------------------------------|
+//                  | | |                                   | 5
+//                  | | |               ^                   | 4
+//   current cursor |>| |               |                   | 3
+//                  | | |      lines    |                   | 2 cursor
+//         selected | |>|--------------------------------   | 1
+//                  | | |                                   | 0
+//                  +---------------------------------------+
+//          spinner |/| | (matched/total) (per%) [selected] |
+//                  +---------------------------------------+
+//                  | prompt>  query string                 |
+//                  +---------------------------------------+
+//
 
 pub struct Model {
     eb: Arc<EventBox<Event>>,
@@ -27,9 +44,12 @@ pub struct Model {
 
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
-    item_start_pos: usize, // for screen scroll.
+    hscroll_offset: usize,
+
     max_y: i32,
     max_x: i32,
+    width: usize,
+    height: usize,
 
     curses: Curses,
 }
@@ -48,10 +68,12 @@ impl Model {
             matched_items: RefCell::new(OrderedVec::new()),
             processed_percentage: 100,
             item_cursor: 0,
-            line_cursor: (max_y - 3) as usize,
-            item_start_pos: 0,
+            line_cursor: 0,
+            hscroll_offset: 0,
             max_y: max_y,
             max_x: max_x,
+            width: (max_x - 2) as usize,
+            height: (max_y - 2) as usize,
             curses: curses,
         }
     }
@@ -89,8 +111,9 @@ impl Model {
 
     pub fn print_info(&self) {
         mv(self.max_y-2, 0);
-        addstr(format!("  {}/{}{}", self.num_matched, self.num_total,
-                       if self.processed_percentage == 100 {"".to_string()} else {format!("({}%)", self.processed_percentage)}
+        addstr(format!("  {}/{}{} [{}/{}/{}]", self.num_matched, self.num_total,
+                       if self.processed_percentage == 100 {"".to_string()} else {format!("({}%)", self.processed_percentage)},
+                       self.line_cursor, self.height, self.item_cursor
                        ).as_str());
     }
 
@@ -147,23 +170,17 @@ impl Model {
 
     pub fn print_items(&self) {
         let mut matched_items = self.matched_items.borrow_mut();
+        let item_start_pos = self.item_cursor - self.line_cursor;
 
-        let mut y = self.max_y - 3;
-        let mut i = self.item_start_pos;
-        while let Some(matched) = matched_items.get(i) {
-            i+=1;
+        for i in 0..self.height {
+            if let Some(matched) = matched_items.get(item_start_pos + i) {
+                mv((self.height - i - 1) as i32, 0);
 
-            mv(y, 0);
-            let is_current_line = y == self.line_cursor as i32;
-
-            let label = if is_current_line {">"} else {" "};
-
-            self.curses.cprint(COLOR_CURSOR, true, label);
-
-            self.print_item(matched, is_current_line);
-
-            y -= 1;
-            if y < 0 {
+                let is_current_line = i == self.line_cursor;
+                let label = if is_current_line {">"} else {" "};
+                self.curses.cprint(COLOR_CURSOR, true, label);
+                self.print_item(matched, is_current_line);
+            } else {
                 break;
             }
         }
@@ -232,6 +249,10 @@ impl Model {
         }
     }
 
+    pub fn act_deselect_all(&mut self) {
+        self.selected_indics.clear();
+    }
+
     pub fn act_end_of_line(&mut self) {
         let _ = self.query.end_of_line();
     }
@@ -265,7 +286,24 @@ impl Model {
         }
     }
 
-    pub fn act_toggle_select(&mut self, selected: Option<bool>) {
+    pub fn act_select_all(&mut self) {
+        let mut matched_items = self.matched_items.borrow_mut();
+        for i in 0..matched_items.len() {
+            self.selected_indics.insert(i);
+        }
+    }
+
+    pub fn act_toggle_all(&mut self) {
+        let mut matched_items = self.matched_items.borrow_mut();
+        let selected = mem::replace(&mut self.selected_indics, HashSet::new());
+        for i in 0..matched_items.len() {
+            if !selected.contains(&i) {
+                self.selected_indics.insert(i);
+            }
+        }
+    }
+
+    pub fn act_toggle(&mut self, selected: Option<bool>) {
         let mut matched_items = self.matched_items.borrow_mut();
         let matched = matched_items.get(self.item_cursor);
         if matched == None {
@@ -295,32 +333,30 @@ impl Model {
     }
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
+        let total_item = self.matched_items.borrow().len() as i32;
 
         let y = self.line_cursor as i32 + diff;
-        let item_y = max(0, self.item_cursor as i32 - diff);
-        let screen_height = (self.max_y - 3) as usize;
+        self.line_cursor = if diff > 0 {
+            let tmp = min(min(y, (self.height as i32) -1), total_item-1);
+            if tmp < 0 {0} else {tmp as usize}
+        } else {
+            max(0, y) as usize
+        };
 
-        match y {
-            y if y < 0 => {
-                self.line_cursor = 0;
-                self.item_cursor = min(item_y as usize, self.matched_items.borrow().len()-1);
-                self.item_start_pos = self.item_cursor - screen_height;
-            }
 
-            y if y > screen_height as i32 => {
-                self.line_cursor = screen_height;
-                self.item_cursor = max(0, item_y as usize);
-                self.item_start_pos = self.item_cursor;
-            }
-
-            y => {
-                self.line_cursor = y as usize;
-                self.item_cursor = item_y as usize;
-            }
+        let item_y = self.item_cursor as i32 + diff;
+        self.item_cursor = if diff > 0 {
+            let tmp = min(item_y, total_item-1);
+            if tmp < 0 {0} else {tmp as usize}
+        } else {
+            max(0, item_y) as usize
         }
     }
 
-
+    pub fn act_move_page(&mut self, pages: i32) {
+        let lines = (self.height as i32) * pages;
+        self.act_move_line_cursor(lines);
+    }
 }
 
 //==============================================================================
@@ -334,31 +370,31 @@ fn display_width(text: &[char]) -> usize {
 }
 
 
-// calculate from left to right, stop when the width exceeds
-fn left_fixed(text: &[char], width: usize) -> usize {
-    if width <= 0 {
+// calculate from left to right, stop when the max_x exceeds
+fn left_fixed(text: &[char], max_x: usize) -> usize {
+    if max_x <= 0 {
         return 0;
     }
 
     let mut w = 0;
     for (idx, &c) in text.iter().enumerate() {
         w += if c.len_utf8() > 1 {2} else {1};
-        if w > width {
+        if w > max_x {
             return idx-1;
         }
     }
     return text.len()-1;
 }
 
-fn right_fixed(text: &[char], width: usize) -> usize {
-    if width <= 0 {
+fn right_fixed(text: &[char], max_x: usize) -> usize {
+    if max_x <= 0 {
         return text.len()-1;
     }
 
     let mut w = 0;
     for (idx, &c) in text.iter().enumerate().rev() {
         w += if c.len_utf8() > 1 {2} else {1};
-        if w > width {
+        if w > max_x {
             return idx+1;
         }
     }

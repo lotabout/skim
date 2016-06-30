@@ -459,7 +459,7 @@ fn get_default_key_map() -> HashMap<Key, Event> {
 
     ret.insert(Key::CtrlK, Event::EvActKillLine);
     ret.insert(Key::AltD,  Event::EvActKillWord);
-    ret.insert(Key::CtrlN, Event::EvActNextHistory);
+    //ret.insert(Key::CtrlN, Event::EvActNextHistory);
     ret.insert(Key::PgDn,  Event::EvActPageDown);
     ret.insert(Key::PgUp,  Event::EvActPageUp);
     ret.insert(Key::CtrlP, Event::EvActPreviousHistory);
