@@ -40,10 +40,11 @@ fn main() {
     let program = args[0].clone();
 
     let mut opts = Options::new();
-    opts.optopt("b", "bind", "comma seperated keybindings", "ctrl-j:accept,ctrl-k:kill-line");
+    opts.optopt("b", "bind", "comma seperated keybindings, such as 'ctrl-j:accept,ctrl-k:kill-line'", "KEY:ACTION");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("m", "multi", "Enable Multiple Selection");
     opts.optopt("p", "prompt", "prompt string", "'> '");
+    opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -82,6 +83,7 @@ fn main() {
     let eb_clone_input = eb.clone();
     let mut input = Input::new(eb_clone_input);
     input.parse_keymap(options.opt_str("b"));
+    input.parse_expect_keys(options.opt_str("e"));
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};

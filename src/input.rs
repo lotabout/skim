@@ -77,6 +77,14 @@ impl Input {
             }
         }
     }
+
+    pub fn parse_expect_keys(&mut self, keys: Option<String>) {
+        if let Some(keys) = keys {
+            for key in keys.split(',') {
+                self.bind(key, "accept");
+            }
+        }
+    }
 }
 
 struct KeyBoard {
