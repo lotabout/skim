@@ -6,7 +6,6 @@ extern crate libc;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, RwLock};
 use std::io::{stdin, BufRead, BufReader};
-use std::sync::mpsc::Sender;
 use std::error::Error;
 use util::eventbox::EventBox;
 use event::Event;

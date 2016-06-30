@@ -10,7 +10,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use orderedvec::OrderedVec;
 use curses::*;
-use input::Key;
 use query::Query;
 use util::eventbox::EventBox;
 use event::Event;
@@ -157,7 +156,7 @@ impl Model {
             mv(y, 0);
             let is_current_line = y == self.line_cursor as i32;
 
-            let mut label = if is_current_line {">"} else {" "};
+            let label = if is_current_line {">"} else {" "};
 
             self.curses.cprint(COLOR_CURSOR, true, label);
 

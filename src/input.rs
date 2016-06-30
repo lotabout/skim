@@ -13,8 +13,6 @@ use std::time::Duration;
 use util::eventbox::EventBox;
 use event::{Event, parse_action};
 
-use ncurses::*;
-
 pub struct Input {
     eb: Arc<EventBox<Event>>,
     keyboard: KeyBoard,
@@ -91,7 +89,7 @@ impl KeyBoard {
         let (tx, rx) = channel();
         thread::spawn(move || {
             for ch in f.chars() {
-                tx.send(ch.unwrap());
+                let _ = tx.send(ch.unwrap());
             }
         });
 

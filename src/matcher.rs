@@ -137,7 +137,7 @@ fn match_item(index: usize, item: &str, query: &str) -> Option<MatchedItem> {
 
 
 struct MatcherCache {
-    matched_items: OrderedVec<MatchedItem>,
+    pub matched_items: OrderedVec<MatchedItem>,
     pub item_pos: usize,
 }
 
@@ -147,9 +147,5 @@ impl MatcherCache {
             item_pos: 0,
             matched_items: OrderedVec::new(),
         }
-    }
-
-    pub fn push(&mut self, matched_item: MatchedItem) {
-        self.matched_items.push(matched_item);
     }
 }

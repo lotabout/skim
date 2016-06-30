@@ -54,7 +54,7 @@ fn main() {
         return
     }
 
-    let theme = curses::ColorTheme::new();
+    let theme = ColorTheme::new();
     let mut curse = Curses::new();
     curse.init(Some(&theme), false, false);
 

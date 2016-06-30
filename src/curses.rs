@@ -29,7 +29,7 @@ impl Curses {
             use_color: false,
         }
     }
-    pub fn init(&mut self, theme: Option<&ColorTheme>, is_black: bool, use_mouse: bool) {
+    pub fn init(&mut self, theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
         // initialize ncurses
         let local_conf = LcCategory::all;
         setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
@@ -53,13 +53,13 @@ impl Curses {
     }
 
     fn init_pairs(&mut self, base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
-        let mut fg = shadow(base.fg, theme.fg);
+        //let mut fg = shadow(base.fg, theme.fg);
         let mut bg = shadow(base.bg, theme.bg);
 
         if is_black {
             bg = COLOR_BLACK;
         } else if theme.use_default {
-            fg = COLOR_DEFAULT;
+            //fg = COLOR_DEFAULT;
             bg = COLOR_DEFAULT;
             use_default_colors();
         }

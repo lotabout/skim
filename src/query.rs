@@ -97,7 +97,7 @@ impl Query {
     pub fn delete_char(&mut self) -> bool {
         if self.index == self.query.len() { return false; }
 
-        let ch = self.query.remove(self.index);
+        let _ = self.query.remove(self.index);
         return true;
     }
 

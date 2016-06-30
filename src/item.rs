@@ -1,7 +1,6 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
-use std;
 use std::cmp::Ordering;
 
 pub struct Item {
