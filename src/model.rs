@@ -51,6 +51,7 @@ pub struct Model {
     width: usize,
     height: usize,
 
+    tabstop: usize,
     curses: Curses,
 }
 
@@ -74,6 +75,7 @@ impl Model {
             max_x: max_x,
             width: (max_x - 2) as usize,
             height: (max_y - 2) as usize,
+            tabstop: 8,
             curses: curses,
         }
     }
@@ -111,61 +113,9 @@ impl Model {
 
     pub fn print_info(&self) {
         mv(self.max_y-2, 0);
-        addstr(format!("  {}/{}{} [{}/{}/{}]", self.num_matched, self.num_total,
+        addstr(format!("  {}/{}{} ", self.num_matched, self.num_total,
                        if self.processed_percentage == 100 {"".to_string()} else {format!("({}%)", self.processed_percentage)},
-                       self.line_cursor, self.height, self.item_cursor
                        ).as_str());
-    }
-
-    fn print_item(&self, matched: &MatchedItem, is_current: bool) {
-        let items = self.items.read().unwrap();
-        let ref item = items[matched.index];
-
-        let is_selected = self.selected_indics.contains(&matched.index);
-
-        if is_selected {
-            self.curses.cprint(COLOR_SELECTED, true, ">");
-        } else {
-            self.curses.cprint(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false, " ");
-        }
-
-        match matched.matched_range {
-            Some(MatchedRange::Chars(ref matched_indics)) => {
-                let matched_end_pos = if matched_indics.len() > 0 {matched_indics[matched_indics.len()-1]} else {item.text.len()-1};
-                let (text, mut idx) = reshape_string(&item.text.chars().collect::<Vec<char>>(), (self.max_x-3) as usize, 0, matched_end_pos);
-                let mut matched_indics_iter = matched_indics.iter().peekable();
-
-                // skip indics
-                while let Some(&&index) = matched_indics_iter.peek() {
-                    if idx > index {
-                        let _ = matched_indics_iter.next();
-                    } else {
-                        break;
-                    }
-                }
-
-                for &ch in text.iter() {
-                    if let Some(&&index) = matched_indics_iter.peek() {
-                        if idx == index {
-                            self.curses.caddch(COLOR_MATCHED, is_current, ch);
-                            let _ = matched_indics_iter.next();
-                        } else {
-                            self.curses.caddch(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current, ch)
-                        }
-                    } else {
-                        self.curses.caddch(if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current, ch)
-                    }
-                    idx += 1;
-                }
-            }
-            Some(MatchedRange::Range(_, _)) => {
-                // pass
-            }
-            None => {
-                // pass
-            }
-        }
-
     }
 
     pub fn print_items(&self) {
@@ -178,10 +128,82 @@ impl Model {
 
                 let is_current_line = i == self.line_cursor;
                 let label = if is_current_line {">"} else {" "};
-                self.curses.cprint(COLOR_CURSOR, true, label);
+                self.curses.cprint(label, COLOR_CURSOR, true);
                 self.print_item(matched, is_current_line);
             } else {
                 break;
+            }
+        }
+    }
+
+    fn print_item(&self, matched: &MatchedItem, is_current: bool) {
+        let items = self.items.read().unwrap();
+        let ref item = items[matched.index];
+
+        let is_selected = self.selected_indics.contains(&matched.index);
+
+        if is_selected {
+            self.curses.cprint(">", COLOR_SELECTED, true);
+        } else {
+            self.curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
+        }
+
+        match matched.matched_range {
+            Some(MatchedRange::Chars(ref matched_indics)) => {
+                let matched_end_pos = if matched_indics.len() > 0 {
+                    matched_indics[matched_indics.len()-1]
+                } else {
+                    0
+                };
+
+                let (text, mut idx) = reshape_string(&item.text.chars().collect::<Vec<char>>(),
+                                                     (self.max_x-3) as usize,
+                                                     self.hscroll_offset,
+                                                     matched_end_pos);
+                let mut matched_indics_iter = matched_indics.iter().peekable();
+
+                // skip indics
+                while let Some(&&index) = matched_indics_iter.peek() {
+                    if idx > index {
+                        let _ = matched_indics_iter.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                for &ch in text.iter() {
+                    match matched_indics_iter.peek() {
+                        Some(&&index) if idx == index => {
+                            self.print_char(ch, COLOR_MATCHED, is_current);
+                            let _ = matched_indics_iter.next();
+                        }
+                        Some(_) | None => {
+                            self.print_char(ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                        }
+                    }
+                    idx += 1;
+                }
+            }
+            Some(MatchedRange::Range(_, _)) => {
+                // pass
+            }
+            None => {
+                // pass
+            }
+        }
+    }
+
+    fn print_char(&self, ch: char, color: i16, is_bold: bool) {
+        if ch != '\t' {
+            self.curses.caddch(ch, color, is_bold);
+        } else {
+            // handle tabstop
+            let mut y = 0;
+            let mut x = 0;
+            getyx(stdscr, &mut y, &mut x);
+            let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
+            for i in 0..rest {
+                self.curses.caddch(' ', color, is_bold);
             }
         }
     }
@@ -208,6 +230,9 @@ impl Model {
         self.max_y = max_y;
         self.max_x = max_x;
     }
+
+    //============================================================================
+    // Actions
 
     pub fn act_add_char(&mut self, ch: char) {
         let changed = self.query.add_char(ch);

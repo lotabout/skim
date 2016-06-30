@@ -93,14 +93,14 @@ impl Curses {
         (max_y, max_x)
     }
 
-    pub fn cprint(&self, pair: i16, is_bold: bool, text: &str) {
+    pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {
         let attr = self.get_color(pair, is_bold);
         attron(attr);
         addstr(text);
         attroff(attr);
     }
 
-    pub fn caddch(&self, pair: i16, is_bold: bool, ch: char) {
+    pub fn caddch(&self, ch: char, pair: i16, is_bold: bool) {
         let attr = self.get_color(pair, is_bold);
         attron(attr);
         addstr(&ch.to_string()); // to support wide character
