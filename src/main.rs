@@ -128,25 +128,54 @@ fn main() {
 
                 Event::EvResize => { model.resize(); }
 
-                // Actions
                 Event::EvActAddChar => {
                     let ch: char = *val.downcast().unwrap();
                     model.act_add_char(ch);
                 }
-                Event::EvActToggleDown => {
-                    model.toggle_select(None);
-                    model.move_line_cursor(1);
-                }
-                Event::EvActUp => { model.move_line_cursor(-1); }
-                Event::EvActDown => { model.move_line_cursor(1); }
-                Event::EvActBackwardChar => { model.act_backward_char(); }
-                Event::EvActBackwardDeleteChar => { model.act_backward_delete_char(); }
-                Event::EvActSelect => {
+                // Actions
+
+                Event::EvActAbort => { break 'outer; }
+                Event::EvActAccept => {
                     // break out of the loop and output the selected item.
-                    if model.get_num_selected() <= 0 { model.toggle_select(Some(true)); }
+                    if model.get_num_selected() <= 0 { model.act_toggle_select(Some(true)); }
                     break 'outer;
                 }
-                Event::EvActQuit => { break 'outer; }
+                Event::EvActBackwardChar => { model.act_backward_char(); }
+                Event::EvActBackwardDeleteChar => { model.act_backward_delete_char(); }
+                Event::EvActBackwardKillWord => {model.act_backward_kill_word();}
+                Event::EvActBackwardWord => {model.act_backward_word();}
+                Event::EvActBeginningOfLine => {model.act_beginning_of_line();}
+                Event::EvActCancel => {}
+                Event::EvActClearScreen => {}
+                Event::EvActDeleteChar => {model.act_delete_char();}
+                Event::EvActDeleteCharEOF => {model.act_delete_char();}
+                Event::EvActDeselectAll => {}
+                Event::EvActDown => { model.act_move_line_cursor(1); }
+                Event::EvActEndOfLine => {model.act_end_of_line();}
+                Event::EvActForwardChar => {model.act_forward_char();}
+                Event::EvActForwardWord => {model.act_forward_word();}
+                Event::EvActIgnore => {}
+                Event::EvActKillLine => {model.act_kill_line();}
+                Event::EvActKillWord => {model.act_kill_word();}
+                Event::EvActNextHistory => {}
+                Event::EvActPageDown => {}
+                Event::EvActPageUp => {}
+                Event::EvActPreviousHistory => {}
+                Event::EvActSelectAll => {}
+                Event::EvActToggle => {}
+                Event::EvActToggleAll => {}
+                Event::EvActToggleDown => {
+                    model.act_toggle_select(None);
+                    model.act_move_line_cursor(1);
+                }
+                Event::EvActToggleIn => {}
+                Event::EvActToggleOut => {}
+                Event::EvActToggleSort => {}
+                Event::EvActToggleUp => {}
+                Event::EvActUnixLineDiscard => {model.act_line_discard();}
+                Event::EvActUnixWordRubout => {model.act_backward_kill_word();}
+                Event::EvActUp => { model.act_move_line_cursor(-1); }
+                Event::EvActYank => {}
 
                 _ => {
                     printw(format!("{}\n", e as i32).as_str());

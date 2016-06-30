@@ -345,10 +345,65 @@ pub enum Key {
 
 fn get_default_key_map() -> HashMap<Key, Event> {
     let mut ret = HashMap::new();
-    ret.insert(Key::Tab,   Event::EvActToggleDown);
-    ret.insert(Key::Enter, Event::EvActSelect);
-    ret.insert(Key::ESC,   Event::EvActQuit);
+    ret.insert(Key::ESC,   Event::EvActAbort);
+    ret.insert(Key::CtrlC, Event::EvActAbort);
+    ret.insert(Key::CtrlG, Event::EvActAbort);
+    ret.insert(Key::CtrlQ, Event::EvActAbort);
+
+    ret.insert(Key::Enter, Event::EvActAccept);
+
     ret.insert(Key::Left,  Event::EvActBackwardChar);
+    ret.insert(Key::CtrlB, Event::EvActBackwardChar);
+
+    ret.insert(Key::CtrlH, Event::EvActBackwardDeleteChar);
     ret.insert(Key::BSpace,Event::EvActBackwardDeleteChar);
+
+    ret.insert(Key::AltBS, Event::EvActBackwardKillWord);
+
+    ret.insert(Key::AltB,  Event::EvActBackwardWord);
+    ret.insert(Key::SLeft, Event::EvActBackwardWord);
+
+    ret.insert(Key::CtrlA, Event::EvActBeginningOfLine);
+    //ret.insert(Key::AltB,  Event::EvActCancel);
+    ret.insert(Key::CtrlL, Event::EvActClearScreen);
+    ret.insert(Key::Del,   Event::EvActDeleteChar);
+    ret.insert(Key::CtrlD, Event::EvActDeleteCharEOF);
+    //ret.insert(Key::AltZ,  Event::EvActDeselectAll);
+
+    ret.insert(Key::CtrlJ, Event::EvActDown);
+    ret.insert(Key::CtrlN, Event::EvActDown);
+    ret.insert(Key::Down,  Event::EvActDown);
+
+    ret.insert(Key::CtrlE, Event::EvActEndOfLine);
+    ret.insert(Key::End,   Event::EvActEndOfLine);
+
+    ret.insert(Key::CtrlF, Event::EvActForwardChar);
+    ret.insert(Key::Right, Event::EvActForwardChar);
+
+    ret.insert(Key::AltF,  Event::EvActForwardWord);
+    ret.insert(Key::SRight,Event::EvActForwardWord);
+
+    //ret.insert(Key::AltZ,  Event::EvActIgnore);
+
+    ret.insert(Key::CtrlK, Event::EvActKillLine);
+    ret.insert(Key::AltD,  Event::EvActKillWord);
+    ret.insert(Key::CtrlN, Event::EvActNextHistory);
+    ret.insert(Key::PgDn,  Event::EvActPageDown);
+    ret.insert(Key::PgUp,  Event::EvActPageUp);
+    ret.insert(Key::CtrlP, Event::EvActPreviousHistory);
+    //ret.insert(Key::AltZ,  Event::EvActSelectAll);
+    //ret.insert(Key::AltZ,  Event::EvActToggle);
+    //ret.insert(Key::AltZ,  Event::EvActToggleAll);
+    ret.insert(Key::Tab,   Event::EvActToggleDown);
+    //ret.insert(Key::AltZ,  Event::EvActToggleIn);
+    //ret.insert(Key::AltZ,  Event::EvActToggleOut);
+    //ret.insert(Key::AltZ,  Event::EvActToggleSort);
+    ret.insert(Key::BTab,  Event::EvActToggleUp);
+    ret.insert(Key::CtrlU, Event::EvActUnixLineDiscard);
+    ret.insert(Key::CtrlW, Event::EvActUnixWordRubout);
+    ret.insert(Key::CtrlP, Event::EvActUp);
+    ret.insert(Key::CtrlK, Event::EvActUp);
+    ret.insert(Key::Up,    Event::EvActUp);
+    ret.insert(Key::CtrlY, Event::EvActYank);
     ret
 }

@@ -66,35 +66,6 @@ impl Model {
         }
     }
 
-    pub fn toggle_select(&mut self, selected: Option<bool>) {
-        let mut matched_items = self.matched_items.borrow_mut();
-        let matched = matched_items.get(self.item_cursor);
-        if matched == None {
-            return;
-        }
-
-        let index = matched.unwrap().index;
-        match selected {
-            Some(true) => {
-                let _ = self.selected_indics.insert(index);
-            }
-            Some(false) => {
-                let _ = self.selected_indics.remove(&index);
-            }
-            None => {
-                if self.selected_indics.contains(&index) {
-                    let _ = self.selected_indics.remove(&index);
-                } else {
-                    let _ = self.selected_indics.insert(index);
-                }
-            }
-        }
-    }
-
-    pub fn get_num_selected(&self) -> usize {
-        self.selected_indics.len()
-    }
-
     pub fn update_process_info(&mut self, matched: u64, total: u64, processed: u64) {
         self.num_matched = matched;
         self.num_total = total;
@@ -107,32 +78,6 @@ impl Model {
 
     pub fn clear_items(&mut self) {
         self.matched_items.borrow_mut().clear();
-    }
-
-    pub fn move_line_cursor(&mut self, diff: i32) {
-
-        let y = self.line_cursor as i32 + diff;
-        let item_y = max(0, self.item_cursor as i32 - diff);
-        let screen_height = (self.max_y - 3) as usize;
-
-        match y {
-            y if y < 0 => {
-                self.line_cursor = 0;
-                self.item_cursor = min(item_y as usize, self.matched_items.borrow().len()-1);
-                self.item_start_pos = self.item_cursor - screen_height;
-            }
-
-            y if y > screen_height as i32 => {
-                self.line_cursor = screen_height;
-                self.item_cursor = max(0, item_y as usize);
-                self.item_start_pos = self.item_cursor;
-            }
-
-            y => {
-                self.line_cursor = y as usize;
-                self.item_cursor = item_y as usize;
-            }
-        }
     }
 
     pub fn print_query(&self) {
@@ -265,6 +210,117 @@ impl Model {
             self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
         }
     }
+
+    pub fn act_backward_kill_word(&mut self) {
+        let changed = self.query.backward_kill_word();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_backward_word(&mut self) {
+        let _ = self.query.backward_word();
+    }
+
+    pub fn act_beginning_of_line(&mut self) {
+        let _ = self.query.beginning_of_line();
+    }
+
+    pub fn act_delete_char(&mut self) {
+        let changed = self.query.delete_char();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_end_of_line(&mut self) {
+        let _ = self.query.end_of_line();
+    }
+
+    pub fn act_forward_char(&mut self) {
+        let _ = self.query.forward_char();
+    }
+
+    pub fn act_forward_word(&mut self) {
+        let _ = self.query.forward_word();
+    }
+
+    pub fn act_kill_line(&mut self) {
+        let changed = self.query.kill_line();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_kill_word(&mut self) {
+        let changed = self.query.kill_word();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_line_discard(&mut self) {
+        let changed = self.query.line_discard();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_toggle_select(&mut self, selected: Option<bool>) {
+        let mut matched_items = self.matched_items.borrow_mut();
+        let matched = matched_items.get(self.item_cursor);
+        if matched == None {
+            return;
+        }
+
+        let index = matched.unwrap().index;
+        match selected {
+            Some(true) => {
+                let _ = self.selected_indics.insert(index);
+            }
+            Some(false) => {
+                let _ = self.selected_indics.remove(&index);
+            }
+            None => {
+                if self.selected_indics.contains(&index) {
+                    let _ = self.selected_indics.remove(&index);
+                } else {
+                    let _ = self.selected_indics.insert(index);
+                }
+            }
+        }
+    }
+
+    pub fn get_num_selected(&self) -> usize {
+        self.selected_indics.len()
+    }
+
+    pub fn act_move_line_cursor(&mut self, diff: i32) {
+
+        let y = self.line_cursor as i32 + diff;
+        let item_y = max(0, self.item_cursor as i32 - diff);
+        let screen_height = (self.max_y - 3) as usize;
+
+        match y {
+            y if y < 0 => {
+                self.line_cursor = 0;
+                self.item_cursor = min(item_y as usize, self.matched_items.borrow().len()-1);
+                self.item_start_pos = self.item_cursor - screen_height;
+            }
+
+            y if y > screen_height as i32 => {
+                self.line_cursor = screen_height;
+                self.item_cursor = max(0, item_y as usize);
+                self.item_start_pos = self.item_cursor;
+            }
+
+            y => {
+                self.line_cursor = y as usize;
+                self.item_cursor = item_y as usize;
+            }
+        }
+    }
+
 
 }
 
