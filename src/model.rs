@@ -43,6 +43,7 @@ pub struct Model {
 
     processed_percentage: u64,
     pub multi_selection: bool,
+    pub prompt: String,
 
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
@@ -71,6 +72,7 @@ impl Model {
             matched_items: RefCell::new(OrderedVec::new()),
             processed_percentage: 100,
             multi_selection: false,
+            prompt: "> ".to_string(),
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
@@ -109,9 +111,9 @@ impl Model {
     pub fn print_query(&self) {
         // > query
         mv(self.max_y-1, 0);
-        addstr("> ");
-        addstr(&self.query.get_query());
-        mv(self.max_y-1, (self.query.pos+2) as i32);
+        self.curses.cprint(&self.prompt, COLOR_PROMPT, false);
+        self.curses.cprint(&self.query.get_query(), COLOR_NORMAL, true);
+        mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
     }
 
     pub fn print_info(&self) {

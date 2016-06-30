@@ -43,6 +43,7 @@ fn main() {
     opts.optopt("b", "bind", "comma seperated keybindings", "ctrl-j:accept,ctrl-k:kill-line");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("m", "multi", "Enable Multiple Selection");
+    opts.optopt("p", "prompt", "prompt string", "'> '");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -63,7 +64,9 @@ fn main() {
     let (tx_matched, rx_matched) = channel();
     let eb_model = eb.clone();
     let mut model = Model::new(eb_model, curse);
+    // parse options for model
     if options.opt_present("m") {model.multi_selection = true;}
+    if let Some(prompt) = options.opt_str("p") {model.prompt = prompt;}
 
     let eb_matcher = Arc::new(EventBox::new());
     let eb_matcher_clone = eb_matcher.clone();
