@@ -1,6 +1,7 @@
 #![feature(io)]
 extern crate libc;
 extern crate ncurses;
+extern crate getopts;
 mod util;
 mod item;
 mod reader;
@@ -29,8 +30,29 @@ use matcher::Matcher;
 use model::Model;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::{ColorTheme, Curses};
+use getopts::Options;
+use std::env;
 
 fn main() {
+
+    // option parsing
+    let args: Vec<String> = env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = Options::new();
+    opts.optopt("b", "bind", "comma seperated keybindings", "ctrl-j:accept,ctrl-k:kill-line");
+    opts.optflag("h", "help", "print this help menu");
+
+    let options = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+
+    // print help message
+    if options.opt_present("h") {
+        print_usage(&program, opts);
+        return
+    }
 
     let theme = curses::ColorTheme::new();
     let mut curse = Curses::new();
@@ -54,6 +76,7 @@ fn main() {
 
     let eb_clone_input = eb.clone();
     let mut input = Input::new(eb_clone_input);
+    input.parse_keymap(options.opt_str("b"));
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
@@ -191,4 +214,9 @@ fn main() {
 
     endwin();
     model.output();
+}
+
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [options]", program);
+    print!("{}", opts.usage(&brief));
 }

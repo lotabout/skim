@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use util::eventbox::EventBox;
-use event::Event;
+use event::{Event, parse_action};
 
 use ncurses::*;
 
@@ -49,6 +49,33 @@ impl Input {
                     }
                 }
                 None => {self.eb.set(Event::EvInputInvalid, Box::new(true));}
+            }
+        }
+    }
+
+    pub fn bind(&mut self, key: &str, action: &str) {
+        let key = parse_key(key);
+        let action = parse_action(action);
+        if key == None || action == None {return;}
+
+        let key = key.unwrap();
+        let act = action.unwrap();
+
+        // remove the key for existing keymap;
+        let _ = self.keymap.remove(&key);
+        self.keymap.entry(key).or_insert(act);
+    }
+
+    // keymap is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
+    pub fn parse_keymap(&mut self, keymap: Option<String>) {
+        if let Some(key_action) = keymap {
+            for pair in key_action.split(',') {
+                let vec: Vec<&str> = pair.split(':').collect();
+                if vec.len() != 2 {
+                    continue;
+                } else {
+                    self.bind(vec[0], vec[1]);
+                }
             }
         }
     }
@@ -268,32 +295,8 @@ impl KeyBoard {
 
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Key {
-    CtrlA,
-    CtrlB,
-    CtrlC,
-    CtrlD,
-    CtrlE,
-    CtrlF,
-    CtrlG,
-    CtrlH,
-    Tab,
-    CtrlJ,
-    CtrlK,
-    CtrlL,
-    Enter,
-    CtrlN,
-    CtrlO,
-    CtrlP,
-    CtrlQ,
-    CtrlR,
-    CtrlS,
-    CtrlT,
-    CtrlU,
-    CtrlV,
-    CtrlW,
-    CtrlX,
-    CtrlY,
-    CtrlZ,
+    CtrlA, CtrlB, CtrlC, CtrlD, CtrlE, CtrlF, CtrlG, CtrlH, Tab,   CtrlJ, CtrlK, CtrlL, Enter,
+    CtrlN, CtrlO, CtrlP, CtrlQ, CtrlR, CtrlS, CtrlT, CtrlU, CtrlV, CtrlW, CtrlX, CtrlY, CtrlZ,
     ESC,
 
     Mouse,
@@ -314,33 +317,104 @@ pub enum Key {
     AltSpace,
     AltSlash,
     AltBS,
-    AltA,
-    AltB,
-    AltC,
-    AltD,
-    AltE,
-    AltF,
-    AltG,
-    AltH,
-    AltI,
-    AltJ,
-    AltK,
-    AltL,
-    AltM,
-    AltN,
-    AltO,
-    AltP,
-    AltQ,
-    AltR,
-    AltS,
-    AltT,
-    AltU,
-    AltV,
-    AltW,
-    AltX,
-    AltY,
-    AltZ,
+
+    AltA, AltB, AltC, AltD, AltE, AltF, AltG, AltH, AltI, AltJ, AltK, AltL, AltM,
+    AltN, AltO, AltP, AltQ, AltR, AltS, AltT, AltU, AltV, AltW, AltX, AltY, AltZ,
     Char(char),
+}
+
+pub fn parse_key(key: &str) -> Option<Key> {
+    match key {
+        "ctrl-a" => Some(Key::CtrlA),
+        "ctrl-b" => Some(Key::CtrlB),
+        "ctrl-c" => Some(Key::CtrlC),
+        "ctrl-d" => Some(Key::CtrlD),
+        "ctrl-e" => Some(Key::CtrlE),
+        "ctrl-f" => Some(Key::CtrlF),
+        "ctrl-g" => Some(Key::CtrlG),
+        "ctrl-h" => Some(Key::CtrlH),
+        "tab" | "ctrl-i" => Some(Key::Tab),
+        "ctrl-j" => Some(Key::CtrlJ),
+        "ctrl-k" => Some(Key::CtrlK),
+        "ctrl-l" => Some(Key::CtrlL),
+        "enter" | "return" | "ctrl-m" => Some(Key::Enter),
+        "ctrl-n" => Some(Key::CtrlN),
+        "ctrl-o" => Some(Key::CtrlO),
+        "ctrl-p" => Some(Key::CtrlP),
+        "ctrl-q" => Some(Key::CtrlQ),
+        "ctrl-r" => Some(Key::CtrlR),
+        "ctrl-s" => Some(Key::CtrlS),
+        "ctrl-t" => Some(Key::CtrlT),
+        "ctrl-u" => Some(Key::CtrlU),
+        "ctrl-v" => Some(Key::CtrlV),
+        "ctrl-w" => Some(Key::CtrlW),
+        "ctrl-x" => Some(Key::CtrlX),
+        "ctrl-y" => Some(Key::CtrlY),
+        "ctrl-z" => Some(Key::CtrlZ),
+
+        "esc"                => Some(Key::ESC),
+        "mouse"              => Some(Key::Mouse),
+        "doubleclick"        => Some(Key::DoubleClick),
+        "btab" | "shift-tab" => Some(Key::BTab),
+        "bspace" | "bs"      => Some(Key::BSpace),
+        "del"                => Some(Key::Del),
+        "pgup" | "page-up"   => Some(Key::PgUp),
+        "pgdn" | "page-down" => Some(Key::PgDn),
+        "up"                 => Some(Key::Up),
+        "down"               => Some(Key::Down),
+        "left"               => Some(Key::Left),
+        "right"              => Some(Key::Right),
+        "home"               => Some(Key::Home),
+        "end"                => Some(Key::End),
+        "shift-left"         => Some(Key::SLeft),
+        "shift-right"        => Some(Key::SRight),
+
+        "f1"  => Some(Key::F1),
+        "f2"  => Some(Key::F2),
+        "f3"  => Some(Key::F3),
+        "f4"  => Some(Key::F4),
+        "f5"  => Some(Key::F5),
+        "f6"  => Some(Key::F6),
+        "f7"  => Some(Key::F7),
+        "f8"  => Some(Key::F8),
+        "f9"  => Some(Key::F9),
+        "f10" => Some(Key::F10),
+        "f11" => Some(Key::F11),
+        "f12" => Some(Key::F12),
+
+        "altenter"              => Some(Key::AltEnter),
+        "altspace"              => Some(Key::AltSpace),
+        "altslash"              => Some(Key::AltSlash),
+        "alt-bs" | "alt-bspace" => Some(Key::AltBS),
+
+        "alt-a" => Some(Key::AltA),
+        "alt-b" => Some(Key::AltB),
+        "alt-c" => Some(Key::AltC),
+        "alt-d" => Some(Key::AltD),
+        "alt-e" => Some(Key::AltE),
+        "alt-f" => Some(Key::AltF),
+        "alt-g" => Some(Key::AltG),
+        "alt-h" => Some(Key::AltH),
+        "alt-i" => Some(Key::AltI),
+        "alt-j" => Some(Key::AltJ),
+        "alt-k" => Some(Key::AltK),
+        "alt-l" => Some(Key::AltL),
+        "alt-m" => Some(Key::AltM),
+        "alt-n" => Some(Key::AltN),
+        "alt-o" => Some(Key::AltO),
+        "alt-p" => Some(Key::AltP),
+        "alt-q" => Some(Key::AltQ),
+        "alt-r" => Some(Key::AltR),
+        "alt-s" => Some(Key::AltS),
+        "alt-t" => Some(Key::AltT),
+        "alt-u" => Some(Key::AltU),
+        "alt-v" => Some(Key::AltV),
+        "alt-w" => Some(Key::AltW),
+        "alt-x" => Some(Key::AltX),
+        "alt-y" => Some(Key::AltY),
+        "alt-z" => Some(Key::AltZ),
+        _ => None,
+    }
 }
 
 fn get_default_key_map() -> HashMap<Key, Event> {
@@ -407,3 +481,4 @@ fn get_default_key_map() -> HashMap<Key, Event> {
     ret.insert(Key::CtrlY, Event::EvActYank);
     ret
 }
+
