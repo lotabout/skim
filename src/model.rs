@@ -408,6 +408,11 @@ impl Model {
         let lines = (self.height as i32) * pages;
         self.act_move_line_cursor(lines);
     }
+
+    pub fn act_vertical_scroll(&mut self, cols: i32) {
+        let new_offset = self.hscroll_offset as i32 + cols;
+        self.hscroll_offset = max(0, new_offset) as usize;
+    }
 }
 
 //==============================================================================
@@ -459,6 +464,7 @@ fn reshape_string(text: &Vec<char>,
                   container_width: usize,
                   text_start_pos: usize,
                   matched_end_pos: usize) -> (Vec<char>, usize) {
+    let text_start_pos = min(max(0, text.len() as i32 - 1) as usize, text_start_pos);
     let full_width = display_width(&text[text_start_pos..]);
 
     if full_width <= container_width {

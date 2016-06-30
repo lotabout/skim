@@ -463,6 +463,8 @@ fn get_default_key_map() -> HashMap<Key, Event> {
     ret.insert(Key::PgDn,  Event::EvActPageDown);
     ret.insert(Key::PgUp,  Event::EvActPageUp);
     ret.insert(Key::CtrlP, Event::EvActPreviousHistory);
+    ret.insert(Key::AltH,  Event::EvActScrollLeft);
+    ret.insert(Key::AltL,  Event::EvActScrollRight);
     //ret.insert(Key::AltZ,  Event::EvActSelectAll);
     //ret.insert(Key::AltZ,  Event::EvActToggle);
     //ret.insert(Key::AltZ,  Event::EvActToggleAll);

@@ -192,6 +192,8 @@ fn main() {
                 Event::EvActPageDown           => {model.act_move_page(-1);}
                 Event::EvActPageUp             => {model.act_move_page(1);}
                 Event::EvActPreviousHistory    => {}
+                Event::EvActScrollLeft         => {model.act_vertical_scroll(-1);}
+                Event::EvActScrollRight        => {model.act_vertical_scroll(1);}
                 Event::EvActSelectAll          => {model.act_select_all();}
                 Event::EvActToggle             => {model.act_toggle();}
                 Event::EvActToggleAll          => {model.act_toggle_all();}
