@@ -14,8 +14,7 @@ use query::Query;
 use util::eventbox::EventBox;
 use event::Event;
 use std::mem;
-use std::time::{Instant, Duration};
-use std::thread;
+use std::time::{Instant};
 
 // The whole screen is:
 //
@@ -139,9 +138,15 @@ impl Model {
             self.print_char(' ', COLOR_NORMAL, false);
         }
 
-        addstr(format!(" {}/{}{} ", self.num_matched, self.num_total,
-                       if self.processed_percentage == 100 {"".to_string()} else {format!("({}%)", self.processed_percentage)},
-                       ).as_str());
+        self.curses.cprint(format!(" {}/{}", self.num_matched, self.num_total).as_ref(), COLOR_INFO, false);
+
+        if self.multi_selection && self.selected_indics.len() > 0 {
+            self.curses.cprint(format!(" [{}]", self.selected_indics.len()).as_ref(), COLOR_INFO, true);
+        }
+
+        if !self.reading && self.processed_percentage < 100 {
+            self.curses.cprint(format!(" ({}%)", self.processed_percentage).as_ref(), COLOR_INFO, false);
+        }
     }
 
     pub fn print_items(&self) {
