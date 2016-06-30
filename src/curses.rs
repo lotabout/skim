@@ -2,6 +2,7 @@
 // Modeled after fzf
 
 use ncurses::*;
+use libc::{STDIN_FILENO, STDERR_FILENO, FILE, fdopen};
 
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
@@ -19,6 +20,7 @@ pub struct Curses {
     current_fg: i16,
     dark_bg: i16,
     use_color: bool,
+    screen: SCREEN,
 }
 
 impl Curses {
@@ -27,13 +29,20 @@ impl Curses {
             current_fg: COLOR_DEFAULT,
             dark_bg: COLOR_DEFAULT,
             use_color: false,
+            screen: stdscr,
         }
     }
     pub fn init(&mut self, theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
         // initialize ncurses
         let local_conf = LcCategory::all;
         setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
-        initscr();
+
+        let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
+        let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
+
+        self.screen = newterm(None, stderr, stdin);
+        set_term(self.screen);
+
         raw();
         keypad(stdscr, true);
         noecho();
@@ -105,6 +114,11 @@ impl Curses {
         attron(attr);
         addstr(&ch.to_string()); // to support wide character
         attroff(attr);
+    }
+
+    pub fn close(&self) {
+        endwin();
+        delscreen(self.screen);
     }
 }
 

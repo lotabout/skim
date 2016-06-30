@@ -97,7 +97,9 @@ impl KeyBoard {
         let (tx, rx) = channel();
         thread::spawn(move || {
             for ch in f.chars() {
-                let _ = tx.send(ch.unwrap());
+                if ch.is_ok() {
+                    let _ = tx.send(ch.unwrap());
+                }
             }
         });
 

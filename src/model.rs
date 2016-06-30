@@ -255,11 +255,13 @@ impl Model {
         clear();
         endwin();
         refresh();
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
+        let (max_y, max_x) = self.curses.get_maxyx();
         self.max_y = max_y;
         self.max_x = max_x;
+    }
+
+    pub fn close(&mut self) {
+        self.curses.close();
     }
 
     //============================================================================
@@ -270,7 +272,7 @@ impl Model {
         let index = self.item_cursor;
         self.selected_indics.insert(index);
     }
-     
+
     pub fn act_add_char(&mut self, ch: char) {
         let changed = self.query.add_char(ch);
         if changed {

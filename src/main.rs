@@ -228,7 +228,7 @@ fn main() {
         }
     };
 
-    endwin();
+    model.close();
     model.output();
 }
 
