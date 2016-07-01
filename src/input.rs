@@ -136,6 +136,7 @@ impl KeyBoard {
         let ch = self.buf.pop_front();
 
         match ch {
+            Some('\u{00}') => Some(Key::Char(' ')),
             Some('\u{01}') => Some(Key::CtrlA),
             Some('\u{02}') => Some(Key::CtrlB),
             Some('\u{03}') => Some(Key::CtrlC),
