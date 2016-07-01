@@ -120,6 +120,8 @@ impl Model {
 
     pub fn clear_items(&mut self) {
         self.matched_items.borrow_mut().clear();
+        self.item_cursor = 0;
+        self.line_cursor = 0;
     }
 
     pub fn print_query(&self) {
