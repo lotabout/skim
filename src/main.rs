@@ -62,28 +62,6 @@ fn main() {
     curse.init(Some(&theme), false, false);
 
     let eb = Arc::new(EventBox::new());
-    let (tx_matched, rx_matched) = channel();
-    let eb_model = eb.clone();
-    let mut model = Model::new(eb_model, curse);
-    // parse options for model
-    if options.opt_present("m") {model.multi_selection = true;}
-    if let Some(prompt) = options.opt_str("p") {model.prompt = prompt;}
-
-    let eb_matcher = Arc::new(EventBox::new());
-    let eb_matcher_clone = eb_matcher.clone();
-    let eb_clone_matcher = eb.clone();
-    let items = model.items.clone();
-    let mut matcher = Matcher::new(items, tx_matched, eb_matcher_clone, eb_clone_matcher);
-
-    let eb_clone_reader = eb.clone();
-    let items = model.items.clone();
-    let mut reader = Reader::new(Some(&"find ."), eb_clone_reader, items);
-
-
-    let eb_clone_input = eb.clone();
-    let mut input = Input::new(eb_clone_input);
-    input.parse_keymap(options.opt_str("b"));
-    input.parse_expect_keys(options.opt_str("e"));
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
@@ -102,6 +80,30 @@ fn main() {
             eb_clone_resize.set(Event::EvResize, Box::new(true));
         }
     });
+
+    let (tx_matched, rx_matched) = channel();
+    let eb_model = eb.clone();
+    let mut model = Model::new(eb_model, curse);
+    // parse options for model
+    if options.opt_present("m") {model.multi_selection = true;}
+    if let Some(prompt) = options.opt_str("p") {model.prompt = prompt;}
+
+
+    let eb_matcher = Arc::new(EventBox::new());
+    let eb_matcher_clone = eb_matcher.clone();
+    let eb_clone_matcher = eb.clone();
+    let items = model.items.clone();
+    let mut matcher = Matcher::new(items, tx_matched, eb_matcher_clone, eb_clone_matcher);
+
+    let eb_clone_reader = eb.clone();
+    let items = model.items.clone();
+    let mut reader = Reader::new(Some(&"find ."), eb_clone_reader, items);
+
+
+    let eb_clone_input = eb.clone();
+    let mut input = Input::new(eb_clone_input);
+    input.parse_keymap(options.opt_str("b"));
+    input.parse_expect_keys(options.opt_str("e"));
 
     // start running
     thread::spawn(move || {
@@ -158,7 +160,7 @@ fn main() {
                     // ignore for now
                 }
 
-                Event::EvResize => { model.resize(); }
+                Event::EvResize => {model.resize();}
 
                 Event::EvActAddChar => {
                     let ch: char = *val.downcast().unwrap();

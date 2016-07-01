@@ -256,8 +256,10 @@ impl Model {
         endwin();
         refresh();
         let (max_y, max_x) = self.curses.get_maxyx();
-        self.max_y = max_y;
-        self.max_x = max_x;
+        self.max_y  = max_y;
+        self.max_x  = max_x;
+        self.width  = (max_x - 2) as usize;
+        self.height = (max_y - 2) as usize;
     }
 
     pub fn close(&mut self) {
