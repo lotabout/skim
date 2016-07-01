@@ -1,7 +1,6 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
-use std;
 use std::cmp::Ordering;
 
 pub struct Item {
@@ -19,13 +18,13 @@ impl Item {
 pub type Score = i32;
 
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum MatchedRange {
     Range(usize, usize),
     Chars(Vec<usize>),
 }
 
-#[derive(Eq)]
+#[derive(Eq, Clone)]
 pub struct MatchedItem {
     pub index: usize,                       // index of current item in items
     pub score: Score,

@@ -5,49 +5,101 @@
 use std::sync::{Arc, RwLock};
 use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
-use std::cmp;
+use std::cmp::{min, max};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use orderedvec::OrderedVec;
+use curses::*;
+use query::Query;
+use util::eventbox::EventBox;
+use event::Event;
+use std::mem;
+use std::time::{Instant};
+
+// The whole screen is:
+//
+//                  +---------------------------------------|
+//                  | | |                                   | 5
+//                  | | |               ^                   | 4
+//   current cursor |>| |               |                   | 3
+//                  | | |      lines    |                   | 2 cursor
+//         selected | |>|--------------------------------   | 1
+//                  | | |                                   | 0
+//                  +---------------------------------------+
+//          spinner |/| | (matched/total) (per%) [selected] |
+//                  +---------------------------------------+
+//                  | prompt>  query string                 |
+//                  +---------------------------------------+
+//
+
+const SPINNER_DURATION: u32 = 200;
+const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+
 
 pub struct Model {
-    pub query: String,
-    query_cursor: i32,  // > qu<query_cursor>ery
+    eb: Arc<EventBox<Event>>,
+    pub query: Query,
+
     num_matched: u64,
     num_total: u64,
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
+
+    processed_percentage: u64,
+    pub multi_selection: bool,
+    pub prompt: String,
+    pub reading: bool,
+
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
-    item_start_pos: usize, // for screen scroll.
+    hscroll_offset: usize,
+
     max_y: i32,
     max_x: i32,
+    width: usize,
+    height: usize,
+
+    pub tabstop: usize,
+    curses: Curses,
+    timer: Instant,
+    accept_key: Option<String>,
 }
 
 impl Model {
-    pub fn new() -> Self {
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
+    pub fn new(eb: Arc<EventBox<Event>>, curses: Curses) -> Self {
+        let (max_y, max_x) = curses.get_maxyx();
+        let timer = Instant::now();
 
         Model {
-            query: String::new(),
-            query_cursor: 0,
+            eb: eb,
+            query: Query::new(),
             num_matched: 0,
             num_total: 0,
             items: Arc::new(RwLock::new(Vec::new())),
             selected_indics: HashSet::new(),
             matched_items: RefCell::new(OrderedVec::new()),
+            processed_percentage: 100,
+            multi_selection: false,
+            prompt: "> ".to_string(),
+            reading: false,
             item_cursor: 0,
-            line_cursor: (max_y - 3) as usize,
-            item_start_pos: 0,
+            line_cursor: 0,
+            hscroll_offset: 0,
             max_y: max_y,
             max_x: max_x,
+            width: (max_x - 2) as usize,
+            height: (max_y - 2) as usize,
+            tabstop: 8,
+            curses: curses,
+            timer: timer,
+            accept_key: None,
         }
     }
 
     pub fn output(&self) {
+        if let Some(ref key) = self.accept_key  { println!("{}", key); }
+
         let mut selected = self.selected_indics.iter().collect::<Vec<&usize>>();
         selected.sort();
         let items = self.items.read().unwrap();
@@ -56,34 +108,10 @@ impl Model {
         }
     }
 
-    pub fn toggle_select(&mut self, selected: Option<bool>) {
-        let mut matched_items = self.matched_items.borrow_mut();
-        let index = matched_items.get(self.item_cursor).unwrap().index;
-        match selected {
-            Some(true) => {
-                let _ = self.selected_indics.insert(index);
-            }
-            Some(false) => {
-                let _ = self.selected_indics.remove(&index);
-            }
-            None => {
-                if self.selected_indics.contains(&index) {
-                    let _ = self.selected_indics.remove(&index);
-                } else {
-                    let _ = self.selected_indics.insert(index);
-                }
-            }
-        }
-    }
-
-    pub fn update_query(&mut self, query: String, cursor: i32) {
-        self.query = query;
-        self.query_cursor = cursor;
-    }
-
-    pub fn update_process_info(&mut self, matched: u64, total: u64) {
+    pub fn update_process_info(&mut self, matched: u64, total: u64, processed: u64) {
         self.num_matched = matched;
         self.num_total = total;
+        self.processed_percentage = (processed+1)*100/(total+1);
     }
 
     pub fn push_item(&mut self, item: MatchedItem) {
@@ -92,74 +120,105 @@ impl Model {
 
     pub fn clear_items(&mut self) {
         self.matched_items.borrow_mut().clear();
-    }
-
-    pub fn move_line_cursor(&mut self, diff: i32) {
-
-        let y = self.line_cursor as i32 + diff;
-        let item_y = cmp::max(0, self.item_cursor as i32 - diff);
-        let screen_height = (self.max_y - 3) as usize;
-
-        match y {
-            y if y < 0 => {
-                self.line_cursor = 0;
-                self.item_cursor = cmp::min(item_y as usize, self.matched_items.borrow().len()-1);
-                self.item_start_pos = self.item_cursor - screen_height;
-            }
-
-            y if y > screen_height as i32 => {
-                self.line_cursor = screen_height;
-                self.item_cursor = cmp::max(0, item_y as usize);
-                self.item_start_pos = self.item_cursor;
-            }
-
-            y => {
-                self.line_cursor = y as usize;
-                self.item_cursor = item_y as usize;
-            }
-        }
+        self.item_cursor = 0;
+        self.line_cursor = 0;
     }
 
     pub fn print_query(&self) {
         // > query
         mv(self.max_y-1, 0);
-        addstr("> ");
-        addstr(&self.query);
-        mv(self.max_y-1, self.query_cursor+2);
+        self.curses.cprint(&self.prompt, COLOR_PROMPT, false);
+        self.curses.cprint(&self.query.get_query(), COLOR_NORMAL, true);
+        mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
     }
 
     pub fn print_info(&self) {
         mv(self.max_y-2, 0);
-        addstr(format!("  {}/{}", self.num_matched, self.num_total).as_str());
+
+        if self.reading {
+            let time = self.timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
+            self.print_char(SPINNERS[index as usize], COLOR_SPINNER, true);
+        } else {
+            self.print_char(' ', COLOR_NORMAL, false);
+        }
+
+        self.curses.cprint(format!(" {}/{}", self.num_matched, self.num_total).as_ref(), COLOR_INFO, false);
+
+        if self.multi_selection && self.selected_indics.len() > 0 {
+            self.curses.cprint(format!(" [{}]", self.selected_indics.len()).as_ref(), COLOR_INFO, true);
+        }
+
+        if !self.reading && self.processed_percentage < 100 {
+            self.curses.cprint(format!(" ({}%)", self.processed_percentage).as_ref(), COLOR_INFO, false);
+        }
     }
 
-    fn print_item(&self, item: &Item, matched: &MatchedItem) {
-        //printw(format!("{}", matched.score).as_ref());
-        if self.selected_indics.contains(&matched.index) {
-            printw(">");
+    pub fn print_items(&self) {
+        let mut matched_items = self.matched_items.borrow_mut();
+        let item_start_pos = self.item_cursor - self.line_cursor;
+
+        for i in 0..self.height {
+            if let Some(matched) = matched_items.get(item_start_pos + i) {
+                mv((self.height - i - 1) as i32, 0);
+
+                let is_current_line = i == self.line_cursor;
+                let label = if is_current_line {">"} else {" "};
+                self.curses.cprint(label, COLOR_CURSOR, true);
+                self.print_item(matched, is_current_line);
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn print_item(&self, matched: &MatchedItem, is_current: bool) {
+        let items = self.items.read().unwrap();
+        let ref item = items[matched.index];
+
+        let is_selected = self.selected_indics.contains(&matched.index);
+
+        if is_selected {
+            self.curses.cprint(">", COLOR_SELECTED, true);
         } else {
-            printw(" ");
+            self.curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
         }
 
         match matched.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
+                let matched_end_pos = if matched_indics.len() > 0 {
+                    matched_indics[matched_indics.len()-1]
+                } else {
+                    0
+                };
+
+                let (text, mut idx) = reshape_string(&item.text.chars().collect::<Vec<char>>(),
+                                                     (self.max_x-3) as usize,
+                                                     self.hscroll_offset,
+                                                     matched_end_pos);
                 let mut matched_indics_iter = matched_indics.iter().peekable();
-                for (idx, ch) in item.text.chars().enumerate() {
-                    if let Some(&&index) = matched_indics_iter.peek() {
-                        if idx == index {
-                            attron(A_UNDERLINE());
-                            addch(ch as u64);
-                            attroff(A_UNDERLINE());
-                            let _ = matched_indics_iter.next();
-                        } else {
-                            addch(ch as u64);
-                        }
+
+                // skip indics
+                while let Some(&&index) = matched_indics_iter.peek() {
+                    if idx > index {
+                        let _ = matched_indics_iter.next();
                     } else {
-                        addch(ch as u64);
-                    }
-                    if idx >= (self.max_x - 3) as usize {
                         break;
                     }
+                }
+
+                for &ch in text.iter() {
+                    match matched_indics_iter.peek() {
+                        Some(&&index) if idx == index => {
+                            self.print_char(ch, COLOR_MATCHED, is_current);
+                            let _ = matched_indics_iter.next();
+                        }
+                        Some(_) | None => {
+                            self.print_char(ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                        }
+                    }
+                    idx += 1;
                 }
             }
             Some(MatchedRange::Range(_, _)) => {
@@ -169,32 +228,19 @@ impl Model {
                 // pass
             }
         }
-
     }
 
-    pub fn print_items(&self) {
-        let items = self.items.read().unwrap();
-        let mut matched_items = self.matched_items.borrow_mut();
-
-        let mut y = self.max_y - 3;
-        let mut i = self.item_start_pos;
-        while let Some(matched) = matched_items.get(i) {
-            i+=1;
-
-            mv(y, 0);
-            let is_current_line = y == self.line_cursor as i32;
-
-            if is_current_line {
-                printw(">");
-            } else {
-                printw(" ");
-            }
-
-            self.print_item(&items[matched.index], matched);
-
-            y -= 1;
-            if y < 0 {
-                break;
+    fn print_char(&self, ch: char, color: i16, is_bold: bool) {
+        if ch != '\t' {
+            self.curses.caddch(ch, color, is_bold);
+        } else {
+            // handle tabstop
+            let mut y = 0;
+            let mut x = 0;
+            getyx(stdscr, &mut y, &mut x);
+            let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
+            for i in 0..rest {
+                self.curses.caddch(' ', color, is_bold);
             }
         }
     }
@@ -208,7 +254,6 @@ impl Model {
         self.print_items();
         self.print_info();
         self.print_query();
-        self.refresh();
     }
 
     // the terminal resizes, so we need to recalculate the margins.
@@ -216,10 +261,297 @@ impl Model {
         clear();
         endwin();
         refresh();
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
-        self.max_y = max_y;
-        self.max_x = max_x;
+        let (max_y, max_x) = self.curses.get_maxyx();
+        self.max_y  = max_y;
+        self.max_x  = max_x;
+        self.width  = (max_x - 2) as usize;
+        self.height = (max_y - 2) as usize;
     }
+
+    pub fn close(&mut self) {
+        self.curses.close();
+    }
+
+    //============================================================================
+    // Actions
+
+    pub fn act_accept(&mut self, accept_key: Option<String>) {
+        self.accept_key = accept_key;
+
+        let mut matched_items = self.matched_items.borrow_mut();
+        if let Some(matched) = matched_items.get(self.item_cursor) {
+            let item_index = matched.index;
+            self.selected_indics.insert(item_index);
+        }
+    }
+
+    pub fn act_add_char(&mut self, ch: char) {
+        let changed = self.query.add_char(ch);
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_backward_char(&mut self) {
+        let _ = self.query.backward_char();
+    }
+
+    pub fn act_backward_delete_char(&mut self) {
+        let changed = self.query.backward_delete_char();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_backward_kill_word(&mut self) {
+        let changed = self.query.backward_kill_word();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_backward_word(&mut self) {
+        let _ = self.query.backward_word();
+    }
+
+    pub fn act_beginning_of_line(&mut self) {
+        let _ = self.query.beginning_of_line();
+    }
+
+    pub fn act_delete_char(&mut self) {
+        let changed = self.query.delete_char();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_deselect_all(&mut self) {
+        self.selected_indics.clear();
+    }
+
+    pub fn act_end_of_line(&mut self) {
+        let _ = self.query.end_of_line();
+    }
+
+    pub fn act_forward_char(&mut self) {
+        let _ = self.query.forward_char();
+    }
+
+    pub fn act_forward_word(&mut self) {
+        let _ = self.query.forward_word();
+    }
+
+    pub fn act_kill_line(&mut self) {
+        let changed = self.query.kill_line();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_kill_word(&mut self) {
+        let changed = self.query.kill_word();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_line_discard(&mut self) {
+        let changed = self.query.line_discard();
+        if changed {
+            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
+        }
+    }
+
+    pub fn act_select_all(&mut self) {
+        if !self.multi_selection {return;}
+
+        let mut matched_items = self.matched_items.borrow_mut();
+        for i in 0..matched_items.len() {
+            self.selected_indics.insert(i);
+        }
+    }
+
+    pub fn act_toggle_all(&mut self) {
+        if !self.multi_selection {return;}
+
+        let mut matched_items = self.matched_items.borrow_mut();
+        let selected = mem::replace(&mut self.selected_indics, HashSet::new());
+        for i in 0..matched_items.len() {
+            if !selected.contains(&i) {
+                self.selected_indics.insert(i);
+            }
+        }
+    }
+
+    pub fn act_toggle(&mut self) {
+        if !self.multi_selection {return;}
+
+        let mut matched_items = self.matched_items.borrow_mut();
+        if let Some(matched) = matched_items.get(self.item_cursor) {
+            let item_index = matched.index;
+            if self.selected_indics.contains(&item_index) {
+                self.selected_indics.remove(&item_index);
+            } else {
+                self.selected_indics.insert(item_index);
+            }
+        }
+    }
+
+    pub fn act_move_line_cursor(&mut self, diff: i32) {
+        let total_item = self.matched_items.borrow().len() as i32;
+
+        let y = self.line_cursor as i32 + diff;
+        self.line_cursor = if diff > 0 {
+            let tmp = min(min(y, (self.height as i32) -1), total_item-1);
+            if tmp < 0 {0} else {tmp as usize}
+        } else {
+            max(0, y) as usize
+        };
+
+
+        let item_y = self.item_cursor as i32 + diff;
+        self.item_cursor = if diff > 0 {
+            let tmp = min(item_y, total_item-1);
+            if tmp < 0 {0} else {tmp as usize}
+        } else {
+            max(0, item_y) as usize
+        }
+    }
+
+    pub fn act_move_page(&mut self, pages: i32) {
+        let lines = (self.height as i32) * pages;
+        self.act_move_line_cursor(lines);
+    }
+
+    pub fn act_vertical_scroll(&mut self, cols: i32) {
+        let new_offset = self.hscroll_offset as i32 + cols;
+        self.hscroll_offset = max(0, new_offset) as usize;
+    }
+}
+
+//==============================================================================
+// helper functions
+
+// wide character will take two unit
+fn display_width(text: &[char]) -> usize {
+    text.iter()
+        .map(|c| {if c.len_utf8() > 1 {2} else {1}})
+        .fold(0, |acc, n| acc + n)
+}
+
+
+// calculate from left to right, stop when the max_x exceeds
+fn left_fixed(text: &[char], max_x: usize) -> usize {
+    if max_x <= 0 {
+        return 0;
+    }
+
+    let mut w = 0;
+    for (idx, &c) in text.iter().enumerate() {
+        w += if c.len_utf8() > 1 {2} else {1};
+        if w > max_x {
+            return idx-1;
+        }
+    }
+    return text.len()-1;
+}
+
+fn right_fixed(text: &[char], max_x: usize) -> usize {
+    if max_x <= 0 {
+        return text.len()-1;
+    }
+
+    let mut w = 0;
+    for (idx, &c) in text.iter().enumerate().rev() {
+        w += if c.len_utf8() > 1 {2} else {1};
+        if w > max_x {
+            return idx+1;
+        }
+    }
+    return 0;
+
+}
+
+// return a string and its left position in original string
+// matched_end_pos is char-wise
+fn reshape_string(text: &Vec<char>,
+                  container_width: usize,
+                  text_start_pos: usize,
+                  matched_end_pos: usize) -> (Vec<char>, usize) {
+    let text_start_pos = min(max(0, text.len() as i32 - 1) as usize, text_start_pos);
+    let full_width = display_width(&text[text_start_pos..]);
+
+    if full_width <= container_width {
+        return (text[text_start_pos..].iter().map(|x| *x).collect(), text_start_pos);
+    }
+
+    let mut ret = Vec::new();
+    let mut ret_pos = 0;
+
+    // trim right, so that 'String' -> 'Str..'
+    let right_pos = 1 + max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));
+    let mut left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-2);
+    ret_pos = left_pos;
+
+    if left_pos > text_start_pos {
+        left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-4);
+        ret.push('.'); ret.push('.');
+        ret_pos = left_pos - 2;
+    }
+
+    // so we should print [left_pos..(right_pos+1)]
+    for ch in text[left_pos..right_pos].iter() {
+        ret.push(*ch);
+    }
+    ret.push('.'); ret.push('.');
+    (ret, ret_pos)
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_display_width() {
+        assert_eq!(super::display_width(&"abcdefg".to_string().chars().collect::<Vec<char>>()), 7);
+        assert_eq!(super::display_width(&"This is 中国".to_string().chars().collect::<Vec<char>>()), 12);
+    }
+
+    #[test]
+    fn test_left_fixed() {
+        assert_eq!(super::left_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 3);
+        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 1);
+        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 0);
+    }
+
+    #[test]
+    fn test_right_fixed() {
+        assert_eq!(super::right_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 2);
+        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 0);
+        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 1);
+    }
+
+    #[test]
+    fn test_reshape_string() {
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 1, 7),
+                   ("..67..".to_string().chars().collect::<Vec<char>>(), 4));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         12, 1, 7),
+                   ("123456789".to_string().chars().collect::<Vec<char>>(), 1));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 0, 6),
+                   ("..56..".to_string().chars().collect::<Vec<char>>(), 3));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         8, 0, 4),
+                   ("012345..".to_string().chars().collect::<Vec<char>>(), 0));
+
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         10, 0, 4),
+                   ("0123456789".to_string().chars().collect::<Vec<char>>(), 0));
+    }
+
+
+
 }

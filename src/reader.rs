@@ -4,31 +4,30 @@
 extern crate libc;
 
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::io::{stdin, BufRead, BufReader};
-use std::sync::mpsc::Sender;
 use std::error::Error;
 use util::eventbox::EventBox;
 use event::Event;
 use item::Item;
 
 pub struct Reader {
-    cmd: Option<&'static str>, // command to invoke
+    cmd: String, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
-    tx: Sender<Item>,    // sender to send the string read from command output
+    items: Arc<RwLock<Vec<Item>>>, // all items
 }
 
 impl Reader {
 
-    pub fn new(cmd: Option<&'static str>, eb: Arc<EventBox<Event>>, tx: Sender<Item>) -> Self {
-        Reader{cmd: cmd, eb: eb, tx: tx}
+    pub fn new(cmd: String, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
+        Reader{cmd: cmd, eb: eb, items: items}
     }
 
     // invoke find comand.
     fn get_command_output(&self) -> Result<Box<BufRead>, Box<Error>> {
         let command = try!(Command::new("sh")
                            .arg("-c")
-                           .arg(self.cmd.unwrap_or("find ."))
+                           .arg(&self.cmd)
                            .stdout(Stdio::piped())
                            .stderr(Stdio::null())
                            .spawn());
@@ -59,13 +58,14 @@ impl Reader {
                             input.pop();
                         }
                     }
-                    let _ = self.tx.send(Item::new(input));
+                    let mut items = self.items.write().unwrap();
+                    items.push(Item::new(input));
                 }
                 Err(_err) => { break; }
             }
-            self.eb.set(Event::EvReaderNewItem, Box::new(0));
+            self.eb.set(Event::EvReaderNewItem, Box::new(true));
         }
-        self.eb.set(Event::EvReaderFinished, Box::new(0));
+        self.eb.set(Event::EvReaderNewItem, Box::new(false));
     }
 }
 
