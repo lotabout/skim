@@ -97,7 +97,11 @@ fn main() {
 
     let eb_clone_reader = eb.clone();
     let items = model.items.clone();
-    let mut reader = Reader::new(Some(&"find ."), eb_clone_reader, items);
+    let default_command = match env::var("FZF_DEFAULT_COMMAND") {
+        Ok(val) => val,
+        Err(_) => "find .".to_string(),
+    };
+    let mut reader = Reader::new(default_command, eb_clone_reader, items);
 
 
     let eb_clone_input = eb.clone();

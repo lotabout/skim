@@ -12,14 +12,14 @@ use event::Event;
 use item::Item;
 
 pub struct Reader {
-    cmd: Option<&'static str>, // command to invoke
+    cmd: String, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
     items: Arc<RwLock<Vec<Item>>>, // all items
 }
 
 impl Reader {
 
-    pub fn new(cmd: Option<&'static str>, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
+    pub fn new(cmd: String, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
         Reader{cmd: cmd, eb: eb, items: items}
     }
 
@@ -27,7 +27,7 @@ impl Reader {
     fn get_command_output(&self) -> Result<Box<BufRead>, Box<Error>> {
         let command = try!(Command::new("sh")
                            .arg("-c")
-                           .arg(self.cmd.unwrap_or("find ."))
+                           .arg(&self.cmd)
                            .stdout(Stdio::piped())
                            .stderr(Stdio::null())
                            .spawn());
