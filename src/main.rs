@@ -172,7 +172,8 @@ fn main() {
                 Event::EvActAccept => {
                     // break out of the loop and output the selected item.
                     //if model.get_num_selected() <= 0 { model.act_toggle(Some(true)); }
-                    model.act_accept();
+                    let args: Option<String> = *val.downcast().unwrap();
+                    model.act_accept(args);
                     break 'outer;
                 }
                 Event::EvActBackwardChar       => {model.act_backward_char();}

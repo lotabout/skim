@@ -63,6 +63,7 @@ pub struct Model {
     pub tabstop: usize,
     curses: Curses,
     timer: Instant,
+    accept_key: Option<String>,
 }
 
 impl Model {
@@ -92,10 +93,13 @@ impl Model {
             tabstop: 8,
             curses: curses,
             timer: timer,
+            accept_key: None,
         }
     }
 
     pub fn output(&self) {
+        if let Some(ref key) = self.accept_key  { println!("{}", key); }
+
         let mut selected = self.selected_indics.iter().collect::<Vec<&usize>>();
         selected.sort();
         let items = self.items.read().unwrap();
@@ -269,7 +273,9 @@ impl Model {
     //============================================================================
     // Actions
 
-    pub fn act_accept(&mut self) {
+    pub fn act_accept(&mut self, accept_key: Option<String>) {
+        self.accept_key = accept_key;
+
         let mut matched_items = self.matched_items.borrow_mut();
         if let Some(matched) = matched_items.get(self.item_cursor) {
             let item_index = matched.index;

@@ -16,7 +16,7 @@ use event::{Event, parse_action};
 pub struct Input {
     eb: Arc<EventBox<Event>>,
     keyboard: KeyBoard,
-    keymap: HashMap<Key, Event>
+    keymap: HashMap<Key, (Event, Option<String>)>,
 }
 
 impl Input {
@@ -38,11 +38,10 @@ impl Input {
                         self.eb.set(Event::EvActAddChar, Box::new(ch));
                     } else {
                         // search event from keymap
-                        if let Some(ev) = self.keymap.get(&key) {
-                            self.eb.set(*ev, Box::new(true));
-                        } else {
-                            // not mapped
-                            self.eb.set(Event::EvInputKey, Box::new(key));
+                        match self.keymap.get(&key) {
+                            Some(&(ev, Some(ref args))) => self.eb.set(ev, Box::new(Some(args.clone()))),
+                            Some(&(ev, None)) => self.eb.set(ev, Box::new(None as Option<String>)),
+                            None => self.eb.set(Event::EvInputKey, Box::new(key)),
                         }
                     }
                 }
@@ -51,7 +50,7 @@ impl Input {
         }
     }
 
-    pub fn bind(&mut self, key: &str, action: &str) {
+    pub fn bind(&mut self, key: &str, action: &str, args: Option<String>) {
         let key = parse_key(key);
         let action = parse_action(action);
         if key == None || action == None {return;}
@@ -61,7 +60,7 @@ impl Input {
 
         // remove the key for existing keymap;
         let _ = self.keymap.remove(&key);
-        self.keymap.entry(key).or_insert(act);
+        self.keymap.entry(key).or_insert((act, args));
     }
 
     // keymap is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
@@ -69,10 +68,10 @@ impl Input {
         if let Some(key_action) = keymap {
             for pair in key_action.split(',') {
                 let vec: Vec<&str> = pair.split(':').collect();
-                if vec.len() != 2 {
+                if vec.len() < 2 {
                     continue;
                 } else {
-                    self.bind(vec[0], vec[1]);
+                    self.bind(vec[0], vec[1], vec.get(2).map(|&string| string.to_string()));
                 }
             }
         }
@@ -80,8 +79,9 @@ impl Input {
 
     pub fn parse_expect_keys(&mut self, keys: Option<String>) {
         if let Some(keys) = keys {
+            self.bind("enter", "accept", Some("".to_string()));
             for key in keys.split(',') {
-                self.bind(key, "accept");
+                self.bind(key, "accept", Some(key.to_string()));
             }
         }
     }
@@ -332,7 +332,7 @@ pub enum Key {
 }
 
 pub fn parse_key(key: &str) -> Option<Key> {
-    match key {
+    match key.to_lowercase().as_ref() {
         "ctrl-a" => Some(Key::CtrlA),
         "ctrl-b" => Some(Key::CtrlB),
         "ctrl-c" => Some(Key::CtrlC),
@@ -425,70 +425,70 @@ pub fn parse_key(key: &str) -> Option<Key> {
     }
 }
 
-fn get_default_key_map() -> HashMap<Key, Event> {
+fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     let mut ret = HashMap::new();
-    ret.insert(Key::ESC,   Event::EvActAbort);
-    ret.insert(Key::CtrlC, Event::EvActAbort);
-    ret.insert(Key::CtrlG, Event::EvActAbort);
-    ret.insert(Key::CtrlQ, Event::EvActAbort);
+    ret.insert(Key::ESC,   (Event::EvActAbort, None));
+    ret.insert(Key::CtrlC, (Event::EvActAbort, None));
+    ret.insert(Key::CtrlG, (Event::EvActAbort, None));
+    ret.insert(Key::CtrlQ, (Event::EvActAbort, None));
 
-    ret.insert(Key::Enter, Event::EvActAccept);
+    ret.insert(Key::Enter, (Event::EvActAccept, None));
 
-    ret.insert(Key::Left,  Event::EvActBackwardChar);
-    ret.insert(Key::CtrlB, Event::EvActBackwardChar);
+    ret.insert(Key::Left,  (Event::EvActBackwardChar, None));
+    ret.insert(Key::CtrlB, (Event::EvActBackwardChar, None));
 
-    ret.insert(Key::CtrlH, Event::EvActBackwardDeleteChar);
-    ret.insert(Key::BSpace,Event::EvActBackwardDeleteChar);
+    ret.insert(Key::CtrlH, (Event::EvActBackwardDeleteChar, None));
+    ret.insert(Key::BSpace,(Event::EvActBackwardDeleteChar, None));
 
-    ret.insert(Key::AltBS, Event::EvActBackwardKillWord);
+    ret.insert(Key::AltBS, (Event::EvActBackwardKillWord, None));
 
-    ret.insert(Key::AltB,  Event::EvActBackwardWord);
-    ret.insert(Key::SLeft, Event::EvActBackwardWord);
+    ret.insert(Key::AltB,  (Event::EvActBackwardWord, None));
+    ret.insert(Key::SLeft, (Event::EvActBackwardWord, None));
 
-    ret.insert(Key::CtrlA, Event::EvActBeginningOfLine);
-    //ret.insert(Key::AltB,  Event::EvActCancel);
-    ret.insert(Key::CtrlL, Event::EvActClearScreen);
-    ret.insert(Key::Del,   Event::EvActDeleteChar);
-    ret.insert(Key::CtrlD, Event::EvActDeleteCharEOF);
-    //ret.insert(Key::AltZ,  Event::EvActDeselectAll);
+    ret.insert(Key::CtrlA, (Event::EvActBeginningOfLine, None));
+    //ret.insert(Key::AltB,  (Event::EvActCancel, None));
+    ret.insert(Key::CtrlL, (Event::EvActClearScreen, None));
+    ret.insert(Key::Del,   (Event::EvActDeleteChar, None));
+    ret.insert(Key::CtrlD, (Event::EvActDeleteCharEOF, None));
+    //ret.insert(Key::AltZ,  (Event::EvActDeselectAll, None));
 
-    ret.insert(Key::CtrlJ, Event::EvActDown);
-    ret.insert(Key::CtrlN, Event::EvActDown);
-    ret.insert(Key::Down,  Event::EvActDown);
+    ret.insert(Key::CtrlJ, (Event::EvActDown, None));
+    ret.insert(Key::CtrlN, (Event::EvActDown, None));
+    ret.insert(Key::Down,  (Event::EvActDown, None));
 
-    ret.insert(Key::CtrlE, Event::EvActEndOfLine);
-    ret.insert(Key::End,   Event::EvActEndOfLine);
+    ret.insert(Key::CtrlE, (Event::EvActEndOfLine, None));
+    ret.insert(Key::End,   (Event::EvActEndOfLine, None));
 
-    ret.insert(Key::CtrlF, Event::EvActForwardChar);
-    ret.insert(Key::Right, Event::EvActForwardChar);
+    ret.insert(Key::CtrlF, (Event::EvActForwardChar, None));
+    ret.insert(Key::Right, (Event::EvActForwardChar, None));
 
-    ret.insert(Key::AltF,  Event::EvActForwardWord);
-    ret.insert(Key::SRight,Event::EvActForwardWord);
+    ret.insert(Key::AltF,  (Event::EvActForwardWord, None));
+    ret.insert(Key::SRight,(Event::EvActForwardWord, None));
 
-    //ret.insert(Key::AltZ,  Event::EvActIgnore);
+    //ret.insert(Key::AltZ,  (Event::EvActIgnore, None));
 
-    ret.insert(Key::CtrlK, Event::EvActKillLine);
-    ret.insert(Key::AltD,  Event::EvActKillWord);
-    //ret.insert(Key::CtrlN, Event::EvActNextHistory);
-    ret.insert(Key::PgDn,  Event::EvActPageDown);
-    ret.insert(Key::PgUp,  Event::EvActPageUp);
-    ret.insert(Key::CtrlP, Event::EvActPreviousHistory);
-    ret.insert(Key::AltH,  Event::EvActScrollLeft);
-    ret.insert(Key::AltL,  Event::EvActScrollRight);
-    //ret.insert(Key::AltZ,  Event::EvActSelectAll);
-    //ret.insert(Key::AltZ,  Event::EvActToggle);
-    //ret.insert(Key::AltZ,  Event::EvActToggleAll);
-    ret.insert(Key::Tab,   Event::EvActToggleDown);
-    //ret.insert(Key::AltZ,  Event::EvActToggleIn);
-    //ret.insert(Key::AltZ,  Event::EvActToggleOut);
-    //ret.insert(Key::AltZ,  Event::EvActToggleSort);
-    ret.insert(Key::BTab,  Event::EvActToggleUp);
-    ret.insert(Key::CtrlU, Event::EvActUnixLineDiscard);
-    ret.insert(Key::CtrlW, Event::EvActUnixWordRubout);
-    ret.insert(Key::CtrlP, Event::EvActUp);
-    ret.insert(Key::CtrlK, Event::EvActUp);
-    ret.insert(Key::Up,    Event::EvActUp);
-    ret.insert(Key::CtrlY, Event::EvActYank);
+    ret.insert(Key::CtrlK, (Event::EvActKillLine, None));
+    ret.insert(Key::AltD,  (Event::EvActKillWord, None));
+    //ret.insert(Key::CtrlN, (Event::EvActNextHistory, None));
+    ret.insert(Key::PgDn,  (Event::EvActPageDown, None));
+    ret.insert(Key::PgUp,  (Event::EvActPageUp, None));
+    ret.insert(Key::CtrlP, (Event::EvActPreviousHistory, None));
+    ret.insert(Key::AltH,  (Event::EvActScrollLeft, None));
+    ret.insert(Key::AltL,  (Event::EvActScrollRight, None));
+    //ret.insert(Key::AltZ,  (Event::EvActSelectAll, None));
+    //ret.insert(Key::AltZ,  (Event::EvActToggle, None));
+    //ret.insert(Key::AltZ,  (Event::EvActToggleAll, None));
+    ret.insert(Key::Tab,   (Event::EvActToggleDown, None));
+    //ret.insert(Key::AltZ,  (Event::EvActToggleIn, None));
+    //ret.insert(Key::AltZ,  (Event::EvActToggleOut, None));
+    //ret.insert(Key::AltZ,  (Event::EvActToggleSort, None));
+    ret.insert(Key::BTab,  (Event::EvActToggleUp, None));
+    ret.insert(Key::CtrlU, (Event::EvActUnixLineDiscard, None));
+    ret.insert(Key::CtrlW, (Event::EvActUnixWordRubout, None));
+    ret.insert(Key::CtrlP, (Event::EvActUp, None));
+    ret.insert(Key::CtrlK, (Event::EvActUp, None));
+    ret.insert(Key::Up,    (Event::EvActUp, None));
+    ret.insert(Key::CtrlY, (Event::EvActYank, None));
     ret
 }
 
