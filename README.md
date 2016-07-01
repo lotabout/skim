@@ -1,6 +1,6 @@
 FZF in Rust. [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder written in Go while [fzf-rs](https://github.com/lotabout/fzf-rs) is a re-implementation in Rust!
 
-TODO: add gif
+![demo](https://cloud.githubusercontent.com/assets/1527040/16512114/6891433e-3f8a-11e6-9a10-4ea2c4ba1c88.gif)
 
 # Usage
 
