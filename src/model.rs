@@ -275,7 +275,8 @@ impl Model {
     //============================================================================
     // Actions
 
-    pub fn act_accept(&mut self, accept_key: Option<String>) {
+    // return the number selected.
+    pub fn act_accept(&mut self, accept_key: Option<String>) -> usize {
         self.accept_key = accept_key;
 
         let mut matched_items = self.matched_items.borrow_mut();
@@ -283,6 +284,7 @@ impl Model {
             let item_index = matched.index;
             self.selected_indics.insert(item_index);
         }
+        self.selected_indics.len()
     }
 
     pub fn act_add_char(&mut self, ch: char) {
