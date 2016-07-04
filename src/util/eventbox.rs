@@ -60,8 +60,11 @@ impl<T: Hash + Eq + Copy> EventBox<T> {
         let num_of_events = events.len();
         if num_of_events == 0 {
             let _ = self.cond.wait(data);
+            let mut data = self.mutex.lock().unwrap();
+            mem::replace(&mut data.events, HashMap::new())
+        } else {
+            events
         }
-        events
     }
 
     /// set: fires an event
