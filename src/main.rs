@@ -34,6 +34,11 @@ use getopts::Options;
 use std::env;
 
 fn main() {
+    let exit_code = real_main();
+    std::process::exit(exit_code);
+}
+
+fn real_main() -> i32 {
 
     // option parsing
     let args: Vec<String> = env::args().collect();
@@ -54,7 +59,7 @@ fn main() {
     // print help message
     if options.opt_present("h") {
         print_usage(&program, opts);
-        return
+        return 0;
     }
 
     let theme = ColorTheme::new();
@@ -122,6 +127,8 @@ fn main() {
         input.run();
     });
 
+    let mut exit_code = 0;
+
     'outer: loop {
         let mut need_refresh = true;
         for (e, val) in eb.wait() {
@@ -172,12 +179,13 @@ fn main() {
                 }
                 // Actions
 
-                Event::EvActAbort => { break 'outer; }
+                Event::EvActAbort => {exit_code = 130; break 'outer; }
                 Event::EvActAccept => {
                     // break out of the loop and output the selected item.
                     //if model.get_num_selected() <= 0 { model.act_toggle(Some(true)); }
                     let args: Option<String> = *val.downcast().unwrap();
-                    model.act_accept(args);
+                    let num_selected = model.act_accept(args);
+                    exit_code = if num_selected > 0 {0} else {1};
                     break 'outer;
                 }
                 Event::EvActBackwardChar       => {model.act_backward_char();}
@@ -237,6 +245,7 @@ fn main() {
 
     model.close();
     model.output();
+    return exit_code;
 }
 
 fn print_usage(program: &str, opts: Options) {

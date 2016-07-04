@@ -60,3 +60,13 @@ different from fzf. For example:
 Feel free to [create new
 issue](https://github.com/lotabout/fzf-rs/issues/new) if you meet any bugs
 or have any ideas.
+
+# Manual
+
+## exit code
+
+| Exit Code | Meaning |
+|---|---|
+| 0 | Exit normally |
+| 1 | No Match found |
+| 130 | Abort by Ctrl-C/Ctrl-G/ESC/etc... |
