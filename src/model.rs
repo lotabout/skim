@@ -40,8 +40,6 @@ pub struct Model {
     eb: Arc<EventBox<Event>>,
     pub query: Query,
 
-    num_matched: u64,
-    num_total: u64,
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
@@ -74,8 +72,6 @@ impl Model {
         Model {
             eb: eb,
             query: Query::new(),
-            num_matched: 0,
-            num_total: 0,
             items: Arc::new(RwLock::new(Vec::new())),
             selected_indics: HashSet::new(),
             matched_items: RefCell::new(OrderedVec::new()),
@@ -108,10 +104,8 @@ impl Model {
         }
     }
 
-    pub fn update_process_info(&mut self, matched: u64, total: u64, processed: u64) {
-        self.num_matched = matched;
-        self.num_total = total;
-        self.processed_percentage = (processed+1)*100/(total+1);
+    pub fn update_process_info(&mut self, percentage: u64) {
+        self.processed_percentage = percentage;
     }
 
     pub fn clear_items(&mut self) {
@@ -140,7 +134,10 @@ impl Model {
             self.print_char(' ', COLOR_NORMAL, false);
         }
 
-        self.curses.cprint(format!(" {}/{}", self.num_matched, self.num_total).as_ref(), COLOR_INFO, false);
+        let num_matched = self.matched_items.borrow().len();
+        let num_total = self.items.read().unwrap().len();
+
+        self.curses.cprint(format!(" {}/{}", num_matched, num_total).as_ref(), COLOR_INFO, false);
 
         if self.multi_selection && self.selected_indics.len() > 0 {
             self.curses.cprint(format!(" [{}]", self.selected_indics.len()).as_ref(), COLOR_INFO, true);

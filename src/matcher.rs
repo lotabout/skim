@@ -1,29 +1,34 @@
 /// Given a list of entries `items` and the query string, filter out the
 /// matched entries using fuzzy search algorithm.
 
+
+extern crate num_cpus;
+extern crate crossbeam;
+
 use std::sync::{Arc, RwLock};
 
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::channel;
 use std::collections::HashMap;
 use event::Event;
 use item::{Item, MatchedItem, MatchedRange};
 use util::eventbox::EventBox;
 use score;
 use orderedvec::OrderedVec;
+use std::cmp::min;
+use std::time::{Instant};
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
     eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
     items: Arc<RwLock<Vec<Item>>>,
     new_items: Arc<RwLock<Vec<Item>>>,
-    item_pos: usize,
-    num_matched: u64,
     query: String,
     cache: HashMap<String, MatcherCache>,
+    partitions: usize,
 }
 
-impl Matcher {
-    pub fn new(items: Arc<RwLock<Vec<Item>>>, 
+impl<'a> Matcher {
+    pub fn new(items: Arc<RwLock<Vec<Item>>>,
                new_items: Arc<RwLock<Vec<Item>>>,
                eb_notify: Arc<EventBox<Event>>) -> Self {
 
@@ -35,45 +40,87 @@ impl Matcher {
             eb_notify: eb_notify,
             items: items,
             new_items: new_items,
-            item_pos: 0,
-            num_matched: 0,
             query: String::new(),
             cache: cache,
+            partitions: num_cpus::get(),
         }
     }
 
     pub fn process(&mut self) {
         let ref mut cache = self.cache.get_mut(&self.query).unwrap();
+        let timer = Instant::now();
 
-        self.item_pos = cache.item_pos;
+        let item_pos = cache.item_pos;
+        let items = self.items.read().unwrap();
+        let slices = slice_items(&items, item_pos, self.partitions);
+        let mut guards = vec![];
+        let query = self.query.clone();
+        let (tx, rx) = channel();
+        let eb_req = self.eb_req.clone();
+        let eb_notify = self.eb_notify.clone();
 
-        loop {
-            let items = self.items.read().unwrap();
-            if let Some(item) = items.get(self.item_pos) {
-                if let Some(matched) = match_item(self.item_pos, &item.text, &self.query) {
-                    self.num_matched += 1;
-                    cache.matched_items.push(matched.clone());
+        crossbeam::scope(|scope| {
+            for (start, slice) in slices {
+                let query = query.clone();
+                let tx = tx.clone();
+                let guard = scope.spawn(move || {
+                    let mut ret = vec![];
+                    let mut last = start;
+                    for (item, index) in slice.iter().zip(start..) {
+                        if let Some(matched) = match_item(index, &item.text, &query) {
+                            ret.push(matched.clone());
+                        }
+
+                        if index > last + 1000 {
+                            tx.send(index - last);
+                            last = index;
+                        }
+                    }
+                    tx.send(slice.len() + start - last);
+                    ret
+                });
+                guards.push(guard);
+            }
+
+            let mut processed_num = 0;
+            while let Ok(num) = rx.recv() {
+                processed_num += num;
+
+                if processed_num >= items.len() - item_pos {
+                    break;
                 }
-            } else {
-                break;
-            }
 
-            self.item_pos += 1;
-            cache.item_pos = self.item_pos;
-            (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64, self.item_pos as u64)));
+                if eb_req.peek(Event::EvMatcherResetQuery) {
+                    // wait for process to exit and clean
+                    while let Ok(num) = rx.try_recv() {} 
+                }
 
-            // check if the current process need to be stopped
-            if self.eb_req.peek(Event::EvMatcherResetQuery) {
-                break;
+                // update process
+                let time = timer.elapsed();
+                let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+                if mills > 200 {
+                    eb_notify.set(Event::EvMatcherUpdateProcess, Box::new((processed_num*100/items.len()) as u64));
+                }
             }
+        });
+
+
+        if !eb_req.peek(Event::EvMatcherResetQuery) {
+
+            cache.matched_items.clear();
+            for guard in guards {
+                let mut matched_items = guard.join();
+                while let Some(item) = matched_items.pop() {
+                    cache.matched_items.push(item);
+                }
+            }
+            cache.item_pos = items.len();
         }
     }
 
     fn reset_query(&mut self, query: &str) {
         self.query.clear();
         self.query.push_str(query);
-        self.num_matched = 0;
-        self.item_pos = 0;
         self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
     }
 
@@ -103,6 +150,19 @@ impl Matcher {
             self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
         }
     }
+}
+
+fn slice_items<'a>(items: &'a[Item], start_pos: usize, partitions: usize) -> Vec<(usize, &'a[Item])>{
+    let step = (items.len() - start_pos)/partitions + 1;
+    let mut ret = Vec::new();
+    let mut start = start_pos;
+    let mut end;
+    while start < items.len() {
+        end = min(start + step, items.len());
+        ret.push((start, &items[start..end]));
+        start = end;
+    }
+    ret
 }
 
 

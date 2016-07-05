@@ -145,8 +145,8 @@ fn real_main() -> i32 {
                 }
 
                 Event::EvMatcherUpdateProcess => {
-                    let (matched, total, processed) : (u64, u64, u64) = *val.downcast().unwrap();
-                    model.update_process_info(matched, total, processed);
+                    let percentage: u64 = *val.downcast().unwrap();
+                    model.update_process_info(percentage);
                 }
 
                 Event::EvMatcherEnd => {
