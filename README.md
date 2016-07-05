@@ -1,6 +1,6 @@
-FZF in Rust. [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder written in Go while [fzf-rs](https://github.com/lotabout/fzf-rs) is a re-implementation in Rust!
+Fuzzy Finder in Rust.
 
-![demo](https://cloud.githubusercontent.com/assets/1527040/16512114/6891433e-3f8a-11e6-9a10-4ea2c4ba1c88.gif)
+TODO: add a new gif demo with new name.
 
 # Usage
 
@@ -10,16 +10,16 @@ Current requires nightly rust to build. clone the repo and run:
 cargo build --release
 ```
 
-and put the resulting `target/release/fzf-rs` executable on your PATH.
+and put the resulting `target/release/skim` executable on your PATH.
 
 Now try out the following commands:
 
 ```
-# directly input fzf-rs
-fzf-rs
+# directly invoke skim
+skim
 
 # or pipe some input to it: (press TAB key select multiple items with -m enabled)
-vim $(find . -name "*.rs" | fzf-rs -m)
+vim $(find . -name "*.rs" | skim -m)
 ```
 The above command will allow you to select files with ".rs" extension and open
 the ones you selected in vim.
@@ -37,11 +37,15 @@ Some common used keybindings.
 | TAB | Toggle selection and move down (with `-m`)|
 | Shift-TAB | Toggle selection and move up (with `-m`)|
 
-Basically keys work in fzf will work in `fzf-rs`.
+Basically keys work in fzf will work in `skim`.
 
-# About fzf-rs
+# About skim
 
-One target of `fzf-rs` is to be compatible with `fzf`, so that we can re-use
+[fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder written
+in Go and [skim](https://github.com/lotabout/skim) trys to implement a new one
+in Rust!
+
+One target of `skim` is to be compatible with `fzf`, so that we can re-use
 all the plugins(such as fzf.vim) that comes with `fzf`. Of course now it is
 far from finished.
 
@@ -52,13 +56,13 @@ different from fzf. For example:
 
 1. The fuzzy search algorithm is different.
 2. UI of showing matched items. `fzf` will show only the range matched while
-   `fzf-rs` will show each character matched.
+   `skim` will show each character matched.
 3. The implementation details are quite different if you care.
 
 ## How to contribute
 
 Feel free to [create new
-issue](https://github.com/lotabout/fzf-rs/issues/new) if you meet any bugs
+issue](https://github.com/lotabout/skim/issues/new) if you meet any bugs
 or have any ideas.
 
 # Manual
