@@ -5,7 +5,7 @@
 extern crate num_cpus;
 extern crate crossbeam;
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Mutex};
 
 use std::sync::mpsc::channel;
 use std::collections::HashMap;
@@ -16,6 +16,10 @@ use score;
 use orderedvec::OrderedVec;
 use std::cmp::min;
 use std::time::{Instant};
+use std::thread;
+
+const MATCHER_CHUNK_SIZE: usize = 100;
+const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
@@ -50,72 +54,79 @@ impl<'a> Matcher {
         let ref mut cache = self.cache.get_mut(&self.query).unwrap();
         let timer = Instant::now();
 
-        let item_pos = cache.item_pos;
-        let items = self.items.read().unwrap();
-        let slices = slice_items(&items, item_pos, self.partitions);
-        let mut guards = vec![];
-        let query = self.query.clone();
+        let query = Arc::new(self.query.clone());
         let (tx, rx) = channel();
-        let eb_req = self.eb_req.clone();
-        let eb_notify = self.eb_notify.clone();
+        let mut guards = vec![];
 
-        crossbeam::scope(|scope| {
-            for (start, slice) in slices {
-                let query = query.clone();
-                let tx = tx.clone();
-                let guard = scope.spawn(move || {
-                    let mut ret = vec![];
-                    let mut last = start;
-                    for (item, index) in slice.iter().zip(start..) {
-                        if let Some(matched) = match_item(index, &item.text, &query) {
-                            ret.push(matched.clone());
-                        }
+        let start_pos = Arc::new(Mutex::new(cache.item_pos));
+        for i in 0..self.partitions {
+            let items = self.items.clone();
+            let start_pos = start_pos.clone();
+            let query = query.clone();
+            let tx = tx.clone();
+            let eb_req = self.eb_req.clone();
 
-                        if index > last + 1000 {
-                            tx.send(index - last);
-                            last = index;
+            let guard = thread::spawn(move || {
+                let items = items.read().unwrap();
+                loop {
+                    let mut start_idx = start_pos.lock().unwrap();
+                    if *start_idx >= items.len() {
+                        break;
+                    }
+
+                    let start = *start_idx;
+                    let end = min(start + MATCHER_CHUNK_SIZE, items.len());
+                    *start_idx = end;
+
+                    for i in start..end {
+                        let ref item = items[i];
+                        if let Some(matched) = match_item(i, &item.text, &query) {
+                            tx.send(Some(matched));
                         }
                     }
-                    tx.send(slice.len() + start - last);
-                    ret
-                });
-                guards.push(guard);
-            }
 
-            let mut processed_num = 0;
-            while let Ok(num) = rx.recv() {
-                processed_num += num;
-
-                if processed_num >= items.len() - item_pos {
-                    break;
+                    if eb_req.peek(Event::EvMatcherResetQuery) {
+                        break;
+                    }
                 }
-
-                if eb_req.peek(Event::EvMatcherResetQuery) {
-                    // wait for process to exit and clean
-                    while let Ok(num) = rx.try_recv() {} 
-                }
-
-                // update process
-                let time = timer.elapsed();
-                let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-                if mills > 200 {
-                    eb_notify.set(Event::EvMatcherUpdateProcess, Box::new((processed_num*100/items.len()) as u64));
-                }
-            }
-        });
-
-
-        if !eb_req.peek(Event::EvMatcherResetQuery) {
-
-            cache.matched_items.clear();
-            for guard in guards {
-                let mut matched_items = guard.join();
-                while let Some(item) = matched_items.pop() {
-                    cache.matched_items.push(item);
-                }
-            }
-            cache.item_pos = items.len();
+                tx.send(None); // to notify match process end
+            });
+            guards.push(guard);
         }
+
+        let items_len = self.items.read().unwrap().len();
+        while let Ok(result) = rx.recv() {
+            if let Some(matched) = result {
+                cache.matched_items.push(matched);
+            }
+
+            let start_idx = *start_pos.lock().unwrap();
+            // update process
+            let time = timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            if mills > PROCESS_UPDATE_DURATION {
+                self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new((start_idx *100/items_len) as u64));
+            }
+
+            if start_idx >= items_len {
+                break;
+            }
+
+            if self.eb_req.peek(Event::EvMatcherResetQuery) {
+                break;
+            }
+        }
+
+        // wait for all threads to exit
+        for guard in guards {
+            let _ = guard.join();
+        }
+
+        // consume remaining results.
+        while let Ok(Some(matched)) = rx.try_recv() {
+            cache.matched_items.push(matched);
+        }
+        cache.item_pos = *start_pos.lock().unwrap();
     }
 
     fn reset_query(&mut self, query: &str) {
