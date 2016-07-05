@@ -2,6 +2,7 @@
 
 use std::collections::BinaryHeap;
 
+#[derive(Clone)]
 pub struct OrderedVec<T: Ord> {
     heap: BinaryHeap<T>,
     vec: Vec<T>,

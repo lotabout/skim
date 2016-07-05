@@ -114,10 +114,6 @@ impl Model {
         self.processed_percentage = (processed+1)*100/(total+1);
     }
 
-    pub fn push_item(&mut self, item: MatchedItem) {
-        self.matched_items.borrow_mut().push(item);
-    }
-
     pub fn clear_items(&mut self) {
         self.matched_items.borrow_mut().clear();
         self.item_cursor = 0;

@@ -12,10 +12,10 @@ use score;
 use orderedvec::OrderedVec;
 
 pub struct Matcher {
-    tx_output: Sender<MatchedItem>,   // channel to send output to
-    eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
+    pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
     eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
     items: Arc<RwLock<Vec<Item>>>,
+    new_items: Arc<RwLock<Vec<Item>>>,
     item_pos: usize,
     num_matched: u64,
     query: String,
@@ -23,15 +23,18 @@ pub struct Matcher {
 }
 
 impl Matcher {
-    pub fn new(items: Arc<RwLock<Vec<Item>>>, tx_output: Sender<MatchedItem>,
-               eb_req: Arc<EventBox<Event>>, eb_notify: Arc<EventBox<Event>>) -> Self {
+    pub fn new(items: Arc<RwLock<Vec<Item>>>, 
+               new_items: Arc<RwLock<Vec<Item>>>,
+               eb_notify: Arc<EventBox<Event>>) -> Self {
+
         let mut cache = HashMap::new();
         cache.entry("".to_string()).or_insert(MatcherCache::new());
+
         Matcher {
-            tx_output: tx_output,
-            eb_req: eb_req,
+            eb_req: Arc::new(EventBox::new()),
             eb_notify: eb_notify,
             items: items,
+            new_items: new_items,
             item_pos: 0,
             num_matched: 0,
             query: String::new(),
@@ -50,10 +53,8 @@ impl Matcher {
                 if let Some(matched) = match_item(self.item_pos, &item.text, &self.query) {
                     self.num_matched += 1;
                     cache.matched_items.push(matched.clone());
-                    let _ = self.tx_output.send(matched);
                 }
             } else {
-                (*self.eb_notify).set(Event::EvMatcherEnd, Box::new(true));
                 break;
             }
 
@@ -62,31 +63,7 @@ impl Matcher {
             (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64, self.item_pos as u64)));
 
             // check if the current process need to be stopped
-            if !self.eb_req.is_empty() {
-                break;
-            }
-        }
-    }
-
-    pub fn output_from_cache(&mut self) {
-        if !self.cache.contains_key(&self.query) {
-            return;
-        }
-
-        let ref mut matched_items = self.cache.get_mut(&self.query).unwrap().matched_items;
-        let total = matched_items.len();
-        loop {
-            if let Some(ref matched) = matched_items.get(self.item_pos) {
-                self.num_matched += 1;
-                let _ = self.tx_output.send((*matched).clone());
-
-                self.item_pos += 1;
-                (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, total as u64, self.item_pos as u64)));
-            } else {
-                break;
-            }
-
-            if !self.eb_req.is_empty() {
+            if self.eb_req.peek(Event::EvMatcherResetQuery) {
                 break;
             }
         }
@@ -102,20 +79,28 @@ impl Matcher {
 
     pub fn run(&mut self) {
         loop {
-            for (e, val) in (*self.eb_req).wait() {
+            for (e, val) in self.eb_req.wait() {
                 match e {
                     Event::EvMatcherNewItem => {}
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
-                        (*self.eb_notify).set(Event::EvMatcherStart, Box::new(true));
-                        let _ = (*self.eb_req).wait_for(Event::EvMatcherStartReceived);
                     }
                     _ => {}
                 }
             }
 
-            self.output_from_cache();
+            // insert new items
+            {
+                let mut buffer = self.new_items.write().unwrap();
+                if buffer.len() > 0 {
+                    let mut items = self.items.write().unwrap();
+                    items.append(&mut buffer);
+                }
+            }
+
             self.process();
+            let ref mut cache = self.cache.get_mut(&self.query).unwrap();
+            self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
         }
     }
 }

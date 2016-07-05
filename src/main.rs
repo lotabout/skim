@@ -14,7 +14,7 @@ mod orderedvec;
 mod curses;
 mod query;
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use std::sync::mpsc::channel;
@@ -32,6 +32,8 @@ use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::{ColorTheme, Curses};
 use getopts::Options;
 use std::env;
+use orderedvec::OrderedVec;
+use item::MatchedItem;
 
 fn main() {
     let exit_code = real_main();
@@ -63,10 +65,8 @@ fn real_main() -> i32 {
     }
 
     let theme = ColorTheme::new();
-    let mut curse = Curses::new();
-    curse.init(Some(&theme), false, false);
-
-    let eb = Arc::new(EventBox::new());
+    let mut curses = Curses::new();
+    curses.init(Some(&theme), false, false);
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
@@ -76,39 +76,44 @@ fn real_main() -> i32 {
         pthread_sigmask(libc::SIG_SETMASK, &mut sigset, ptr::null_mut());
     }
 
-    let eb_clone_resize = eb.clone();
+    // controller variables
+    let eb = Arc::new(EventBox::new());
+    let item_buffer = Arc::new(RwLock::new(Vec::new()));
+
+    let eb_clone = eb.clone();
     thread::spawn(move || {
         // listen to the resize event;
         loop {
             let mut sig = 0;
             let _errno = unsafe {sigwait(&mut sigset, &mut sig)};
-            eb_clone_resize.set(Event::EvResize, Box::new(true));
+            eb_clone.set(Event::EvResize, Box::new(true));
         }
     });
 
-    let (tx_matched, rx_matched) = channel();
+    // model
     let eb_model = eb.clone();
-    let mut model = Model::new(eb_model, curse);
+    let mut model = Model::new(eb_model, curses);
     // parse options for model
     if options.opt_present("m") {model.multi_selection = true;}
     if let Some(prompt) = options.opt_str("p") {model.prompt = prompt;}
 
 
-    let eb_matcher = Arc::new(EventBox::new());
-    let eb_matcher_clone = eb_matcher.clone();
-    let eb_clone_matcher = eb.clone();
+    // matcher
+    let eb_clone = eb.clone();
     let items = model.items.clone();
-    let mut matcher = Matcher::new(items, tx_matched, eb_matcher_clone, eb_clone_matcher);
+    let mut matcher = Matcher::new(items, item_buffer.clone(), eb_clone);
+    let eb_matcher = matcher.eb_req.clone();
 
+    // reader
     let eb_clone_reader = eb.clone();
-    let items = model.items.clone();
     let default_command = match env::var("FZF_DEFAULT_COMMAND") {
         Ok(val) => val,
         Err(_) => "find .".to_string(),
     };
-    let mut reader = Reader::new(default_command, eb_clone_reader, items);
+    let mut reader = Reader::new(default_command, eb_clone_reader, item_buffer);
 
 
+    // input
     let eb_clone_input = eb.clone();
     let mut input = Input::new(eb_clone_input);
     input.parse_keymap(options.opt_str("b"));
@@ -142,21 +147,13 @@ fn real_main() -> i32 {
                 Event::EvMatcherUpdateProcess => {
                     let (matched, total, processed) : (u64, u64, u64) = *val.downcast().unwrap();
                     model.update_process_info(matched, total, processed);
-
-                    while let Ok(matched_item) = rx_matched.try_recv() {
-                        model.push_item(matched_item);
-                    }
-                }
-
-                Event::EvMatcherStart => {
-                    while let Ok(_) = rx_matched.try_recv() {}
-                    model.clear_items();
-                    eb_matcher.set(Event::EvMatcherStartReceived, Box::new(true));
-                    need_refresh = false;
                 }
 
                 Event::EvMatcherEnd => {
                     // do nothing
+                    let result: OrderedVec<MatchedItem> = *val.downcast().unwrap();
+                    let mut matched_items = model.matched_items.borrow_mut();
+                    *matched_items = result;
                 }
 
                 Event::EvQueryChange => {
