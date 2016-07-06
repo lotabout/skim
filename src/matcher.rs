@@ -69,14 +69,18 @@ impl<'a> Matcher {
             let guard = thread::spawn(move || {
                 let items = items.read().unwrap();
                 loop {
-                    let mut start_idx = start_pos.lock().unwrap();
-                    if *start_idx >= items.len() {
-                        break;
-                    }
+                    let mut start = 0;
+                    let mut end = 0;
+                    { // to release the start_pos lock as soon as possible
+                        let mut start_idx = start_pos.lock().unwrap();
+                        if *start_idx >= items.len() {
+                            break;
+                        }
 
-                    let start = *start_idx;
-                    let end = min(start + MATCHER_CHUNK_SIZE, items.len());
-                    *start_idx = end;
+                        start = *start_idx;
+                        end = min(start + MATCHER_CHUNK_SIZE, items.len());
+                        *start_idx = end;
+                    }
 
                     for i in start..end {
                         let ref item = items[i];
@@ -100,7 +104,7 @@ impl<'a> Matcher {
                 cache.matched_items.push(matched);
             }
 
-            let start_idx = *start_pos.lock().unwrap();
+            let start_idx = {*start_pos.lock().unwrap()};
             // update process
             let time = timer.elapsed();
             let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
