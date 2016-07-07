@@ -21,7 +21,7 @@ impl<T> OrderedVec<T> where T: Ord {
     }
 
     pub fn push(&mut self, item: T) {
-        if self.index_min > 0 && item >= self.vec[self.index_min-1] {
+        if self.index_min > 0 && item > self.vec[self.index_min/2] {
             self.vec.push(item);
             self.sorted = false;
         } else {

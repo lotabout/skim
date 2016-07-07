@@ -15,11 +15,10 @@ use util::eventbox::EventBox;
 use score;
 use orderedvec::OrderedVec;
 use std::cmp::min;
-use std::time::{Instant};
 use std::thread;
 
 const MATCHER_CHUNK_SIZE: usize = 100;
-const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
+const PROCESS_UPDATE_DURATION: u64 = 100; // milliseconds
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
@@ -52,7 +51,6 @@ impl<'a> Matcher {
 
     pub fn process(&mut self) {
         let ref mut cache = self.cache.get_mut(&self.query).unwrap();
-        let timer = Instant::now();
 
         let query = Arc::new(self.query.clone());
         let (tx, rx) = channel();
@@ -106,11 +104,9 @@ impl<'a> Matcher {
 
             let start_idx = {*start_pos.lock().unwrap()};
             // update process
-            let time = timer.elapsed();
-            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-            if mills > PROCESS_UPDATE_DURATION {
-                self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new((start_idx *100/items_len) as u64));
-            }
+            self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess,
+                                        Box::new((start_idx *100/items_len) as u64),
+                                        PROCESS_UPDATE_DURATION);
 
             if start_idx >= items_len {
                 break;
@@ -161,8 +157,10 @@ impl<'a> Matcher {
             }
 
             self.process();
-            let ref mut cache = self.cache.get_mut(&self.query).unwrap();
-            self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
+            if !self.eb_req.peek(Event::EvMatcherResetQuery) {
+                let ref mut cache = self.cache.get_mut(&self.query).unwrap();
+                self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
+            }
         }
     }
 }
