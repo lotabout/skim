@@ -61,7 +61,7 @@ impl Reader {
                     let mut items = self.items.write().unwrap();
                     items.push(Item::new(input));
                 }
-                Err(_err) => { break; }
+                Err(_err) => {} // String not UTF8 or other error, skip.
             }
             self.eb.set(Event::EvReaderNewItem, Box::new(true));
         }
