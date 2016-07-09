@@ -123,8 +123,10 @@ impl<'a> Matcher {
         }
 
         // consume remaining results.
-        while let Ok(Some(matched)) = rx.try_recv() {
-            cache.matched_items.push(matched);
+        while let Ok(result) = rx.try_recv() {
+            if let Some(matched) = result {
+                cache.matched_items.push(matched);
+            }
         }
         cache.item_pos = *start_pos.lock().unwrap();
     }
