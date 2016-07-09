@@ -16,9 +16,10 @@ use score;
 use orderedvec::OrderedVec;
 use std::cmp::min;
 use std::thread;
+use std::time::Instant;
 
 const MATCHER_CHUNK_SIZE: usize = 100;
-const PROCESS_UPDATE_DURATION: u64 = 100; // milliseconds
+const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
@@ -97,16 +98,20 @@ impl<'a> Matcher {
         }
 
         let items_len = self.items.read().unwrap().len();
+        let timer = Instant::now();
         while let Ok(result) = rx.recv() {
             if let Some(matched) = result {
                 cache.matched_items.push(matched);
             }
 
             let start_idx = {*start_pos.lock().unwrap()};
+
             // update process
-            self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess,
-                                        Box::new((start_idx *100/items_len) as u64),
-                                        PROCESS_UPDATE_DURATION);
+            let time = timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            if mills > PROCESS_UPDATE_DURATION {
+                self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64));
+            }
 
             if start_idx >= items_len {
                 break;
@@ -129,6 +134,7 @@ impl<'a> Matcher {
             }
         }
         cache.item_pos = *start_pos.lock().unwrap();
+        self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
     }
 
     fn reset_query(&mut self, query: &str) {
