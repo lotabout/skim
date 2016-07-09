@@ -114,6 +114,16 @@ impl Model {
         self.percentage = percentage;
     }
 
+    pub fn update_matched_items(&mut self, items: OrderedVec<MatchedItem>) {
+        let mut matched_items = self.matched_items.borrow_mut();
+        *matched_items = items;
+
+        // update cursor
+        let item_len = matched_items.len();
+        self.item_cursor = min(self.item_cursor, if item_len > 0 {item_len-1} else {0});
+        self.line_cursor = min(self.line_cursor, self.item_cursor);
+    }
+
     pub fn clear_items(&mut self) {
         self.matched_items.borrow_mut().clear();
         self.item_cursor = 0;

@@ -152,10 +152,7 @@ fn real_main() -> i32 {
                 Event::EvMatcherEnd => {
                     // do nothing
                     let result: OrderedVec<MatchedItem> = *val.downcast().unwrap();
-                    {
-                        let mut matched_items = model.matched_items.borrow_mut();
-                        *matched_items = result;
-                    }
+                    model.update_matched_items(result);
                     model.display();
                 }
 
@@ -178,8 +175,8 @@ fn real_main() -> i32 {
                     model.act_add_char(ch);
                     model.print_query();
                 }
-                // Actions
 
+                // Actions
                 Event::EvActAbort => {exit_code = 130; break 'outer; }
                 Event::EvActAccept => {
                     // break out of the loop and output the selected item.
@@ -243,8 +240,6 @@ fn real_main() -> i32 {
             model.refresh();
             thread::sleep(Duration::from_millis(10));
         }
-
-
     };
 
     model.close();

@@ -166,7 +166,7 @@ fn set_event_throttle<T>(mutex: &Arc<Mutex<EventData<T>>>, cond: &Arc<Condvar>, 
     let cond = cond.clone();
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(timeout));
-        let mut remaining = {
+        let remaining = {
             let mut data = mutex.lock().unwrap();
             data.throttled.remove(&e)
         };
