@@ -44,7 +44,6 @@ impl Curses {
         set_term(self.screen);
 
         raw();
-        keypad(stdscr, true);
         noecho();
 
         if let Some(theme) = theme {
@@ -95,11 +94,26 @@ impl Curses {
         }
     }
 
+    pub fn mv(&self, y: i32, x: i32) {
+        mv(y, x);
+    }
+
+    pub fn get_yx(&self) -> (i32, i32) {
+        let mut y = 0;
+        let mut x = 0;
+        getyx(stdscr, &mut y, &mut x);
+        (y, x)
+    }
+
     pub fn get_maxyx(&self) -> (i32, i32) {
         let mut max_y = 0;
         let mut max_x = 0;
         getmaxyx(stdscr, &mut max_y, &mut max_x);
         (max_y, max_x)
+    }
+
+    pub fn clrtoeol(&self) {
+        clrtoeol();
     }
 
     pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {

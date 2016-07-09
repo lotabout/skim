@@ -1,123 +1,189 @@
 /// Given a list of entries `items` and the query string, filter out the
 /// matched entries using fuzzy search algorithm.
 
-use std::sync::{Arc, RwLock};
 
-use std::sync::mpsc::Sender;
+extern crate num_cpus;
+extern crate crossbeam;
+
+use std::sync::{Arc, RwLock, Mutex};
+
+use std::sync::mpsc::channel;
 use std::collections::HashMap;
 use event::Event;
 use item::{Item, MatchedItem, MatchedRange};
 use util::eventbox::EventBox;
 use score;
 use orderedvec::OrderedVec;
+use std::cmp::min;
+use std::thread;
+use std::time::Instant;
+
+const MATCHER_CHUNK_SIZE: usize = 100;
+const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
 
 pub struct Matcher {
-    tx_output: Sender<MatchedItem>,   // channel to send output to
-    eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
+    pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
     eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
     items: Arc<RwLock<Vec<Item>>>,
-    item_pos: usize,
-    num_matched: u64,
+    new_items: Arc<RwLock<Vec<Item>>>,
     query: String,
     cache: HashMap<String, MatcherCache>,
+    partitions: usize,
 }
 
-impl Matcher {
-    pub fn new(items: Arc<RwLock<Vec<Item>>>, tx_output: Sender<MatchedItem>,
-               eb_req: Arc<EventBox<Event>>, eb_notify: Arc<EventBox<Event>>) -> Self {
+impl<'a> Matcher {
+    pub fn new(items: Arc<RwLock<Vec<Item>>>,
+               new_items: Arc<RwLock<Vec<Item>>>,
+               eb_notify: Arc<EventBox<Event>>) -> Self {
+
         let mut cache = HashMap::new();
         cache.entry("".to_string()).or_insert(MatcherCache::new());
+
         Matcher {
-            tx_output: tx_output,
-            eb_req: eb_req,
+            eb_req: Arc::new(EventBox::new()),
             eb_notify: eb_notify,
             items: items,
-            item_pos: 0,
-            num_matched: 0,
+            new_items: new_items,
             query: String::new(),
             cache: cache,
+            partitions: num_cpus::get(),
         }
     }
 
     pub fn process(&mut self) {
         let ref mut cache = self.cache.get_mut(&self.query).unwrap();
 
-        self.item_pos = cache.item_pos;
+        let query = Arc::new(self.query.clone());
+        let (tx, rx) = channel();
+        let mut guards = vec![];
 
-        loop {
-            let items = self.items.read().unwrap();
-            if let Some(item) = items.get(self.item_pos) {
-                if let Some(matched) = match_item(self.item_pos, &item.text, &self.query) {
-                    self.num_matched += 1;
-                    cache.matched_items.push(matched.clone());
-                    let _ = self.tx_output.send(matched);
+        let start_pos = Arc::new(Mutex::new(cache.item_pos));
+        for i in 0..self.partitions {
+            let items = self.items.clone();
+            let start_pos = start_pos.clone();
+            let query = query.clone();
+            let tx = tx.clone();
+            let eb_req = self.eb_req.clone();
+
+            let guard = thread::spawn(move || {
+                let items = items.read().unwrap();
+                loop {
+                    let mut start = 0;
+                    let mut end = 0;
+                    { // to release the start_pos lock as soon as possible
+                        let mut start_idx = start_pos.lock().unwrap();
+                        if *start_idx >= items.len() {
+                            break;
+                        }
+
+                        start = *start_idx;
+                        end = min(start + MATCHER_CHUNK_SIZE, items.len());
+                        *start_idx = end;
+                    }
+
+                    for i in start..end {
+                        let ref item = items[i];
+                        if let Some(matched) = match_item(i, &item.text, &query) {
+                            tx.send(Some(matched));
+                        }
+                    }
+
+                    if eb_req.peek(Event::EvMatcherResetQuery) {
+                        break;
+                    }
                 }
-            } else {
-                (*self.eb_notify).set(Event::EvMatcherEnd, Box::new(true));
+                tx.send(None); // to notify match process end
+            });
+            guards.push(guard);
+        }
+
+        let items_len = self.items.read().unwrap().len();
+        let timer = Instant::now();
+        while let Ok(result) = rx.recv() {
+            if let Some(matched) = result {
+                cache.matched_items.push(matched);
+            }
+
+            let start_idx = {*start_pos.lock().unwrap()};
+
+            // update process
+            let time = timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            if mills > PROCESS_UPDATE_DURATION {
+                self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64));
+            }
+
+            if start_idx >= items_len {
                 break;
             }
 
-            self.item_pos += 1;
-            cache.item_pos = self.item_pos;
-            (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, items.len() as u64, self.item_pos as u64)));
-
-            // check if the current process need to be stopped
-            if !self.eb_req.is_empty() {
+            if self.eb_req.peek(Event::EvMatcherResetQuery) {
                 break;
             }
         }
-    }
 
-    pub fn output_from_cache(&mut self) {
-        if !self.cache.contains_key(&self.query) {
-            return;
+        // wait for all threads to exit
+        for guard in guards {
+            let _ = guard.join();
         }
 
-        let ref mut matched_items = self.cache.get_mut(&self.query).unwrap().matched_items;
-        let total = matched_items.len();
-        loop {
-            if let Some(ref matched) = matched_items.get(self.item_pos) {
-                self.num_matched += 1;
-                let _ = self.tx_output.send((*matched).clone());
-
-                self.item_pos += 1;
-                (*self.eb_notify).set(Event::EvMatcherUpdateProcess, Box::new((self.num_matched, total as u64, self.item_pos as u64)));
-            } else {
-                break;
-            }
-
-            if !self.eb_req.is_empty() {
-                break;
+        // consume remaining results.
+        while let Ok(result) = rx.try_recv() {
+            if let Some(matched) = result {
+                cache.matched_items.push(matched);
             }
         }
+        cache.item_pos = *start_pos.lock().unwrap();
+        self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
     }
 
     fn reset_query(&mut self, query: &str) {
         self.query.clear();
         self.query.push_str(query);
-        self.num_matched = 0;
-        self.item_pos = 0;
         self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
     }
 
     pub fn run(&mut self) {
         loop {
-            for (e, val) in (*self.eb_req).wait() {
+            for (e, val) in self.eb_req.wait() {
                 match e {
                     Event::EvMatcherNewItem => {}
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
-                        (*self.eb_notify).set(Event::EvMatcherStart, Box::new(true));
-                        let _ = (*self.eb_req).wait_for(Event::EvMatcherStartReceived);
                     }
                     _ => {}
                 }
             }
 
-            self.output_from_cache();
+            // insert new items
+            {
+                let mut buffer = self.new_items.write().unwrap();
+                if buffer.len() > 0 {
+                    let mut items = self.items.write().unwrap();
+                    items.append(&mut buffer);
+                }
+            }
+
             self.process();
+            if !self.eb_req.peek(Event::EvMatcherResetQuery) {
+                let ref mut cache = self.cache.get_mut(&self.query).unwrap();
+                self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
+            }
         }
     }
+}
+
+fn slice_items<'a>(items: &'a[Item], start_pos: usize, partitions: usize) -> Vec<(usize, &'a[Item])>{
+    let step = (items.len() - start_pos)/partitions + 1;
+    let mut ret = Vec::new();
+    let mut start = start_pos;
+    let mut end;
+    while start < items.len() {
+        end = min(start + step, items.len());
+        ret.push((start, &items[start..end]));
+        start = end;
+    }
+    ret
 }
 
 

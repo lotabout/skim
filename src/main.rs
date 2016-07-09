@@ -14,7 +14,7 @@ mod orderedvec;
 mod curses;
 mod query;
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use std::sync::mpsc::channel;
@@ -32,6 +32,8 @@ use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::{ColorTheme, Curses};
 use getopts::Options;
 use std::env;
+use orderedvec::OrderedVec;
+use item::MatchedItem;
 
 fn main() {
     let exit_code = real_main();
@@ -63,10 +65,8 @@ fn real_main() -> i32 {
     }
 
     let theme = ColorTheme::new();
-    let mut curse = Curses::new();
-    curse.init(Some(&theme), false, false);
-
-    let eb = Arc::new(EventBox::new());
+    let mut curses = Curses::new();
+    curses.init(Some(&theme), false, false);
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
@@ -76,41 +76,42 @@ fn real_main() -> i32 {
         pthread_sigmask(libc::SIG_SETMASK, &mut sigset, ptr::null_mut());
     }
 
-    let eb_clone_resize = eb.clone();
+    // controller variables
+    let eb = Arc::new(EventBox::new());
+    let item_buffer = Arc::new(RwLock::new(Vec::new()));
+
+    let eb_clone = eb.clone();
     thread::spawn(move || {
         // listen to the resize event;
         loop {
             let mut sig = 0;
             let _errno = unsafe {sigwait(&mut sigset, &mut sig)};
-            eb_clone_resize.set(Event::EvResize, Box::new(true));
+            eb_clone.set(Event::EvResize, Box::new(true));
         }
     });
 
-    let (tx_matched, rx_matched) = channel();
-    let eb_model = eb.clone();
-    let mut model = Model::new(eb_model, curse);
+    // model
+    let mut model = Model::new(eb.clone(), curses);
     // parse options for model
     if options.opt_present("m") {model.multi_selection = true;}
     if let Some(prompt) = options.opt_str("p") {model.prompt = prompt;}
 
 
-    let eb_matcher = Arc::new(EventBox::new());
-    let eb_matcher_clone = eb_matcher.clone();
-    let eb_clone_matcher = eb.clone();
+    // matcher
     let items = model.items.clone();
-    let mut matcher = Matcher::new(items, tx_matched, eb_matcher_clone, eb_clone_matcher);
+    let mut matcher = Matcher::new(items, item_buffer.clone(), eb.clone());
+    let eb_matcher = matcher.eb_req.clone();
 
-    let eb_clone_reader = eb.clone();
-    let items = model.items.clone();
+    // reader
     let default_command = match env::var("FZF_DEFAULT_COMMAND") {
         Ok(val) => val,
         Err(_) => "find .".to_string(),
     };
-    let mut reader = Reader::new(default_command, eb_clone_reader, items);
+    let mut reader = Reader::new(default_command, eb.clone(), item_buffer.clone());
 
 
-    let eb_clone_input = eb.clone();
-    let mut input = Input::new(eb_clone_input);
+    // input
+    let mut input = Input::new(eb.clone());
     input.parse_keymap(options.opt_str("b"));
     input.parse_expect_keys(options.opt_str("e"));
 
@@ -130,33 +131,29 @@ fn real_main() -> i32 {
     let mut exit_code = 0;
 
     'outer: loop {
-        let mut need_refresh = true;
         for (e, val) in eb.wait() {
             match e {
                 Event::EvReaderNewItem => {
                     eb_matcher.set(Event::EvMatcherNewItem, Box::new(true));
                     let reading: bool = *val.downcast().unwrap();
                     model.reading = reading;
+
+                    let new_items = item_buffer.read().unwrap();
+                    model.update_num_total(new_items.len());
+                    model.print_info();
                 }
 
                 Event::EvMatcherUpdateProcess => {
-                    let (matched, total, processed) : (u64, u64, u64) = *val.downcast().unwrap();
-                    model.update_process_info(matched, total, processed);
-
-                    while let Ok(matched_item) = rx_matched.try_recv() {
-                        model.push_item(matched_item);
-                    }
-                }
-
-                Event::EvMatcherStart => {
-                    while let Ok(_) = rx_matched.try_recv() {}
-                    model.clear_items();
-                    eb_matcher.set(Event::EvMatcherStartReceived, Box::new(true));
-                    need_refresh = false;
+                    let percentage: u64 = *val.downcast().unwrap();
+                    model.update_percentage(percentage);
+                    model.print_info();
                 }
 
                 Event::EvMatcherEnd => {
                     // do nothing
+                    let result: OrderedVec<MatchedItem> = *val.downcast().unwrap();
+                    model.update_matched_items(result);
+                    model.display();
                 }
 
                 Event::EvQueryChange => {
@@ -171,14 +168,15 @@ fn real_main() -> i32 {
                     // ignore for now
                 }
 
-                Event::EvResize => {model.resize();}
+                Event::EvResize => {model.resize(); model.display();}
 
                 Event::EvActAddChar => {
                     let ch: char = *val.downcast().unwrap();
                     model.act_add_char(ch);
+                    model.print_query();
                 }
-                // Actions
 
+                // Actions
                 Event::EvActAbort => {exit_code = 130; break 'outer; }
                 Event::EvActAccept => {
                     // break out of the loop and output the selected item.
@@ -188,35 +186,37 @@ fn real_main() -> i32 {
                     exit_code = if num_selected > 0 {0} else {1};
                     break 'outer;
                 }
-                Event::EvActBackwardChar       => {model.act_backward_char();}
-                Event::EvActBackwardDeleteChar => {model.act_backward_delete_char();}
-                Event::EvActBackwardKillWord   => {model.act_backward_kill_word();}
-                Event::EvActBackwardWord       => {model.act_backward_word();}
-                Event::EvActBeginningOfLine    => {model.act_beginning_of_line();}
+                Event::EvActBackwardChar       => {model.act_backward_char();       model.print_query();}
+                Event::EvActBackwardDeleteChar => {model.act_backward_delete_char();model.print_query();}
+                Event::EvActBackwardKillWord   => {model.act_backward_kill_word();  model.print_query();}
+                Event::EvActBackwardWord       => {model.act_backward_word();       model.print_query();}
+                Event::EvActBeginningOfLine    => {model.act_beginning_of_line();   model.print_query();}
                 Event::EvActCancel             => {}
                 Event::EvActClearScreen        => {model.refresh();}
-                Event::EvActDeleteChar         => {model.act_delete_char();}
-                Event::EvActDeleteCharEOF      => {model.act_delete_char();}
-                Event::EvActDeselectAll        => {model.act_deselect_all();}
-                Event::EvActDown               => {model.act_move_line_cursor(-1);}
-                Event::EvActEndOfLine          => {model.act_end_of_line();}
-                Event::EvActForwardChar        => {model.act_forward_char();}
-                Event::EvActForwardWord        => {model.act_forward_word();}
+                Event::EvActDeleteChar         => {model.act_delete_char();         model.print_query();}
+                Event::EvActDeleteCharEOF      => {model.act_delete_char();         model.print_query();}
+                Event::EvActDeselectAll        => {model.act_deselect_all();        model.print_info(); model.print_items();}
+                Event::EvActDown               => {model.act_move_line_cursor(-1);  model.print_items();}
+                Event::EvActEndOfLine          => {model.act_end_of_line();         model.print_query();}
+                Event::EvActForwardChar        => {model.act_forward_char();        model.print_query();}
+                Event::EvActForwardWord        => {model.act_forward_word();        model.print_query();}
                 Event::EvActIgnore             => {}
-                Event::EvActKillLine           => {model.act_kill_line();}
-                Event::EvActKillWord           => {model.act_kill_word();}
+                Event::EvActKillLine           => {model.act_kill_line();           model.print_query();}
+                Event::EvActKillWord           => {model.act_kill_word();           model.print_query();}
                 Event::EvActNextHistory        => {}
-                Event::EvActPageDown           => {model.act_move_page(-1);}
-                Event::EvActPageUp             => {model.act_move_page(1);}
+                Event::EvActPageDown           => {model.act_move_page(-1);         model.print_items();}
+                Event::EvActPageUp             => {model.act_move_page(1);          model.print_items();}
                 Event::EvActPreviousHistory    => {}
-                Event::EvActScrollLeft         => {model.act_vertical_scroll(-1);}
-                Event::EvActScrollRight        => {model.act_vertical_scroll(1);}
-                Event::EvActSelectAll          => {model.act_select_all();}
-                Event::EvActToggle             => {model.act_toggle();}
-                Event::EvActToggleAll          => {model.act_toggle_all();}
+                Event::EvActScrollLeft         => {model.act_vertical_scroll(-1);   model.print_items();}
+                Event::EvActScrollRight        => {model.act_vertical_scroll(1);    model.print_items();}
+                Event::EvActSelectAll          => {model.act_select_all();          model.print_info(); model.print_items();}
+                Event::EvActToggle             => {model.act_toggle();              model.print_info(); model.print_items();}
+                Event::EvActToggleAll          => {model.act_toggle_all();          model.print_info(); model.print_items();}
                 Event::EvActToggleDown         => {
                     model.act_toggle();
                     model.act_move_line_cursor(-1);
+                    model.print_info();
+                    model.print_items();
                 }
                 Event::EvActToggleIn           => {}
                 Event::EvActToggleOut          => {}
@@ -224,22 +224,21 @@ fn real_main() -> i32 {
                 Event::EvActToggleUp           => {
                     model.act_toggle();
                     model.act_move_line_cursor(1);
+                    model.print_info();
+                    model.print_items();
                 }
-                Event::EvActUnixLineDiscard    => {model.act_line_discard();}
-                Event::EvActUnixWordRubout     => {model.act_backward_kill_word();}
-                Event::EvActUp                 => {model.act_move_line_cursor(1);}
+                Event::EvActUnixLineDiscard    => {model.act_line_discard();       model.print_query();}
+                Event::EvActUnixWordRubout     => {model.act_backward_kill_word(); model.print_query();}
+                Event::EvActUp                 => {model.act_move_line_cursor(1);  model.print_items();}
                 Event::EvActYank               => {}
 
                 _ => {
                     printw(format!("{}\n", e as i32).as_str());
                 }
             }
-        }
 
-        thread::sleep(Duration::from_millis(10));
-        model.display();
-        if need_refresh {
             model.refresh();
+            thread::sleep(Duration::from_millis(10));
         }
     };
 

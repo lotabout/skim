@@ -1,62 +1,76 @@
 // ordered container
+// Normally, user will only care about the first several options. So we only keep several of them
+// in order. Other items are kept unordered and are sorted on demand.
 
-use std::collections::BinaryHeap;
+const ORDERED_SIZE: usize = 300;
 
+#[derive(Clone)]
 pub struct OrderedVec<T: Ord> {
-    heap: BinaryHeap<T>,
-    vec: Vec<T>,
+    ordered: Vec<T>,
+    unordered: Vec<T>,
     sorted: bool,
-    index_min: usize,
 }
 
 impl<T> OrderedVec<T> where T: Ord {
     pub fn new() -> Self {
         OrderedVec {
-            heap: BinaryHeap::new(),
-            vec: Vec::new(),
-            sorted: true,
-            index_min: 0,
+            ordered: Vec::new(),
+            unordered: Vec::new(),
+            sorted: false,
+        }
+    }
+
+    fn ordered_insert(&mut self, item: T) {
+        self.ordered.push(item);
+        let mut pos = self.ordered.len() - 1;
+        while pos > 0 && self.ordered[pos] > self.ordered[pos-1] {
+            self.ordered.swap(pos, pos-1);
+            pos -= 1;
         }
     }
 
     pub fn push(&mut self, item: T) {
-        if self.index_min > 0 && item >= self.vec[self.index_min-1] {
-            self.vec.push(item);
-            self.sorted = false;
+        if self.ordered.len() < ORDERED_SIZE {
+            self.ordered_insert(item);
+            return;
+        } 
+
+        let smaller = if item < *self.ordered.last().unwrap() {
+            item
         } else {
-            self.heap.push(item);
-        }
+            self.ordered_insert(item);
+            self.ordered.pop().unwrap()
+        };
+
+        self.unordered.push(smaller);
+        self.sorted = false;
     }
 
     pub fn get(&mut self, index: usize) -> Option<&T> {
-        if !self.sorted {
-            self.vec.sort_by(|a, b| b.cmp(a));
+        if index < self.ordered.len() {
+            return self.ordered.get(index);
         }
 
-        if index >= self.vec.len() + self.heap.len() {
+        if index >= self.ordered.len() + self.unordered.len() {
             return None;
         }
 
-        let mut len = self.vec.len();
-        while len <= index {
-            self.vec.push(self.heap.pop().unwrap());
-            len += 1;
+        if !self.sorted {
+            self.unordered.sort_by(|a, b| b.cmp(a));
+            self.sorted = true;
         }
 
-        self.sorted = true;
-        self.index_min = self.vec.len();
-        return self.vec.get(index);
+        return self.unordered.get(index - self.ordered.len());
     }
 
     pub fn len(&self) -> usize {
-        return self.vec.len() + self.heap.len();
+        return self.ordered.len() + self.unordered.len();
     }
 
     pub fn clear(&mut self) {
-        self.vec.clear();
-        self.heap.clear();
+        self.ordered.clear();
+        self.unordered.clear();
         self.sorted = true;
-        self.index_min = 0;
     }
 }
 
