@@ -58,7 +58,7 @@ impl<'a> Matcher {
         let mut guards = vec![];
 
         let start_pos = Arc::new(Mutex::new(cache.item_pos));
-        for i in 0..self.partitions {
+        for _ in 0..self.partitions {
             let items = self.items.clone();
             let start_pos = start_pos.clone();
             let query = query.clone();
@@ -68,23 +68,22 @@ impl<'a> Matcher {
             let guard = thread::spawn(move || {
                 let items = items.read().unwrap();
                 loop {
-                    let mut start = 0;
-                    let mut end = 0;
-                    { // to release the start_pos lock as soon as possible
+                    let (start, end) = { // to release the start_pos lock as soon as possible
                         let mut start_idx = start_pos.lock().unwrap();
                         if *start_idx >= items.len() {
                             break;
                         }
 
-                        start = *start_idx;
-                        end = min(start + MATCHER_CHUNK_SIZE, items.len());
+                        let start = *start_idx;
+                        let end = min(start + MATCHER_CHUNK_SIZE, items.len());
                         *start_idx = end;
-                    }
+                        (start, end)
+                    };
 
                     for i in start..end {
                         let ref item = items[i];
                         if let Some(matched) = match_item(i, &item.text, &query) {
-                            tx.send(Some(matched));
+                            let _ = tx.send(Some(matched));
                         }
                     }
 
@@ -92,7 +91,7 @@ impl<'a> Matcher {
                         break;
                     }
                 }
-                tx.send(None); // to notify match process end
+                let _ = tx.send(None); // to notify match process end
             });
             guards.push(guard);
         }
@@ -172,20 +171,6 @@ impl<'a> Matcher {
         }
     }
 }
-
-fn slice_items<'a>(items: &'a[Item], start_pos: usize, partitions: usize) -> Vec<(usize, &'a[Item])>{
-    let step = (items.len() - start_pos)/partitions + 1;
-    let mut ret = Vec::new();
-    let mut start = start_pos;
-    let mut end;
-    while start < items.len() {
-        end = min(start + step, items.len());
-        ret.push((start, &items[start..end]));
-        start = end;
-    }
-    ret
-}
-
 
 fn match_item(index: usize, item: &str, query: &str) -> Option<MatchedItem> {
     let matched_result = score::fuzzy_match(item, query);

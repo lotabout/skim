@@ -17,7 +17,6 @@ mod query;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use std::sync::mpsc::channel;
 use std::mem;
 use std::ptr;
 use util::eventbox::EventBox;
@@ -128,7 +127,7 @@ fn real_main() -> i32 {
         input.run();
     });
 
-    let mut exit_code = 0;
+    let exit_code;
 
     'outer: loop {
         for (e, val) in eb.wait() {
@@ -244,7 +243,7 @@ fn real_main() -> i32 {
 
     model.close();
     model.output();
-    return exit_code;
+    exit_code
 }
 
 fn print_usage(program: &str, opts: Options) {

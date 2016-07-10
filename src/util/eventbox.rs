@@ -87,48 +87,10 @@ impl<T> EventBox<T> where T: Hash + Eq + Copy + 'static + Send {
         set_event_throttle(&self.mutex, &self.cond, e, value, timeout, false);
     }
 
-
-    /// clear the event map
-    pub fn clear(&self) {
-        let mut data = self.mutex.lock().unwrap();
-        data.events.clear();
-    }
-
     // peek at the event box to check whether event had been set or not
     pub fn peek(&self, event: T) -> bool {
         let data = self.mutex.lock().unwrap();
         data.events.contains_key(&event)
-    }
-
-    // remove events from lazy table
-    pub fn watch(&self, events: &Vec<T>) {
-        let mut data = self.mutex.lock().unwrap();
-        for e in events {
-            data.lazy.remove(e);
-        }
-    }
-
-    // add events from lazy table
-    pub fn unwatch(&self, events: &Vec<T>) {
-        let mut data = self.mutex.lock().unwrap();
-        for e in events {
-            data.lazy.insert(*e);
-        }
-    }
-
-    pub fn wait_for(&self, event: T) -> Value {
-        'event_found: loop {
-            for (e, val) in self.wait() {
-                if e == event {
-                    return val
-                }
-            }
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        let data = self.mutex.lock().unwrap();
-        data.events.len() == 0
     }
 }
 
@@ -238,79 +200,6 @@ mod test {
 
         let val: i32 = *eb.wait_for(10).downcast().unwrap();
         assert_eq!(20, val);
-    }
-
-    #[test]
-    fn test_unwatch_set() {
-        const NUM_OF_EVENTS: i32 = 4;
-        let eb = Arc::new(EventBox::new());
-
-        // this time, we lazy event NO. NUM_OF_EVENTS
-        // note that unwatch will not trigger the event notification, but the
-        // value are actually set.
-        eb.unwatch(&vec![NUM_OF_EVENTS]);
-
-        let counter = Arc::new(Mutex::new(0));
-        for i in 1..(NUM_OF_EVENTS+1) {
-            let eb_clone = eb.clone();
-            let counter_clone = counter.clone();
-            thread::spawn(move || {
-                eb_clone.set(i, Box::new(i));
-                let mut count = counter_clone.lock().unwrap();
-                *count += 1;
-            });
-        }
-
-        // wait till all events are set
-        loop {
-            thread::sleep(Duration::from_millis(100));
-            let count = counter.lock().unwrap();
-            if *count == NUM_OF_EVENTS {
-                break;
-            }
-        }
-
-        let mut total: i32 = 0;
-        for (_, val) in eb.wait() {
-            total += *val.downcast().unwrap();
-        }
-
-        assert_eq!((1..(NUM_OF_EVENTS+1)).fold(0, |x, acc| acc+x), total);
-    }
-
-    #[test]
-    fn test_unwatch_notify() {
-        // unwatched event will not trigger notification
-
-        let eb = Arc::new(EventBox::new());
-
-        eb.unwatch(&vec![1]);
-
-        let eb_clone1 = eb.clone();
-
-        let which_one = Arc::new(Mutex::new(1));
-        let which_one_clone = which_one.clone();
-
-        let wait = thread::spawn(move || {
-            for (_, _) in eb.wait() {
-                let mut data = which_one.lock().unwrap();
-                assert_eq!(2, *data);
-            }
-        });
-
-        thread::spawn(move || {
-            eb_clone1.set(1, Box::new(1));
-
-            // to ensure that the `wait` in main thread have time to trigger.
-            // of course, the expected behavior is that it will not.
-            thread::sleep(Duration::from_millis(100));
-
-            let mut data = which_one_clone.lock().unwrap();
-            *data = 2;
-            eb_clone1.set(2, Box::new(2));
-        });
-
-        wait.join();
     }
 
     // Not including this test, because we should not rely on eventbox to do the dispatching at

@@ -124,12 +124,6 @@ impl Model {
         self.line_cursor = min(self.line_cursor, self.item_cursor);
     }
 
-    pub fn clear_items(&mut self) {
-        self.matched_items.borrow_mut().clear();
-        self.item_cursor = 0;
-        self.line_cursor = 0;
-    }
-
     pub fn print_query(&self) {
         // > query
         self.curses.mv(self.max_y-1, 0);
@@ -258,7 +252,7 @@ impl Model {
             let mut x = 0;
             getyx(stdscr, &mut y, &mut x);
             let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
-            for i in 0..rest {
+            for _ in 0..rest {
                 self.curses.caddch(' ', color, is_bold);
             }
         }
@@ -386,7 +380,7 @@ impl Model {
     pub fn act_select_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let matched_items = self.matched_items.borrow_mut();
         for i in 0..matched_items.len() {
             self.selected_indics.insert(i);
         }
@@ -395,7 +389,7 @@ impl Model {
     pub fn act_toggle_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let matched_items = self.matched_items.borrow_mut();
         let selected = mem::replace(&mut self.selected_indics, HashSet::new());
         for i in 0..matched_items.len() {
             if !selected.contains(&i) {
@@ -507,7 +501,7 @@ fn reshape_string(text: &Vec<char>,
     }
 
     let mut ret = Vec::new();
-    let mut ret_pos = 0;
+    let mut ret_pos;
 
     // trim right, so that 'String' -> 'Str..'
     let right_pos = 1 + max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));

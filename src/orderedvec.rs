@@ -33,7 +33,7 @@ impl<T> OrderedVec<T> where T: Ord {
         if self.ordered.len() < ORDERED_SIZE {
             self.ordered_insert(item);
             return;
-        } 
+        }
 
         let smaller = if item < *self.ordered.last().unwrap() {
             item
@@ -65,12 +65,6 @@ impl<T> OrderedVec<T> where T: Ord {
 
     pub fn len(&self) -> usize {
         return self.ordered.len() + self.unordered.len();
-    }
-
-    pub fn clear(&mut self) {
-        self.ordered.clear();
-        self.unordered.clear();
-        self.sorted = true;
     }
 }
 
