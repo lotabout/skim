@@ -6,8 +6,6 @@ pub enum Event {
     EvMatcherNewItem,
     EvMatcherResetQuery,
     EvMatcherUpdateProcess,
-    EvMatcherStart,
-    EvMatcherStartReceived,
     EvMatcherEnd,
     EvQueryChange,
     EvInputKey,

@@ -11,6 +11,8 @@ use util::eventbox::EventBox;
 use event::Event;
 use item::Item;
 
+const READER_EVENT_DURATION: u64 = 30;
+
 pub struct Reader {
     cmd: String, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
@@ -61,11 +63,12 @@ impl Reader {
                     let mut items = self.items.write().unwrap();
                     items.push(Item::new(input));
                 }
-                Err(_err) => { break; }
+                Err(_err) => {} // String not UTF8 or other error, skip.
             }
-            self.eb.set(Event::EvReaderNewItem, Box::new(true));
+
+            self.eb.set_throttle(Event::EvReaderNewItem, Box::new(true), READER_EVENT_DURATION);
         }
-        self.eb.set(Event::EvReaderNewItem, Box::new(false));
+        self.eb.set_throttle(Event::EvReaderNewItem, Box::new(false), READER_EVENT_DURATION);
     }
 }
 

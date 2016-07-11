@@ -7,3 +7,5 @@ authors = ["Mark Wallace <lotabout@gmail.com>"]
 libc = "*"
 ncurses = "*"
 getopts = "0.2"
+num_cpus = "0.2"
+crossbeam = "0.2"

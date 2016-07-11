@@ -2,7 +2,7 @@
 // Modeled after fzf
 
 use ncurses::*;
-use libc::{STDIN_FILENO, STDERR_FILENO, FILE, fdopen};
+use libc::{STDIN_FILENO, STDERR_FILENO, fdopen};
 
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
@@ -14,7 +14,7 @@ pub static COLOR_INFO:          i16 = 6;
 pub static COLOR_CURSOR:        i16 = 7;
 pub static COLOR_SELECTED:      i16 = 8;
 pub static COLOR_HEADER:        i16 = 9;
-pub static COLOR_USER:          i16 = 10;
+//pub static COLOR_USER:          i16 = 10;
 
 pub struct Curses {
     current_fg: i16,
@@ -44,7 +44,6 @@ impl Curses {
         set_term(self.screen);
 
         raw();
-        keypad(stdscr, true);
         noecho();
 
         if let Some(theme) = theme {
@@ -95,11 +94,26 @@ impl Curses {
         }
     }
 
+    pub fn mv(&self, y: i32, x: i32) {
+        mv(y, x);
+    }
+
+    pub fn get_yx(&self) -> (i32, i32) {
+        let mut y = 0;
+        let mut x = 0;
+        getyx(stdscr, &mut y, &mut x);
+        (y, x)
+    }
+
     pub fn get_maxyx(&self) -> (i32, i32) {
         let mut max_y = 0;
         let mut max_x = 0;
         getmaxyx(stdscr, &mut max_y, &mut max_x);
         (max_y, max_x)
+    }
+
+    pub fn clrtoeol(&self) {
+        clrtoeol();
     }
 
     pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {
@@ -228,18 +242,19 @@ const DARK256: ColorTheme = ColorTheme {
     header:        109,
 };
 
-const LIGHT256: ColorTheme = ColorTheme {
-    use_default:   true,
-    fg:            15,
-    bg:            0,
-    dark_bg:       251,
-    prompt:        25,
-    matched:       66,
-    current:       237,
-    current_match: 23,
-    spinner:       65,
-    info:          101,
-    cursor:        161,
-    selected:      168,
-    header:        31,
-};
+// Not used for now, will later.
+//const LIGHT256: ColorTheme = ColorTheme {
+    //use_default:   true,
+    //fg:            15,
+    //bg:            0,
+    //dark_bg:       251,
+    //prompt:        25,
+    //matched:       66,
+    //current:       237,
+    //current_match: 23,
+    //spinner:       65,
+    //info:          101,
+    //cursor:        161,
+    //selected:      168,
+    //header:        31,
+//};

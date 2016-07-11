@@ -40,13 +40,12 @@ pub struct Model {
     eb: Arc<EventBox<Event>>,
     pub query: Query,
 
-    num_matched: u64,
-    num_total: u64,
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
     pub matched_items: RefCell<OrderedVec<MatchedItem>>,
+    num_total: usize,
+    percentage: u64,
 
-    processed_percentage: u64,
     pub multi_selection: bool,
     pub prompt: String,
     pub reading: bool,
@@ -74,12 +73,11 @@ impl Model {
         Model {
             eb: eb,
             query: Query::new(),
-            num_matched: 0,
-            num_total: 0,
             items: Arc::new(RwLock::new(Vec::new())),
             selected_indics: HashSet::new(),
             matched_items: RefCell::new(OrderedVec::new()),
-            processed_percentage: 100,
+            num_total: 0,
+            percentage: 0,
             multi_selection: false,
             prompt: "> ".to_string(),
             reading: false,
@@ -108,32 +106,38 @@ impl Model {
         }
     }
 
-    pub fn update_process_info(&mut self, matched: u64, total: u64, processed: u64) {
-        self.num_matched = matched;
-        self.num_total = total;
-        self.processed_percentage = (processed+1)*100/(total+1);
+    pub fn update_num_total(&mut self, num_new_items: usize) {
+        self.num_total = num_new_items + self.items.read().unwrap().len();
     }
 
-    pub fn push_item(&mut self, item: MatchedItem) {
-        self.matched_items.borrow_mut().push(item);
+    pub fn update_percentage(&mut self, percentage: u64) {
+        self.percentage = percentage;
     }
 
-    pub fn clear_items(&mut self) {
-        self.matched_items.borrow_mut().clear();
-        self.item_cursor = 0;
-        self.line_cursor = 0;
+    pub fn update_matched_items(&mut self, items: OrderedVec<MatchedItem>) {
+        let mut matched_items = self.matched_items.borrow_mut();
+        *matched_items = items;
+
+        // update cursor
+        let item_len = matched_items.len();
+        self.item_cursor = min(self.item_cursor, if item_len > 0 {item_len-1} else {0});
+        self.line_cursor = min(self.line_cursor, self.item_cursor);
     }
 
     pub fn print_query(&self) {
         // > query
-        mv(self.max_y-1, 0);
+        self.curses.mv(self.max_y-1, 0);
+        self.curses.clrtoeol();
         self.curses.cprint(&self.prompt, COLOR_PROMPT, false);
         self.curses.cprint(&self.query.get_query(), COLOR_NORMAL, true);
-        mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
+        self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
     }
 
     pub fn print_info(&self) {
-        mv(self.max_y-2, 0);
+        let (orig_y, orig_x) = self.curses.get_yx();
+
+        self.curses.mv(self.max_y-2, 0);
+        self.curses.clrtoeol();
 
         if self.reading {
             let time = self.timer.elapsed();
@@ -144,24 +148,31 @@ impl Model {
             self.print_char(' ', COLOR_NORMAL, false);
         }
 
-        self.curses.cprint(format!(" {}/{}", self.num_matched, self.num_total).as_ref(), COLOR_INFO, false);
+        let num_matched = self.matched_items.borrow().len();
+
+        self.curses.cprint(format!(" {}/{}", num_matched, self.num_total).as_ref(), COLOR_INFO, false);
 
         if self.multi_selection && self.selected_indics.len() > 0 {
             self.curses.cprint(format!(" [{}]", self.selected_indics.len()).as_ref(), COLOR_INFO, true);
         }
 
-        if !self.reading && self.processed_percentage < 100 {
-            self.curses.cprint(format!(" ({}%)", self.processed_percentage).as_ref(), COLOR_INFO, false);
+        if self.percentage < 100 {
+            self.curses.cprint(format!(" ({}%)", self.percentage).as_ref(), COLOR_INFO, false);
         }
+
+        self.curses.mv(orig_y, orig_x);
     }
 
     pub fn print_items(&self) {
+        let (orig_y, orig_x) = self.curses.get_yx();
+
         let mut matched_items = self.matched_items.borrow_mut();
         let item_start_pos = self.item_cursor - self.line_cursor;
 
         for i in 0..self.height {
             if let Some(matched) = matched_items.get(item_start_pos + i) {
-                mv((self.height - i - 1) as i32, 0);
+                self.curses.mv((self.height - i - 1) as i32, 0);
+                self.curses.clrtoeol();
 
                 let is_current_line = i == self.line_cursor;
                 let label = if is_current_line {">"} else {" "};
@@ -171,6 +182,8 @@ impl Model {
                 break;
             }
         }
+
+        self.curses.mv(orig_y, orig_x);
     }
 
     fn print_item(&self, matched: &MatchedItem, is_current: bool) {
@@ -239,7 +252,7 @@ impl Model {
             let mut x = 0;
             getyx(stdscr, &mut y, &mut x);
             let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
-            for i in 0..rest {
+            for _ in 0..rest {
                 self.curses.caddch(' ', color, is_bold);
             }
         }
@@ -367,7 +380,7 @@ impl Model {
     pub fn act_select_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let matched_items = self.matched_items.borrow_mut();
         for i in 0..matched_items.len() {
             self.selected_indics.insert(i);
         }
@@ -376,7 +389,7 @@ impl Model {
     pub fn act_toggle_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let matched_items = self.matched_items.borrow_mut();
         let selected = mem::replace(&mut self.selected_indics, HashSet::new());
         for i in 0..matched_items.len() {
             if !selected.contains(&i) {
@@ -488,7 +501,7 @@ fn reshape_string(text: &Vec<char>,
     }
 
     let mut ret = Vec::new();
-    let mut ret_pos = 0;
+    let mut ret_pos;
 
     // trim right, so that 'String' -> 'Str..'
     let right_pos = 1 + max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));
