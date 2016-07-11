@@ -17,6 +17,7 @@ use orderedvec::OrderedVec;
 use std::cmp::min;
 use std::thread;
 use std::time::Instant;
+use getopts;
 
 const MATCHER_CHUNK_SIZE: usize = 100;
 const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
@@ -29,6 +30,7 @@ pub struct Matcher {
     query: String,
     cache: HashMap<String, MatcherCache>,
     partitions: usize,
+    rank_criterion: Arc<Vec<RankCriteria>>,
 }
 
 impl<'a> Matcher {
@@ -47,6 +49,22 @@ impl<'a> Matcher {
             query: String::new(),
             cache: cache,
             partitions: num_cpus::get(),
+            rank_criterion: Arc::new(vec![RankCriteria::Score,
+                                          RankCriteria::Index,
+                                          RankCriteria::Begin,
+                                          RankCriteria::End]),
+        }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if let Some(tie_breaker) = options.opt_str("t") {
+            let mut vec = Vec::new();
+            for criteria in tie_breaker.split(',') {
+                if let Some(c) = parse_criteria(criteria) {
+                    vec.push(c);
+                }
+            }
+            self.rank_criterion = Arc::new(vec);
         }
     }
 
@@ -58,12 +76,14 @@ impl<'a> Matcher {
         let mut guards = vec![];
 
         let start_pos = Arc::new(Mutex::new(cache.item_pos));
+
         for _ in 0..self.partitions {
             let items = self.items.clone();
             let start_pos = start_pos.clone();
             let query = query.clone();
             let tx = tx.clone();
             let eb_req = self.eb_req.clone();
+            let criterion = self.rank_criterion.clone();
 
             let guard = thread::spawn(move || {
                 let items = items.read().unwrap();
@@ -82,7 +102,7 @@ impl<'a> Matcher {
 
                     for i in start..end {
                         let ref item = items[i];
-                        if let Some(matched) = match_item(i, &item.text, &query) {
+                        if let Some(matched) = match_item(i, &item.text, &query, &criterion) {
                             let _ = tx.send(Some(matched));
                         }
                     }
@@ -94,7 +114,7 @@ impl<'a> Matcher {
                 let _ = tx.send(None); // to notify match process end
             });
             guards.push(guard);
-        }
+        };
 
         let items_len = self.items.read().unwrap().len();
         let timer = Instant::now();
@@ -172,7 +192,7 @@ impl<'a> Matcher {
     }
 }
 
-fn match_item(index: usize, item: &str, query: &str) -> Option<MatchedItem> {
+fn match_item(index: usize, item: &str, query: &str, criterion: &[RankCriteria]) -> Option<MatchedItem> {
     let matched_result = score::fuzzy_match(item, query);
     if matched_result == None {
         return None;
@@ -180,9 +200,23 @@ fn match_item(index: usize, item: &str, query: &str) -> Option<MatchedItem> {
 
     let (score, matched_range) = matched_result.unwrap();
 
+    let mut rank = [0; 4];
+    for (idx, criteria) in criterion.iter().enumerate() {
+        rank[idx] = match *criteria {
+            RankCriteria::Score    => -score,
+            RankCriteria::Index    => index as i64,
+            RankCriteria::Begin    => *matched_range.get(0).unwrap_or(&0) as i64,
+            RankCriteria::End      => *matched_range.last().unwrap_or(&0) as i64,
+            RankCriteria::NegScore => score,
+            RankCriteria::NegIndex => -(index as i64),
+            RankCriteria::NegBegin => -(*matched_range.get(0).unwrap_or(&0) as i64),
+            RankCriteria::NegEnd   => -(*matched_range.last().unwrap_or(&0) as i64),
+        }
+    }
+
     let mut item = MatchedItem::new(index);
     item.set_matched_range(MatchedRange::Chars(matched_range));
-    item.set_score(score);
+    item.set_rank(rank);
     Some(item)
 }
 
@@ -198,5 +232,30 @@ impl MatcherCache {
             item_pos: 0,
             matched_items: OrderedVec::new(),
         }
+    }
+}
+
+pub enum RankCriteria {
+    Score,
+    Index,
+    Begin,
+    End,
+    NegScore,
+    NegIndex,
+    NegBegin,
+    NegEnd,
+}
+
+pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
+    match text.to_lowercase().as_ref() {
+        "score"  => Some(RankCriteria::Score),
+        "index"  => Some(RankCriteria::Index),
+        "begin"  => Some(RankCriteria::Begin),
+        "end"    => Some(RankCriteria::End),
+        "-score" => Some(RankCriteria::NegScore),
+        "-index" => Some(RankCriteria::NegIndex),
+        "-begin" => Some(RankCriteria::NegBegin),
+        "-end"   => Some(RankCriteria::NegEnd),
+        _ => None,
     }
 }

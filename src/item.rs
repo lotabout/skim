@@ -15,7 +15,7 @@ impl Item {
     }
 }
 
-pub type Score = i32;
+pub type Rank = [i64; 4]; // score, index, start, end
 
 
 #[derive(PartialEq, Eq, Clone)]
@@ -27,7 +27,7 @@ pub enum MatchedRange {
 #[derive(Eq, Clone)]
 pub struct MatchedItem {
     pub index: usize,                       // index of current item in items
-    pub score: Score,
+    pub rank: Rank,
     pub matched_range: Option<MatchedRange>,  // range of chars that metched the pattern
 }
 
@@ -35,7 +35,7 @@ impl MatchedItem {
     pub fn new(index: usize) -> Self {
         MatchedItem {
             index: index,
-            score: -200000,
+            rank: [0, 0, 0, 0],
             matched_range: None,
         }
     }
@@ -44,14 +44,14 @@ impl MatchedItem {
         self.matched_range = Some(range);
     }
 
-    pub fn set_score(&mut self, score: Score) {
-        self.score = score;
+    pub fn set_rank(&mut self, rank: Rank) {
+        self.rank = rank;
     }
 }
 
 impl Ord for MatchedItem {
     fn cmp(&self, other: &MatchedItem) -> Ordering {
-        self.score.cmp(&other.score)
+        self.rank.cmp(&other.rank)
     }
 }
 
@@ -64,6 +64,6 @@ impl PartialOrd for MatchedItem {
 
 impl PartialEq for MatchedItem {
     fn eq(&self, other: &MatchedItem) -> bool {
-        self.score == other.score
+        self.rank == other.rank
     }
 }
