@@ -23,7 +23,7 @@ impl<T> OrderedVec<T> where T: Ord {
     fn ordered_insert(&mut self, item: T) {
         self.ordered.push(item);
         let mut pos = self.ordered.len() - 1;
-        while pos > 0 && self.ordered[pos] > self.ordered[pos-1] {
+        while pos > 0 && self.ordered[pos] < self.ordered[pos-1] {
             self.ordered.swap(pos, pos-1);
             pos -= 1;
         }
@@ -35,7 +35,7 @@ impl<T> OrderedVec<T> where T: Ord {
             return;
         }
 
-        let smaller = if item < *self.ordered.last().unwrap() {
+        let smaller = if item > *self.ordered.last().unwrap() {
             item
         } else {
             self.ordered_insert(item);
@@ -56,7 +56,7 @@ impl<T> OrderedVec<T> where T: Ord {
         }
 
         if !self.sorted {
-            self.unordered.sort_by(|a, b| b.cmp(a));
+            self.unordered.sort_by(|a, b| a.cmp(b));
             self.sorted = true;
         }
 

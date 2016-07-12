@@ -51,6 +51,7 @@ fn real_main() -> i32 {
     opts.optflag("m", "multi", "Enable Multiple Selection");
     opts.optopt("p", "prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
+    opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -100,6 +101,7 @@ fn real_main() -> i32 {
     let items = model.items.clone();
     let mut matcher = Matcher::new(items, item_buffer.clone(), eb.clone());
     let eb_matcher = matcher.eb_req.clone();
+    matcher.parse_options(&options);
 
     // reader
     let default_command = match env::var("FZF_DEFAULT_COMMAND") {
@@ -107,7 +109,6 @@ fn real_main() -> i32 {
         Err(_) => "find .".to_string(),
     };
     let mut reader = Reader::new(default_command, eb.clone(), item_buffer.clone());
-
 
     // input
     let mut input = Input::new(eb.clone());

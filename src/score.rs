@@ -5,17 +5,17 @@
 
 use std::cmp::max;
 use std::cell::RefCell;
-const BONUS_UPPER_MATCH: i32 = 10;
-const BONUS_ADJACENCY: i32 = 10;
-const BONUS_SEPARATOR: i32 = 20;
-const BONUS_CAMEL: i32 = 20;
-const PENALTY_CASE_UNMATCHED: i32 = -1;
-const PENALTY_LEADING: i32 = -6; // penalty applied for every letter before the first match
-const PENALTY_MAX_LEADING: i32 = -18; // maxing penalty for leading letters
-const PENALTY_UNMATCHED: i32 = -2;
+const BONUS_UPPER_MATCH: i64 = 10;
+const BONUS_ADJACENCY: i64 = 10;
+const BONUS_SEPARATOR: i64 = 20;
+const BONUS_CAMEL: i64 = 20;
+const PENALTY_CASE_UNMATCHED: i64 = -1;
+const PENALTY_LEADING: i64 = -6; // penalty applied for every letter before the first match
+const PENALTY_MAX_LEADING: i64 = -18; // maxing penalty for leading letters
+const PENALTY_UNMATCHED: i64 = -2;
 
 // judge how many scores the current index should get
-fn fuzzy_score(string: &Vec<char>, index: usize, pattern: &Vec<char>, pattern_idx: usize) -> i32 {
+fn fuzzy_score(string: &Vec<char>, index: usize, pattern: &Vec<char>, pattern_idx: usize) -> i64 {
     let mut score = 0;
 
     let pattern_char = pattern[pattern_idx];
@@ -44,13 +44,13 @@ fn fuzzy_score(string: &Vec<char>, index: usize, pattern: &Vec<char>, pattern_id
     }
 
     if pattern_idx == 0 {
-        score += max((index as i32) * PENALTY_LEADING, PENALTY_MAX_LEADING);
+        score += max((index as i64) * PENALTY_LEADING, PENALTY_MAX_LEADING);
     }
 
     score
 }
 
-pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i32, Vec<usize>)>{
+pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i64, Vec<usize>)>{
     if pattern.len() == 0 {
         return Some((0, Vec::new()));
     }
@@ -70,7 +70,7 @@ pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i32, Vec<usize>)>{
         {
             let mut vec = vec_cell.borrow_mut();
             for (idx, ch) in choice_lower.chars().enumerate() {
-                if ch == pattern_char && (idx as i32) > prev_matched_idx {
+                if ch == pattern_char && (idx as i64) > prev_matched_idx {
                     vec.push((idx, fuzzy_score(&choice_chars, idx, &pattern_chars, pattern_idx), 0)); // (char_idx, score, vec_idx back_ref)
                 }
             }
@@ -79,7 +79,7 @@ pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i32, Vec<usize>)>{
                 // not matched
                 return None;
             }
-            prev_matched_idx = vec[0].0 as i32;
+            prev_matched_idx = vec[0].0 as i64;
         }
         scores.push(vec_cell);
     }
@@ -95,7 +95,7 @@ pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i32, Vec<usize>)>{
                 .take_while(|&&(idx, _, _)| idx < next_char_idx)
                 .map(|&(char_idx, score, _)| {
                     let adjacent_num = next_char_idx - char_idx - 1;
-                    score + next_score + if adjacent_num == 0 {BONUS_ADJACENCY} else {PENALTY_UNMATCHED * adjacent_num as i32}
+                    score + next_score + if adjacent_num == 0 {BONUS_ADJACENCY} else {PENALTY_UNMATCHED * adjacent_num as i64}
                 })
                 .enumerate()
                 .max_by_key(|&(_, x)| x)
@@ -106,7 +106,7 @@ pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i32, Vec<usize>)>{
     }
 
     let (mut next_col, &(_, score, _)) = scores[pattern.len()-1].borrow().iter().enumerate().max_by_key(|&(_, &x)| x.1).unwrap();
-    let mut pattern_idx = pattern.len() as i32 - 1;
+    let mut pattern_idx = pattern.len() as i64 - 1;
     while pattern_idx >= 0 {
         let (idx, _, next) = scores[pattern_idx as usize].borrow()[next_col];
         next_col = next;
