@@ -117,10 +117,11 @@ impl<'a> Matcher {
         };
 
         let items_len = self.items.read().unwrap().len();
+        let mut matched_items = cache.matched_items.write().unwrap();
         let timer = Instant::now();
         while let Ok(result) = rx.recv() {
             if let Some(matched) = result {
-                cache.matched_items.push(matched);
+                matched_items.push(matched);
             }
 
             let start_idx = {*start_pos.lock().unwrap()};
@@ -149,7 +150,7 @@ impl<'a> Matcher {
         // consume remaining results.
         while let Ok(result) = rx.try_recv() {
             if let Some(matched) = result {
-                cache.matched_items.push(matched);
+                matched_items.push(matched);
             }
         }
         cache.item_pos = *start_pos.lock().unwrap();
@@ -184,8 +185,8 @@ impl<'a> Matcher {
 
             self.process();
             if !self.eb_req.peek(Event::EvMatcherResetQuery) {
-                let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
-                self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
+                let matched_items = self.cache.get_mut(&self.query.get()).unwrap().matched_items.clone();
+                self.eb_notify.set(Event::EvMatcherEnd, Box::new(matched_items));
             }
         }
     }
@@ -221,7 +222,7 @@ fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteri
 
 
 struct MatcherCache {
-    pub matched_items: OrderedVec<MatchedItem>,
+    pub matched_items: Arc<RwLock<OrderedVec<MatchedItem>>>,
     pub item_pos: usize,
 }
 
@@ -229,7 +230,7 @@ impl MatcherCache {
     pub fn new() -> Self {
         MatcherCache {
             item_pos: 0,
-            matched_items: OrderedVec::new(),
+            matched_items: Arc::new(RwLock::new(OrderedVec::new())),
         }
     }
 }
