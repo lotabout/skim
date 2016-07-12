@@ -27,7 +27,7 @@ pub struct Matcher {
     eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
     items: Arc<RwLock<Vec<Item>>>,
     new_items: Arc<RwLock<Vec<Item>>>,
-    query: String,
+    query: Query,
     cache: HashMap<String, MatcherCache>,
     partitions: usize,
     rank_criterion: Arc<Vec<RankCriteria>>,
@@ -46,7 +46,7 @@ impl<'a> Matcher {
             eb_notify: eb_notify,
             items: items,
             new_items: new_items,
-            query: String::new(),
+            query: Query::new(""),
             cache: cache,
             partitions: num_cpus::get(),
             rank_criterion: Arc::new(vec![RankCriteria::Score,
@@ -69,7 +69,7 @@ impl<'a> Matcher {
     }
 
     pub fn process(&mut self) {
-        let ref mut cache = self.cache.get_mut(&self.query).unwrap();
+        let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
 
         let query = Arc::new(self.query.clone());
         let (tx, rx) = channel();
@@ -102,7 +102,7 @@ impl<'a> Matcher {
 
                     for i in start..end {
                         let ref item = items[i];
-                        if let Some(matched) = match_item(i, &item.text, &query, &criterion) {
+                        if let Some(matched) = match_item(i, &item, &query, &criterion) {
                             let _ = tx.send(Some(matched));
                         }
                     }
@@ -157,8 +157,7 @@ impl<'a> Matcher {
     }
 
     fn reset_query(&mut self, query: &str) {
-        self.query.clear();
-        self.query.push_str(query);
+        self.query = Query::new(query);
         self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
     }
 
@@ -185,15 +184,15 @@ impl<'a> Matcher {
 
             self.process();
             if !self.eb_req.peek(Event::EvMatcherResetQuery) {
-                let ref mut cache = self.cache.get_mut(&self.query).unwrap();
+                let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
                 self.eb_notify.set(Event::EvMatcherEnd, Box::new(cache.matched_items.clone()));
             }
         }
     }
 }
 
-fn match_item(index: usize, item: &str, query: &str, criterion: &[RankCriteria]) -> Option<MatchedItem> {
-    let matched_result = score::fuzzy_match(item, query);
+fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
+    let matched_result = score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars());
     if matched_result == None {
         return None;
     }
@@ -257,5 +256,35 @@ pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
         "-begin" => Some(RankCriteria::NegBegin),
         "-end"   => Some(RankCriteria::NegEnd),
         _ => None,
+    }
+}
+
+// cache for lowercases and others.
+#[derive(Clone)]
+struct Query {
+    query: String,
+    query_chars: Vec<char>,
+    query_lower_chars: Vec<char>,
+}
+
+impl Query {
+    pub fn new(query: &str) -> Self {
+        Query {
+            query: query.to_string(),
+            query_chars: query.chars().collect(),
+            query_lower_chars: query.to_lowercase().chars().collect(),
+        }
+    }
+
+    pub fn get(&self) -> String {
+        self.query.clone()
+    }
+
+    pub fn get_chars(&self) -> &[char] {
+        &self.query_chars
+    }
+
+    pub fn get_lower_chars(&self) -> &[char] {
+        &self.query_lower_chars
     }
 }

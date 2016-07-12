@@ -15,7 +15,7 @@ const PENALTY_MAX_LEADING: i64 = -18; // maxing penalty for leading letters
 const PENALTY_UNMATCHED: i64 = -2;
 
 // judge how many scores the current index should get
-fn fuzzy_score(string: &Vec<char>, index: usize, pattern: &Vec<char>, pattern_idx: usize) -> i64 {
+fn fuzzy_score(string: &[char], index: usize, pattern: &[char], pattern_idx: usize) -> i64 {
     let mut score = 0;
 
     let pattern_char = pattern[pattern_idx];
@@ -50,28 +50,23 @@ fn fuzzy_score(string: &Vec<char>, index: usize, pattern: &Vec<char>, pattern_id
     score
 }
 
-pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i64, Vec<usize>)>{
+pub fn fuzzy_match(choice: &[char], pattern: &[char], pattern_lower: &[char]) -> Option<(i64, Vec<usize>)>{
     if pattern.len() == 0 {
         return Some((0, Vec::new()));
     }
-
-    let choice_chars: Vec<char> = choice.chars().collect();
-    let choice_lower = choice.to_lowercase();
-    let pattern_chars: Vec<char> = pattern.chars().collect();
-    let pattern_chars_lower: Vec<char> = pattern.to_lowercase().chars().collect();
 
     let mut scores = vec![];
     let mut picked = vec![];
 
     let mut prev_matched_idx = -1; // to ensure that the pushed char are able to match the pattern
-    for pattern_idx in 0..pattern_chars_lower.len() {
-        let pattern_char = pattern_chars_lower[pattern_idx];
+    for pattern_idx in 0..pattern_lower.len() {
+        let pattern_char = pattern_lower[pattern_idx];
         let vec_cell = RefCell::new(vec![]);
         {
             let mut vec = vec_cell.borrow_mut();
-            for (idx, ch) in choice_lower.chars().enumerate() {
+            for (idx, &ch) in choice.iter().enumerate() {
                 if ch == pattern_char && (idx as i64) > prev_matched_idx {
-                    vec.push((idx, fuzzy_score(&choice_chars, idx, &pattern_chars, pattern_idx), 0)); // (char_idx, score, vec_idx back_ref)
+                    vec.push((idx, fuzzy_score(choice, idx, pattern, pattern_idx), 0)); // (char_idx, score, vec_idx back_ref)
                 }
             }
 
