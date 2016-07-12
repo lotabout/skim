@@ -6,7 +6,6 @@ use std::sync::{Arc, RwLock};
 use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
 use std::cmp::{min, max};
-use std::cell::RefCell;
 use std::collections::HashSet;
 use orderedvec::OrderedVec;
 use curses::*;
@@ -42,7 +41,7 @@ pub struct Model {
 
     pub items: Arc<RwLock<Vec<Item>>>, // all items
     selected_indics: HashSet<usize>,
-    pub matched_items: RefCell<OrderedVec<MatchedItem>>,
+    pub matched_items: Arc<RwLock<OrderedVec<MatchedItem>>>,
     num_total: usize,
     percentage: u64,
 
@@ -75,7 +74,7 @@ impl Model {
             query: Query::new(),
             items: Arc::new(RwLock::new(Vec::new())),
             selected_indics: HashSet::new(),
-            matched_items: RefCell::new(OrderedVec::new()),
+            matched_items: Arc::new(RwLock::new(OrderedVec::new())),
             num_total: 0,
             percentage: 0,
             multi_selection: false,
@@ -114,12 +113,11 @@ impl Model {
         self.percentage = percentage;
     }
 
-    pub fn update_matched_items(&mut self, items: OrderedVec<MatchedItem>) {
-        let mut matched_items = self.matched_items.borrow_mut();
-        *matched_items = items;
+    pub fn update_matched_items(&mut self, items: Arc<RwLock<OrderedVec<MatchedItem>>>) {
+        self.matched_items = items;
 
         // update cursor
-        let item_len = matched_items.len();
+        let item_len = self.matched_items.read().unwrap().len();
         self.item_cursor = min(self.item_cursor, if item_len > 0 {item_len-1} else {0});
         self.line_cursor = min(self.line_cursor, self.item_cursor);
     }
@@ -148,7 +146,7 @@ impl Model {
             self.print_char(' ', COLOR_NORMAL, false);
         }
 
-        let num_matched = self.matched_items.borrow().len();
+        let num_matched = self.matched_items.read().unwrap().len();
 
         self.curses.cprint(format!(" {}/{}", num_matched, self.num_total).as_ref(), COLOR_INFO, false);
 
@@ -166,20 +164,19 @@ impl Model {
     pub fn print_items(&self) {
         let (orig_y, orig_x) = self.curses.get_yx();
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let mut matched_items = self.matched_items.write().unwrap();
         let item_start_pos = self.item_cursor - self.line_cursor;
 
         for i in 0..self.height {
-            if let Some(matched) = matched_items.get(item_start_pos + i) {
-                self.curses.mv((self.height - i - 1) as i32, 0);
-                self.curses.clrtoeol();
+            self.curses.mv((self.height - i - 1) as i32, 0);
+            self.curses.clrtoeol();
 
+            if let Some(matched) = matched_items.get(item_start_pos + i) {
                 let is_current_line = i == self.line_cursor;
                 let label = if is_current_line {">"} else {" "};
                 self.curses.cprint(label, COLOR_CURSOR, true);
                 self.print_item(matched, is_current_line);
             } else {
-                break;
             }
         }
 
@@ -291,7 +288,7 @@ impl Model {
     pub fn act_accept(&mut self, accept_key: Option<String>) -> usize {
         self.accept_key = accept_key;
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let mut matched_items = self.matched_items.write().unwrap();
         if let Some(matched) = matched_items.get(self.item_cursor) {
             let item_index = matched.index;
             self.selected_indics.insert(item_index);
@@ -379,8 +376,8 @@ impl Model {
     pub fn act_select_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let matched_items = self.matched_items.borrow_mut();
-        for i in 0..matched_items.len() {
+        let num_matched = self.matched_items.read().unwrap().len();
+        for i in 0..num_matched {
             self.selected_indics.insert(i);
         }
     }
@@ -388,9 +385,9 @@ impl Model {
     pub fn act_toggle_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let matched_items = self.matched_items.borrow_mut();
+        let num_matched = self.matched_items.read().unwrap().len();
         let selected = mem::replace(&mut self.selected_indics, HashSet::new());
-        for i in 0..matched_items.len() {
+        for i in 0..num_matched {
             if !selected.contains(&i) {
                 self.selected_indics.insert(i);
             }
@@ -400,7 +397,7 @@ impl Model {
     pub fn act_toggle(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut matched_items = self.matched_items.borrow_mut();
+        let mut matched_items = self.matched_items.write().unwrap();
         if let Some(matched) = matched_items.get(self.item_cursor) {
             let item_index = matched.index;
             if self.selected_indics.contains(&item_index) {
@@ -412,7 +409,7 @@ impl Model {
     }
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
-        let total_item = self.matched_items.borrow().len() as i32;
+        let total_item = self.matched_items.read().unwrap().len() as i32;
 
         let y = self.line_cursor as i32 + diff;
         self.line_cursor = if diff > 0 {

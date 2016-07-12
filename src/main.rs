@@ -151,7 +151,7 @@ fn real_main() -> i32 {
 
                 Event::EvMatcherEnd => {
                     // do nothing
-                    let result: OrderedVec<MatchedItem> = *val.downcast().unwrap();
+                    let result: Arc<RwLock<OrderedVec<MatchedItem>>> = *val.downcast().unwrap();
                     model.update_matched_items(result);
                     model.display();
                 }
