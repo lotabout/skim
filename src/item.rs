@@ -5,13 +5,20 @@ use std::cmp::Ordering;
 
 pub struct Item {
     pub text: String,
+    text_lower_chars: Vec<char>, // lower case version of text.
 }
 
 impl Item {
     pub fn new(text: String) -> Self {
+        let lower_chars = text.to_lowercase().chars().collect();
         Item {
             text: text,
+            text_lower_chars: lower_chars,
         }
+    }
+
+    pub fn get_lower_chars(&self) -> &[char] {
+        &self.text_lower_chars
     }
 }
 
