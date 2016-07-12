@@ -263,7 +263,6 @@ impl Model {
     }
 
     pub fn display(&self) {
-        erase();
         self.print_items();
         self.print_info();
         self.print_query();

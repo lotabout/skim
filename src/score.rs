@@ -50,7 +50,9 @@ fn fuzzy_score(string: &[char], index: usize, pattern: &[char], pattern_idx: usi
     score
 }
 
-pub fn fuzzy_match(choice: &[char], pattern: &[char], pattern_lower: &[char]) -> Option<(i64, Vec<usize>)>{
+pub fn fuzzy_match(choice: &[char],
+                   pattern: &[char],
+                   pattern_lower: &[char]) -> Option<(i64, Vec<usize>)>{
     if pattern.len() == 0 {
         return Some((0, Vec::new()));
     }

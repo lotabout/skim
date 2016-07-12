@@ -168,7 +168,10 @@ fn real_main() -> i32 {
                     // ignore for now
                 }
 
-                Event::EvResize => {model.resize(); model.display();}
+                Event::EvResize => {
+                    model.resize();
+                    model.display();
+                }
 
                 Event::EvActAddChar => {
                     let ch: char = *val.downcast().unwrap();
@@ -177,7 +180,11 @@ fn real_main() -> i32 {
                 }
 
                 // Actions
-                Event::EvActAbort => {exit_code = 130; break 'outer; }
+                Event::EvActAbort => {
+                    exit_code = 130;
+                    break 'outer;
+                }
+
                 Event::EvActAccept => {
                     // break out of the loop and output the selected item.
                     //if model.get_num_selected() <= 0 { model.act_toggle(Some(true)); }
@@ -186,60 +193,172 @@ fn real_main() -> i32 {
                     exit_code = if num_selected > 0 {0} else {1};
                     break 'outer;
                 }
-                Event::EvActBackwardChar       => {model.act_backward_char();       model.print_query();}
-                Event::EvActBackwardDeleteChar => {model.act_backward_delete_char();model.print_query();}
-                Event::EvActBackwardKillWord   => {model.act_backward_kill_word();  model.print_query();}
-                Event::EvActBackwardWord       => {model.act_backward_word();       model.print_query();}
-                Event::EvActBeginningOfLine    => {model.act_beginning_of_line();   model.print_query();}
-                Event::EvActCancel             => {}
-                Event::EvActClearScreen        => {model.refresh();}
-                Event::EvActDeleteChar         => {model.act_delete_char();         model.print_query();}
-                Event::EvActDeleteCharEOF      => {model.act_delete_char();         model.print_query();}
-                Event::EvActDeselectAll        => {model.act_deselect_all();        model.print_info(); model.print_items();}
-                Event::EvActDown               => {model.act_move_line_cursor(-1);  model.print_items();}
-                Event::EvActEndOfLine          => {model.act_end_of_line();         model.print_query();}
-                Event::EvActForwardChar        => {model.act_forward_char();        model.print_query();}
-                Event::EvActForwardWord        => {model.act_forward_word();        model.print_query();}
-                Event::EvActIgnore             => {}
-                Event::EvActKillLine           => {model.act_kill_line();           model.print_query();}
-                Event::EvActKillWord           => {model.act_kill_word();           model.print_query();}
-                Event::EvActNextHistory        => {}
-                Event::EvActPageDown           => {model.act_move_page(-1);         model.print_items();}
-                Event::EvActPageUp             => {model.act_move_page(1);          model.print_items();}
-                Event::EvActPreviousHistory    => {}
-                Event::EvActScrollLeft         => {model.act_vertical_scroll(-1);   model.print_items();}
-                Event::EvActScrollRight        => {model.act_vertical_scroll(1);    model.print_items();}
-                Event::EvActSelectAll          => {model.act_select_all();          model.print_info(); model.print_items();}
-                Event::EvActToggle             => {model.act_toggle();              model.print_info(); model.print_items();}
-                Event::EvActToggleAll          => {model.act_toggle_all();          model.print_info(); model.print_items();}
-                Event::EvActToggleDown         => {
+
+                Event::EvActBackwardChar => {
+                    model.act_backward_char();
+                    model.print_query();
+                }
+
+                Event::EvActBackwardDeleteChar => {
+                    model.act_backward_delete_char();
+                    model.print_query();
+                }
+
+                Event::EvActBackwardKillWord => {
+                    model.act_backward_kill_word();
+                    model.print_query();
+                }
+
+                Event::EvActBackwardWord => {
+                    model.act_backward_word();
+                    model.print_query();
+                }
+
+                Event::EvActBeginningOfLine => {
+                    model.act_beginning_of_line();
+                    model.print_query();
+                }
+
+                Event::EvActCancel => {}
+
+                Event::EvActClearScreen => {
+                    model.refresh();
+                }
+
+                Event::EvActDeleteChar => {
+                    model.act_delete_char();
+                    model.print_query();
+                }
+
+                Event::EvActDeleteCharEOF => {
+                    model.act_delete_char();
+                    model.print_query();
+                }
+
+                Event::EvActDeselectAll => {
+                    model.act_deselect_all();
+                    model.print_info();
+                    model.print_items();
+                }
+
+                Event::EvActDown => {
+                    model.act_move_line_cursor(-1);
+                    model.print_items();
+                }
+
+                Event::EvActEndOfLine => {
+                    model.act_end_of_line();
+                    model.print_query();
+                }
+
+                Event::EvActForwardChar => {
+                    model.act_forward_char();
+                    model.print_query();
+                }
+
+                Event::EvActForwardWord => {
+                    model.act_forward_word();
+                    model.print_query();
+                }
+
+                Event::EvActIgnore => {}
+
+                Event::EvActKillLine => {
+                    model.act_kill_line();
+                    model.print_query();
+                }
+
+                Event::EvActKillWord => {
+                    model.act_kill_word();
+                    model.print_query();
+                }
+
+                Event::EvActNextHistory => {}
+
+                Event::EvActPageDown => {
+                    model.act_move_page(-1);
+                    model.print_items();
+                }
+
+                Event::EvActPageUp => {
+                    model.act_move_page(1);
+                    model.print_items();
+                }
+
+                Event::EvActPreviousHistory => {}
+
+                Event::EvActScrollLeft => {
+                    model.act_vertical_scroll(-1);
+                    model.print_items();
+                }
+
+                Event::EvActScrollRight => {
+                    model.act_vertical_scroll(1);
+                    model.print_items();
+                }
+
+                Event::EvActSelectAll => {
+                    model.act_select_all();
+                    model.print_info();
+                    model.print_items();
+                }
+
+                Event::EvActToggle => {
+                    model.act_toggle();
+                    model.print_info();
+                    model.print_items();
+                }
+
+                Event::EvActToggleAll => {
+                    model.act_toggle_all();
+                    model.print_info();
+                    model.print_items();
+                }
+
+                Event::EvActToggleDown => {
                     model.act_toggle();
                     model.act_move_line_cursor(-1);
                     model.print_info();
                     model.print_items();
                 }
-                Event::EvActToggleIn           => {}
-                Event::EvActToggleOut          => {}
-                Event::EvActToggleSort         => {}
-                Event::EvActToggleUp           => {
+
+                Event::EvActToggleIn => {}
+
+                Event::EvActToggleOut => {}
+
+                Event::EvActToggleSort => {}
+
+                Event::EvActToggleUp => {
                     model.act_toggle();
                     model.act_move_line_cursor(1);
                     model.print_info();
                     model.print_items();
                 }
-                Event::EvActUnixLineDiscard    => {model.act_line_discard();       model.print_query();}
-                Event::EvActUnixWordRubout     => {model.act_backward_kill_word(); model.print_query();}
-                Event::EvActUp                 => {model.act_move_line_cursor(1);  model.print_items();}
-                Event::EvActYank               => {}
+
+                Event::EvActUnixLineDiscard => {
+                    model.act_line_discard();
+                    model.print_query();
+                }
+
+                Event::EvActUnixWordRubout => {
+                    model.act_backward_kill_word();
+                    model.print_query();
+                }
+
+                Event::EvActUp => {
+                    model.act_move_line_cursor(1);
+                    model.print_items();
+                }
+
+                Event::EvActYank => {}
 
                 _ => {
                     printw(format!("{}\n", e as i32).as_str());
                 }
             }
-
-            model.refresh();
-            thread::sleep(Duration::from_millis(10));
         }
+        model.refresh();
+        thread::sleep(Duration::from_millis(10));
     };
 
     model.close();
