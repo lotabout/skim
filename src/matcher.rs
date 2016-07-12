@@ -201,7 +201,7 @@ fn match_item(index: usize, item: &str, query: &str, criterion: &[RankCriteria])
     let (score, matched_range) = matched_result.unwrap();
 
     let mut rank = [0; 4];
-    for (idx, criteria) in criterion.iter().enumerate() {
+    for (idx, criteria) in criterion.iter().enumerate().take(4) {
         rank[idx] = match *criteria {
             RankCriteria::Score    => -score,
             RankCriteria::Index    => index as i64,
