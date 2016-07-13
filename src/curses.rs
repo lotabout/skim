@@ -171,8 +171,8 @@ impl Curses {
         attron(attr);
     }
 
-    pub fn attr_set(&self, attr: attr_t) {
-        attrset(attr);
+    pub fn attr_off(&self, attr: attr_t) {
+        attroff(attr);
     }
 }
 

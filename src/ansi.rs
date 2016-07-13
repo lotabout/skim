@@ -3,14 +3,29 @@
 use regex::Regex;
 use curses::get_color_pair;
 use ncurses::*;
+use std::sync::Mutex;
 
 pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
     lazy_static! {
         static ref RE: Regex = Regex::new(r"\x1b\[[0-9;]*[mK]").unwrap();
+        static ref LAST_ATTR: Mutex<Option<attr_t>> = Mutex::new(None);
     }
 
     let mut strip_string = String::new();
     let mut colors = Vec::new();
+    let mut last_attr = LAST_ATTR.lock().unwrap();
+
+    // assume parse_ansi is called linewise.
+    // Because ANSI color code can affect text of next lines. We will save the last attribute and
+    // add it to the newest line if no new color is specified.
+    match RE.find(text) {
+        Some((start, _)) if start <= 0 => {}
+        Some(_) | None => {
+            last_attr.map(|attr| {
+                colors.push((0, attr));
+            });
+        }
+    }
 
     let mut last = 0;
     for (start, end) in RE.find_iter(text) {
@@ -21,6 +36,7 @@ pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
         attr.map(|attr| {
             colors.push((strip_string.len(), attr));
         });
+        *last_attr = attr;
     }
 
     strip_string.push_str(&text[last..text.len()]);
