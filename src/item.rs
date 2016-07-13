@@ -2,23 +2,37 @@
 // the internal states, such as selected or not
 
 use std::cmp::Ordering;
+use ncurses::*;
+use ansi::parse_ansi;
 
 pub struct Item {
     pub text: String,
     text_lower_chars: Vec<char>, // lower case version of text.
+    ansi_states: Vec<(usize, attr_t)>,
 }
 
 impl Item {
-    pub fn new(text: String) -> Self {
+    pub fn new(text: String, use_ansi: bool) -> Self {
+        let (text, states) = if use_ansi {
+             parse_ansi(&text)
+        } else {
+            (text, Vec::new())
+        };
+
         let lower_chars = text.to_lowercase().chars().collect();
         Item {
             text: text,
             text_lower_chars: lower_chars,
+            ansi_states: states,
         }
     }
 
     pub fn get_lower_chars(&self) -> &[char] {
         &self.text_lower_chars
+    }
+
+    pub fn get_ansi_states(&self) -> &Vec<(usize, attr_t)> {
+        &self.ansi_states
     }
 }
 

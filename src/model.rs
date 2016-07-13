@@ -208,11 +208,22 @@ impl Model {
                                                      self.hscroll_offset,
                                                      matched_end_pos);
                 let mut matched_indics_iter = matched_indics.iter().peekable();
+                let mut ansi_states = item.get_ansi_states().iter().peekable();
 
                 // skip indics
                 while let Some(&&index) = matched_indics_iter.peek() {
                     if idx > index {
                         let _ = matched_indics_iter.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                // skip ansi states
+                while let Some(&&(index, attr)) = ansi_states.peek() {
+                    if idx > index {
+                        self.curses.attr_on(attr);
+                        let _ = ansi_states.next();
                     } else {
                         break;
                     }
@@ -225,6 +236,14 @@ impl Model {
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
+                            match ansi_states.peek() {
+                                Some(&&(index, attr)) if idx == index => {
+                                    // print ansi color codes.
+                                    self.curses.attr_set(attr);
+                                    let _ = ansi_states.next();
+                                }
+                                Some(_) | None => {}
+                            }
                             self.print_char(ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                         }
                     }

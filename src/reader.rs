@@ -17,12 +17,17 @@ pub struct Reader {
     cmd: String, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
     items: Arc<RwLock<Vec<Item>>>, // all items
+    use_ansi_color: bool,
 }
 
 impl Reader {
 
     pub fn new(cmd: String, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
-        Reader{cmd: cmd, eb: eb, items: items}
+        Reader{cmd: cmd,
+               eb: eb,
+               items: items,
+               use_ansi_color: true,
+        }
     }
 
     // invoke find comand.
@@ -61,7 +66,7 @@ impl Reader {
                         }
                     }
                     let mut items = self.items.write().unwrap();
-                    items.push(Item::new(input));
+                    items.push(Item::new(input, self.use_ansi_color));
                 }
                 Err(_err) => {} // String not UTF8 or other error, skip.
             }

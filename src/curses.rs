@@ -2,6 +2,8 @@
 // Modeled after fzf
 
 use ncurses::*;
+use std::sync::RwLock;
+use std::collections::HashMap;
 use libc::{STDIN_FILENO, STDERR_FILENO, fdopen};
 
 pub static COLOR_NORMAL:        i16 = 0;
@@ -14,80 +16,110 @@ pub static COLOR_INFO:          i16 = 6;
 pub static COLOR_CURSOR:        i16 = 7;
 pub static COLOR_SELECTED:      i16 = 8;
 pub static COLOR_HEADER:        i16 = 9;
-//pub static COLOR_USER:          i16 = 10;
+static COLOR_USER:              i16 = 10;
+
+lazy_static! {
+    static ref COLOR_MAP: RwLock<HashMap<i16, attr_t>> = RwLock::new(HashMap::new());
+    static ref CURRENT_FG: RwLock<i16> = RwLock::new(7);
+    static ref FG: RwLock<i16> = RwLock::new(7);
+    static ref CURRENT_BG: RwLock<i16> = RwLock::new(0);
+    static ref BG: RwLock<i16> = RwLock::new(0);
+    static ref USE_COLOR: RwLock<bool> = RwLock::new(true);
+}
+
+pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
+    // initialize ncurses
+    let local_conf = LcCategory::all;
+    setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
+    let mut use_color = USE_COLOR.write().unwrap();
+
+    if let Some(theme) = theme {
+        let base_theme = if tigetnum("colors") >= 256 {
+            DARK256
+        } else {
+            DEFAULT16
+        };
+
+        init_pairs(&base_theme, &theme, is_black);
+        *use_color = true;
+    } else {
+        *use_color = false;
+    }
+}
+
+fn init_pairs(base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
+    let mut current_fg = CURRENT_FG.write().unwrap();
+    let mut current_bg = CURRENT_BG.write().unwrap();
+    let mut fg = FG.write().unwrap();
+    let mut bg = BG.write().unwrap();
+
+
+    *fg = shadow(base.fg, theme.fg);
+    *bg = shadow(base.bg, theme.bg);
+
+    if is_black {
+        *bg = COLOR_BLACK;
+    } else if theme.use_default {
+        *fg = COLOR_DEFAULT;
+        *bg = COLOR_DEFAULT;
+        use_default_colors();
+    }
+
+    if !theme.use_default {
+        assume_default_colors(shadow(base.fg, theme.fg) as i32, *bg as i32);
+    }
+
+    start_color();
+
+    *current_fg = shadow(base.current, theme.current);
+    *current_bg = shadow(base.dark_bg, theme.dark_bg);;
+    init_pair(COLOR_PROMPT, shadow(base.prompt, theme.prompt), *bg);
+    init_pair(COLOR_MATCHED, shadow(base.matched, theme.matched), *bg);
+    init_pair(COLOR_CURRENT, shadow(base.current, theme.current), *current_bg);
+    init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), *current_bg);
+    init_pair(COLOR_SPINNER, shadow(base.spinner, theme.spinner), *bg);
+    init_pair(COLOR_INFO, shadow(base.info, theme.info), *bg);
+    init_pair(COLOR_CURSOR, shadow(base.cursor, theme.cursor), *current_bg);
+    init_pair(COLOR_SELECTED, shadow(base.selected, theme.selected), *current_bg);
+    init_pair(COLOR_HEADER, shadow(base.header, theme.header), *bg);
+}
+
+
+pub fn get_color_pair(fg: i16, bg: i16) -> attr_t {
+    let fg = if fg == -1 { *FG.read().unwrap() } else {fg};
+    let bg = if bg == -1 { *BG.read().unwrap() } else {bg};
+
+    let key = (fg << 8) + bg;
+    let mut color_map = COLOR_MAP.write().unwrap();
+    let pair_num = color_map.len() as i16;
+    let pair = color_map.entry(key).or_insert_with(|| {
+        let next_pair = COLOR_USER + pair_num;
+        init_pair(next_pair, fg, bg);
+        COLOR_PAIR(next_pair)
+    });
+    *pair
+}
 
 pub struct Curses {
-    current_fg: i16,
-    dark_bg: i16,
-    use_color: bool,
     screen: SCREEN,
 }
 
 impl Curses {
     pub fn new() -> Self {
-        Curses {
-            current_fg: COLOR_DEFAULT,
-            dark_bg: COLOR_DEFAULT,
-            use_color: false,
-            screen: stdscr,
-        }
-    }
-    pub fn init(&mut self, theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
-        // initialize ncurses
-        let local_conf = LcCategory::all;
-        setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
-
         let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
         let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
-
-        self.screen = newterm(None, stderr, stdin);
-        set_term(self.screen);
-
+        let screen = newterm(None, stderr, stdin);
+        set_term(screen);
         raw();
         noecho();
 
-        if let Some(theme) = theme {
-            let base_theme = if tigetnum("colors") >= 256 {
-                DARK256
-            } else {
-                DEFAULT16
-            };
-
-            self.init_pairs(&base_theme, &theme, is_black);
-            self.use_color = true;
-        } else {
-            self.use_color = false;
+        Curses {
+            screen: screen,
         }
     }
 
-    fn init_pairs(&mut self, base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
-        //let mut fg = shadow(base.fg, theme.fg);
-        let mut bg = shadow(base.bg, theme.bg);
-
-        if is_black {
-            bg = COLOR_BLACK;
-        } else if theme.use_default {
-            //fg = COLOR_DEFAULT;
-            bg = COLOR_DEFAULT;
-            use_default_colors();
-        }
-
-        start_color();
-        self.current_fg = shadow(base.current, theme.current);
-        self.dark_bg = shadow(base.dark_bg, theme.dark_bg);;
-        init_pair(COLOR_PROMPT, shadow(base.prompt, theme.prompt), bg);
-        init_pair(COLOR_MATCHED, shadow(base.matched, theme.matched), bg);
-        init_pair(COLOR_CURRENT, shadow(base.current, theme.current), self.dark_bg);
-        init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), self.dark_bg);
-        init_pair(COLOR_SPINNER, shadow(base.spinner, theme.spinner), bg);
-        init_pair(COLOR_INFO, shadow(base.info, theme.info), bg);
-        init_pair(COLOR_CURSOR, shadow(base.cursor, theme.cursor), self.dark_bg);
-        init_pair(COLOR_SELECTED, shadow(base.selected, theme.selected), self.dark_bg);
-        init_pair(COLOR_HEADER, shadow(base.header, theme.header), bg);
-    }
-
-    pub fn get_color(&self, pair: i16, is_bold: bool) -> attr_t{
-        if self.use_color {
+    fn get_color(&self, pair: i16, is_bold: bool) -> attr_t {
+        if *USE_COLOR.read().unwrap() {
             attr_color(pair, is_bold)
         } else {
             attr_mono(pair, is_bold)
@@ -133,6 +165,14 @@ impl Curses {
     pub fn close(&self) {
         endwin();
         delscreen(self.screen);
+    }
+
+    pub fn attr_on(&self, attr: attr_t) {
+        attron(attr);
+    }
+
+    pub fn attr_set(&self, attr: attr_t) {
+        attrset(attr);
     }
 }
 

@@ -2,6 +2,8 @@
 extern crate libc;
 extern crate ncurses;
 extern crate getopts;
+extern crate regex;
+#[macro_use] extern crate lazy_static;
 mod util;
 mod item;
 mod reader;
@@ -13,6 +15,7 @@ mod score;
 mod orderedvec;
 mod curses;
 mod query;
+mod ansi;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -65,8 +68,9 @@ fn real_main() -> i32 {
     }
 
     let theme = ColorTheme::new();
-    let mut curses = Curses::new();
-    curses.init(Some(&theme), false, false);
+    let curses = Curses::new();
+    curses::init(Some(&theme), false, false);
+
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
