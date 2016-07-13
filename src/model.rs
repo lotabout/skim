@@ -14,6 +14,7 @@ use util::eventbox::EventBox;
 use event::Event;
 use std::mem;
 use std::time::{Instant};
+use getopts;
 
 // The whole screen is:
 //
@@ -59,6 +60,7 @@ pub struct Model {
     height: usize,
 
     pub tabstop: usize,
+    pub is_interactive: bool,
     curses: Curses,
     timer: Instant,
     accept_key: Option<String>,
@@ -91,6 +93,19 @@ impl Model {
             curses: curses,
             timer: timer,
             accept_key: None,
+            is_interactive: false,
+        }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if options.opt_present("i") {
+            self.is_interactive = true;
+        }
+        if options.opt_present("m") {
+            self.multi_selection = true;
+        }
+        if let Some(prompt) = options.opt_str("p") {
+            self.prompt = prompt.clone();
         }
     }
 

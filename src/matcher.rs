@@ -31,6 +31,7 @@ pub struct Matcher {
     cache: HashMap<String, MatcherCache>,
     partitions: usize,
     rank_criterion: Arc<Vec<RankCriteria>>,
+    is_interactive: bool,
 }
 
 impl<'a> Matcher {
@@ -53,6 +54,7 @@ impl<'a> Matcher {
                                           RankCriteria::Index,
                                           RankCriteria::Begin,
                                           RankCriteria::End]),
+            is_interactive: false,
         }
     }
 
@@ -65,6 +67,10 @@ impl<'a> Matcher {
                 }
             }
             self.rank_criterion = Arc::new(vec);
+        }
+
+        if options.opt_present("i") {
+            self.is_interactive = true;
         }
     }
 
@@ -84,6 +90,7 @@ impl<'a> Matcher {
             let tx = tx.clone();
             let eb_req = self.eb_req.clone();
             let criterion = self.rank_criterion.clone();
+            let is_interactive = self.is_interactive;
 
             let guard = thread::spawn(move || {
                 let items = items.read().unwrap();
@@ -102,7 +109,7 @@ impl<'a> Matcher {
 
                     for i in start..end {
                         let ref item = items[i];
-                        if let Some(matched) = match_item(i, &item, &query, &criterion) {
+                        if let Some(matched) = match_item(i, &item, &query, &criterion, is_interactive) {
                             let _ = tx.send(Some(matched));
                         }
                     }
@@ -159,6 +166,11 @@ impl<'a> Matcher {
 
     fn reset_query(&mut self, query: &str) {
         self.query = Query::new(query);
+        if self.is_interactive {
+            let mut items = self.items.write().unwrap();
+            items.clear();
+            self.cache.remove(&query.to_string());
+        }
         self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
     }
 
@@ -192,8 +204,13 @@ impl<'a> Matcher {
     }
 }
 
-fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
-    let matched_result = score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars());
+fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria], is_interactive: bool) -> Option<MatchedItem> {
+    let matched_result = if !is_interactive {
+        score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars())
+    } else {
+        Some((-(index as i64), Vec::new()))
+    };
+
     if matched_result == None {
         return None;
     }

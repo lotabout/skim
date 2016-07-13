@@ -92,6 +92,15 @@ impl<T> EventBox<T> where T: Hash + Eq + Copy + 'static + Send {
         let data = self.mutex.lock().unwrap();
         data.events.contains_key(&event)
     }
+    pub fn wait_for(&self, event: T) -> Value {
+        'event_found: loop {
+            for (e, val) in self.wait() {
+                if e == event {
+                    return val
+                }
+            }
+        }
+    }
 }
 
 

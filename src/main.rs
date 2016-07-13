@@ -55,6 +55,8 @@ fn real_main() -> i32 {
     opts.optopt("p", "prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
+    opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
+    opts.optflag("i", "interactive", "Use skim as an interactive interface");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -96,9 +98,7 @@ fn real_main() -> i32 {
 
     // model
     let mut model = Model::new(eb.clone(), curses);
-    // parse options for model
-    if options.opt_present("m") {model.multi_selection = true;}
-    if let Some(prompt) = options.opt_str("p") {model.prompt = prompt;}
+    model.parse_options(&options);
 
 
     // matcher
@@ -113,6 +113,8 @@ fn real_main() -> i32 {
         Err(_) => "find .".to_string(),
     };
     let mut reader = Reader::new(default_command, eb.clone(), item_buffer.clone());
+    let eb_reader = reader.eb_req.clone();
+    reader.parse_options(&options);
 
     // input
     let mut input = Input::new(eb.clone());
@@ -161,7 +163,12 @@ fn real_main() -> i32 {
                 }
 
                 Event::EvQueryChange => {
-                    eb_matcher.set(Event::EvMatcherResetQuery, val);
+                    let query: String = *val.downcast().unwrap();
+                    if model.is_interactive {
+                        eb_reader.set(Event::EvReaderResetQuery, Box::new(query.clone()));
+                        eb.wait_for(Event::EvReaderRestart);
+                    }
+                    eb_matcher.set(Event::EvMatcherResetQuery, Box::new(query));
                 }
 
                 Event::EvInputInvalid => {
