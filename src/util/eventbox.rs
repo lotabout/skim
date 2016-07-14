@@ -98,12 +98,13 @@ impl<T> EventBox<T> where T: Hash + Eq + Copy + 'static + Send {
     }
 
     pub fn wait_for(&self, event: T) -> Value {
-        'event_found: loop {
-            for (e, val) in self.wait() {
-                if e == event {
-                    return val
-                }
+        loop {
+            let mut data = self.mutex.lock().unwrap();
+            let value = data.events.remove(&event);
+            if value.is_some() {
+                return value.unwrap();
             }
+            let _ = self.cond.wait(data);
         }
     }
 
@@ -202,7 +203,7 @@ mod test {
     use super::*;
     use std::thread;
     use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     #[test]
     fn test_wait() {
@@ -248,11 +249,13 @@ mod test {
         let eb2 = eb.clone();
 
         thread::spawn(move || {
+            eb2.set(20, Box::new(20));
             eb2.set(10, Box::new(20));
         });
 
         let val: i32 = *eb.wait_for(10).downcast().unwrap();
         assert_eq!(20, val);
+        assert!(eb.peek(20));
     }
 
     // Not including this test, because we should not rely on eventbox to do the dispatching at
