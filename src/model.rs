@@ -2,7 +2,7 @@
 /// It will also define how the states will be shown on the terminal
 
 
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Mutex};
 use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
 use std::cmp::{min, max};
@@ -13,7 +13,8 @@ use query::Query;
 use util::eventbox::EventBox;
 use event::Event;
 use std::mem;
-use std::time::{Instant};
+use std::time::{Instant, Duration};
+use std::thread;
 use getopts;
 
 // The whole screen is:
@@ -33,6 +34,7 @@ use getopts;
 //
 
 const SPINNER_DURATION: u32 = 200;
+const REFRESH_DURATION: u64 = 100;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 
 
@@ -58,6 +60,9 @@ pub struct Model {
     max_x: i32,
     width: usize,
     height: usize,
+
+    refresh_block: Arc<Mutex<u64>>,
+    update_finished: Arc<Mutex<bool>>,
 
     pub tabstop: usize,
     pub is_interactive: bool,
@@ -89,6 +94,8 @@ impl Model {
             max_x: max_x,
             width: (max_x - 2) as usize,
             height: (max_y - 2) as usize,
+            refresh_block: Arc::new(Mutex::new(0)),
+            update_finished: Arc::new(Mutex::new(true)),
             tabstop: 8,
             curses: curses,
             timer: timer,
@@ -107,6 +114,11 @@ impl Model {
         if let Some(prompt) = options.opt_str("p") {
             self.prompt = prompt.clone();
         }
+    }
+
+    pub fn clear_items(&self) {
+        self.items.write().unwrap().clear();
+        self.matched_items.write().unwrap().clear();
     }
 
     pub fn output(&self) {
@@ -138,15 +150,18 @@ impl Model {
     }
 
     pub fn print_query(&self) {
+        {*self.update_finished.lock().unwrap() = false;}
         // > query
         self.curses.mv(self.max_y-1, 0);
         self.curses.clrtoeol();
         self.curses.cprint(&self.prompt, COLOR_PROMPT, false);
         self.curses.cprint(&self.query.get_query(), COLOR_NORMAL, true);
         self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
+        {*self.update_finished.lock().unwrap() = true;}
     }
 
     pub fn print_info(&self) {
+        {*self.update_finished.lock().unwrap() = false;}
         let (orig_y, orig_x) = self.curses.get_yx();
 
         self.curses.mv(self.max_y-2, 0);
@@ -174,9 +189,11 @@ impl Model {
         }
 
         self.curses.mv(orig_y, orig_x);
+        {*self.update_finished.lock().unwrap() = true;}
     }
 
     pub fn print_items(&self) {
+        {*self.update_finished.lock().unwrap() = false;}
         let (orig_y, orig_x) = self.curses.get_yx();
 
         let mut matched_items = self.matched_items.write().unwrap();
@@ -196,6 +213,7 @@ impl Model {
         }
 
         self.curses.mv(orig_y, orig_x);
+        {*self.update_finished.lock().unwrap() = true;}
     }
 
     fn print_item(&self, matched: &MatchedItem, is_current: bool) {
@@ -295,7 +313,13 @@ impl Model {
     }
 
     pub fn refresh(&self) {
-        refresh();
+        if *self.update_finished.lock().unwrap() {
+            refresh();
+        }
+    }
+
+    pub fn refresh_throttle(&self) {
+        refresh_throttle(self.refresh_block.clone(), self.update_finished.clone());
     }
 
     pub fn display(&self) {
@@ -308,7 +332,7 @@ impl Model {
     pub fn resize(&mut self) {
         clear();
         endwin();
-        refresh();
+        self.refresh();
         let (max_y, max_x) = self.curses.get_maxyx();
         self.max_y  = max_y;
         self.max_x  = max_x;
@@ -555,6 +579,36 @@ fn reshape_string(text: &Vec<char>,
     }
     ret.push('.'); ret.push('.');
     (ret, ret_pos)
+}
+
+pub fn refresh_throttle(refresh_block: Arc<Mutex<u64>>, update_finished: Arc<Mutex<bool>>) {
+    {
+        let mut num_blocks = refresh_block.lock().unwrap();
+
+        *num_blocks += 1;
+        if *num_blocks > 1 {
+            return;
+        }
+    }
+
+    if *update_finished.lock().unwrap() {
+        refresh();
+    }
+
+    let refresh_block = refresh_block.clone();
+    let update_finished = update_finished.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(REFRESH_DURATION));
+        let num = {
+            let mut num_blocks = refresh_block.lock().unwrap();
+            let num = *num_blocks;
+            *num_blocks = 0;
+            num
+        };
+        if num > 1 {
+            refresh_throttle(refresh_block, update_finished);
+        }
+    });
 }
 
 #[cfg(test)]

@@ -64,7 +64,10 @@ impl Reader {
             };
 
             self.read_items(read);
-            command.map(|mut x| x.kill());
+            command.map(|mut x| {
+                let _ = x.kill();
+                let _ = x.wait();
+            });
 
             for (e, val) in self.eb_req.wait() {
                 match e {
@@ -72,7 +75,8 @@ impl Reader {
                         let mut items = self.items.write().unwrap();
                         items.clear();
                         arg = *val.downcast::<String>().unwrap();
-                        self.eb.set(Event::EvReaderRestart, Box::new(true));
+                        self.eb.set(Event::EvReaderSync, Box::new(true));
+                        let _ = self.eb_req.wait_for(Event::EvModelAck);
                     }
                     _ => {}
                 }

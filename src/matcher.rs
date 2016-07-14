@@ -20,7 +20,9 @@ use std::time::Instant;
 use getopts;
 
 const MATCHER_CHUNK_SIZE: usize = 100;
-const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
+const PROCESS_START_UPDATE_DURATION: u32 = 200; // milliseconds
+const PROCESS_UPDATE_DURATION: u64 = 100; // milliseconds
+const RESULT_UPDATE_DURATION: u64 = 300; // milliseconds
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
@@ -136,8 +138,8 @@ impl<'a> Matcher {
             // update process
             let time = timer.elapsed();
             let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-            if mills > PROCESS_UPDATE_DURATION {
-                self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64));
+            if mills > PROCESS_START_UPDATE_DURATION {
+                self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64), PROCESS_UPDATE_DURATION);
             }
 
             if start_idx >= items_len {
@@ -167,8 +169,7 @@ impl<'a> Matcher {
     fn reset_query(&mut self, query: &str) {
         self.query = Query::new(query);
         if self.is_interactive {
-            let mut items = self.items.write().unwrap();
-            items.clear();
+            self.new_items.write().unwrap().clear();
             self.cache.remove(&query.to_string());
         }
         self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
@@ -181,6 +182,10 @@ impl<'a> Matcher {
                     Event::EvMatcherNewItem => {}
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
+                        if self.is_interactive {
+                            self.eb_notify.set(Event::EvMatcherSync, Box::new(true));
+                            let _ = self.eb_req.wait_for(Event::EvModelAck);
+                        }
                     }
                     _ => {}
                 }
@@ -198,7 +203,11 @@ impl<'a> Matcher {
             self.process();
             if !self.eb_req.peek(Event::EvMatcherResetQuery) {
                 let matched_items = self.cache.get_mut(&self.query.get()).unwrap().matched_items.clone();
-                self.eb_notify.set(Event::EvMatcherEnd, Box::new(matched_items));
+                if self.is_interactive {
+                    self.eb_notify.set_debounce(Event::EvMatcherEnd, Box::new(matched_items), RESULT_UPDATE_DURATION);
+                } else {
+                    self.eb_notify.set(Event::EvMatcherEnd, Box::new(matched_items));
+                }
             }
         }
     }

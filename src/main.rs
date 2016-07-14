@@ -134,9 +134,13 @@ fn real_main() -> i32 {
         input.run();
     });
 
+    model.display();
+    model.refresh();
+
     let exit_code;
 
     'outer: loop {
+        let mut immediate_refresh = false;
         for (e, val) in eb.wait() {
             match e {
                 Event::EvReaderNewItem => {
@@ -158,17 +162,27 @@ fn real_main() -> i32 {
                 Event::EvMatcherEnd => {
                     // do nothing
                     let result: Arc<RwLock<OrderedVec<MatchedItem>>> = *val.downcast().unwrap();
+                    model.update_percentage(100);
                     model.update_matched_items(result);
                     model.display();
                 }
 
                 Event::EvQueryChange => {
                     let query: String = *val.downcast().unwrap();
+
                     if model.is_interactive {
+                        model.clear_items();
+                        eb_matcher.set(Event::EvMatcherResetQuery, Box::new(query.clone()));
+                        eb.wait_for(Event::EvMatcherSync);
                         eb_reader.set(Event::EvReaderResetQuery, Box::new(query.clone()));
-                        eb.wait_for(Event::EvReaderRestart);
+                        eb.wait_for(Event::EvReaderSync);
+                        eb_reader.set(Event::EvModelAck, Box::new(true));
+                        eb_matcher.set(Event::EvModelAck, Box::new(true));
+                        eb.clear();
+                        break;
+                    } else {
+                        eb_matcher.set(Event::EvMatcherResetQuery, Box::new(query));
                     }
-                    eb_matcher.set(Event::EvMatcherResetQuery, Box::new(query));
                 }
 
                 Event::EvInputInvalid => {
@@ -182,6 +196,7 @@ fn real_main() -> i32 {
                 Event::EvResize => {
                     model.resize();
                     model.display();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActAddChar => {
@@ -233,7 +248,7 @@ fn real_main() -> i32 {
                 Event::EvActCancel => {}
 
                 Event::EvActClearScreen => {
-                    model.refresh();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActDeleteChar => {
@@ -255,6 +270,7 @@ fn real_main() -> i32 {
                 Event::EvActDown => {
                     model.act_move_line_cursor(-1);
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActEndOfLine => {
@@ -289,11 +305,13 @@ fn real_main() -> i32 {
                 Event::EvActPageDown => {
                     model.act_move_page(-1);
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActPageUp => {
                     model.act_move_page(1);
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActPreviousHistory => {}
@@ -301,29 +319,34 @@ fn real_main() -> i32 {
                 Event::EvActScrollLeft => {
                     model.act_vertical_scroll(-1);
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActScrollRight => {
                     model.act_vertical_scroll(1);
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActSelectAll => {
                     model.act_select_all();
                     model.print_info();
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActToggle => {
                     model.act_toggle();
                     model.print_info();
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActToggleAll => {
                     model.act_toggle_all();
                     model.print_info();
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActToggleDown => {
@@ -331,6 +354,7 @@ fn real_main() -> i32 {
                     model.act_move_line_cursor(-1);
                     model.print_info();
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActToggleIn => {}
@@ -344,6 +368,7 @@ fn real_main() -> i32 {
                     model.act_move_line_cursor(1);
                     model.print_info();
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActUnixLineDiscard => {
@@ -359,6 +384,7 @@ fn real_main() -> i32 {
                 Event::EvActUp => {
                     model.act_move_line_cursor(1);
                     model.print_items();
+                    immediate_refresh = true;
                 }
 
                 Event::EvActYank => {}
@@ -368,7 +394,12 @@ fn real_main() -> i32 {
                 }
             }
         }
-        model.refresh();
+
+        if immediate_refresh {
+            model.refresh();
+        } else {
+            model.refresh_throttle();
+        }
         thread::sleep(Duration::from_millis(10));
     };
 

@@ -66,6 +66,12 @@ impl<T> OrderedVec<T> where T: Ord {
     pub fn len(&self) -> usize {
         return self.ordered.len() + self.unordered.len();
     }
+
+    pub fn clear(&mut self) {
+        self.ordered.clear();
+        self.unordered.clear();
+        self.sorted = true;
+    }
 }
 
 #[cfg(test)]

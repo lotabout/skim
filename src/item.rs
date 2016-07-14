@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use ncurses::*;
 use ansi::parse_ansi;
 
+#[derive(Debug)]
 pub struct Item {
     pub text: String,
     text_lower_chars: Vec<char>, // lower case version of text.
@@ -39,13 +40,13 @@ impl Item {
 pub type Rank = [i64; 4]; // score, index, start, end
 
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum MatchedRange {
     Range(usize, usize),
     Chars(Vec<usize>),
 }
 
-#[derive(Eq, Clone)]
+#[derive(Eq, Clone, Debug)]
 pub struct MatchedItem {
     pub index: usize,                       // index of current item in items
     pub rank: Rank,
