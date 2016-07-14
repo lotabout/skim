@@ -208,6 +208,7 @@ impl Model {
                                                      self.hscroll_offset,
                                                      matched_end_pos);
                 let mut matched_indics_iter = matched_indics.iter().peekable();
+                let mut ansi_states = item.get_ansi_states().iter().peekable();
 
                 // skip indics
                 while let Some(&&index) = matched_indics_iter.peek() {
@@ -218,6 +219,18 @@ impl Model {
                     }
                 }
 
+                // skip ansi states
+                let mut last_attr = 0;
+                while let Some(&&(index, attr)) = ansi_states.peek() {
+                    if idx > index {
+                        last_attr = attr;
+                        let _ = ansi_states.next();
+                    } else {
+                        break;
+                    }
+                }
+                self.curses.attr_on(last_attr);
+
                 for &ch in text.iter() {
                     match matched_indics_iter.peek() {
                         Some(&&index) if idx == index => {
@@ -225,11 +238,22 @@ impl Model {
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
+                            match ansi_states.peek() {
+                                Some(&&(index, attr)) if idx == index => {
+                                    // print ansi color codes.
+                                    self.curses.attr_off(last_attr);
+                                    self.curses.attr_on(attr);
+                                    last_attr = attr;
+                                    let _ = ansi_states.next();
+                                }
+                                Some(_) | None => {}
+                            }
                             self.print_char(ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                         }
                     }
                     idx += 1;
                 }
+                self.curses.attr_off(last_attr);
             }
             Some(MatchedRange::Range(_, _)) => {
                 // pass

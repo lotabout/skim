@@ -10,6 +10,7 @@ use std::error::Error;
 use util::eventbox::EventBox;
 use event::Event;
 use item::Item;
+use getopts;
 
 const READER_EVENT_DURATION: u64 = 30;
 
@@ -17,12 +18,17 @@ pub struct Reader {
     cmd: String, // command to invoke
     eb: Arc<EventBox<Event>>,         // eventbox
     items: Arc<RwLock<Vec<Item>>>, // all items
+    use_ansi_color: bool,
 }
 
 impl Reader {
 
     pub fn new(cmd: String, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
-        Reader{cmd: cmd, eb: eb, items: items}
+        Reader{cmd: cmd,
+               eb: eb,
+               items: items,
+               use_ansi_color: false,
+        }
     }
 
     // invoke find comand.
@@ -35,6 +41,12 @@ impl Reader {
                            .spawn());
         let stdout = try!(command.stdout.ok_or("command output: unwrap failed".to_owned()));
         Ok(Box::new(BufReader::new(stdout)))
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if options.opt_present("ansi") {
+            self.use_ansi_color = true;
+        }
     }
 
     pub fn run(&mut self) {
@@ -61,7 +73,7 @@ impl Reader {
                         }
                     }
                     let mut items = self.items.write().unwrap();
-                    items.push(Item::new(input));
+                    items.push(Item::new(input, self.use_ansi_color));
                 }
                 Err(_err) => {} // String not UTF8 or other error, skip.
             }

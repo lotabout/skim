@@ -2,6 +2,8 @@
 extern crate libc;
 extern crate ncurses;
 extern crate getopts;
+extern crate regex;
+#[macro_use] extern crate lazy_static;
 mod util;
 mod item;
 mod reader;
@@ -13,6 +15,7 @@ mod score;
 mod orderedvec;
 mod curses;
 mod query;
+mod ansi;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -52,6 +55,7 @@ fn real_main() -> i32 {
     opts.optopt("p", "prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
+    opts.optflag("", "ansi", "parse ANSI color codes for input strings");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -65,8 +69,9 @@ fn real_main() -> i32 {
     }
 
     let theme = ColorTheme::new();
-    let mut curses = Curses::new();
-    curses.init(Some(&theme), false, false);
+    let curses = Curses::new();
+    curses::init(Some(&theme), false, false);
+
 
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
@@ -109,6 +114,7 @@ fn real_main() -> i32 {
         Err(_) => "find .".to_string(),
     };
     let mut reader = Reader::new(default_command, eb.clone(), item_buffer.clone());
+    reader.parse_options(&options);
 
     // input
     let mut input = Input::new(eb.clone());
