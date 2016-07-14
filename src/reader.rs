@@ -29,7 +29,7 @@ impl Reader {
                eb: eb,
                eb_req: Arc::new(EventBox::new()),
                items: items,
-               use_ansi_color: true,
+               use_ansi_color: false,
         }
     }
 
@@ -46,6 +46,10 @@ impl Reader {
     }
 
     pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if options.opt_present("ansi") {
+            self.use_ansi_color = true;
+        }
+
         if let Some(cmd) = options.opt_str("c") {
             self.cmd = cmd.clone();
         }

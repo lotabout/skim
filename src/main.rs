@@ -55,6 +55,7 @@ fn real_main() -> i32 {
     opts.optopt("p", "prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
+    opts.optflag("", "ansi", "parse ANSI color codes for input strings");
     opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
     opts.optflag("i", "interactive", "Use skim as an interactive interface");
 
@@ -113,8 +114,8 @@ fn real_main() -> i32 {
         Err(_) => "find .".to_string(),
     };
     let mut reader = Reader::new(default_command, eb.clone(), item_buffer.clone());
-    let eb_reader = reader.eb_req.clone();
     reader.parse_options(&options);
+    let eb_reader = reader.eb_req.clone();
 
     // input
     let mut input = Input::new(eb.clone());

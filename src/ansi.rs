@@ -27,14 +27,17 @@ pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
         }
     }
 
+    let mut num_chars = 0;
     let mut last = 0;
     for (start, end) in RE.find_iter(text) {
         strip_string.push_str(&text[last..start]);
+        num_chars += (&text[last..start]).chars().count();
+
         last = end;
 
         let attr = interpret_code(&text[start..end]);
         attr.map(|attr| {
-            colors.push((strip_string.len(), attr));
+            colors.push((num_chars, attr));
         });
         *last_attr = attr;
     }
