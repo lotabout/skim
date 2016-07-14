@@ -10,6 +10,7 @@ use std::error::Error;
 use util::eventbox::EventBox;
 use event::Event;
 use item::Item;
+use getopts;
 
 const READER_EVENT_DURATION: u64 = 30;
 
@@ -26,7 +27,7 @@ impl Reader {
         Reader{cmd: cmd,
                eb: eb,
                items: items,
-               use_ansi_color: true,
+               use_ansi_color: false,
         }
     }
 
@@ -40,6 +41,12 @@ impl Reader {
                            .spawn());
         let stdout = try!(command.stdout.ok_or("command output: unwrap failed".to_owned()));
         Ok(Box::new(BufReader::new(stdout)))
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if options.opt_present("ansi") {
+            self.use_ansi_color = true;
+        }
     }
 
     pub fn run(&mut self) {

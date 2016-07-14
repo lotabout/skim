@@ -55,6 +55,7 @@ fn real_main() -> i32 {
     opts.optopt("p", "prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
+    opts.optflag("", "ansi", "parse ANSI color codes for input strings");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }
@@ -113,6 +114,7 @@ fn real_main() -> i32 {
         Err(_) => "find .".to_string(),
     };
     let mut reader = Reader::new(default_command, eb.clone(), item_buffer.clone());
+    reader.parse_options(&options);
 
     // input
     let mut input = Input::new(eb.clone());
