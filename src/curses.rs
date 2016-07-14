@@ -29,8 +29,6 @@ lazy_static! {
 
 pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
     // initialize ncurses
-    let local_conf = LcCategory::all;
-    setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
     let mut use_color = USE_COLOR.write().unwrap();
 
     if let Some(theme) = theme {
@@ -106,6 +104,8 @@ pub struct Curses {
 
 impl Curses {
     pub fn new() -> Self {
+        let local_conf = LcCategory::all;
+        setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
         let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
         let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
         let screen = newterm(None, stderr, stdin);
