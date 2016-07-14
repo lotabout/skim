@@ -87,10 +87,33 @@ impl<T> EventBox<T> where T: Hash + Eq + Copy + 'static + Send {
         set_event_throttle(&self.mutex, &self.cond, e, value, timeout, false);
     }
 
+    pub fn set_debounce(&self, e: T, value: Value, timeout: u64) {
+        set_event_debounce(&self.mutex, &self.cond, e, value, timeout);
+    }
+
     // peek at the event box to check whether event had been set or not
     pub fn peek(&self, event: T) -> bool {
         let data = self.mutex.lock().unwrap();
         data.events.contains_key(&event)
+    }
+
+    pub fn wait_for(&self, event: T) -> Value {
+        loop {
+            let mut data = self.mutex.lock().unwrap();
+            let value = data.events.remove(&event);
+            if value.is_some() {
+                return value.unwrap();
+            }
+            let _ = self.cond.wait(data);
+        }
+    }
+
+    pub fn clear(&self) {
+        let mut data = self.mutex.lock().unwrap();
+        data.events.clear();
+        data.lazy.clear();
+        data.blocked.clear();
+        data.throttled.clear();
     }
 }
 
@@ -144,12 +167,43 @@ fn set_event_throttle<T>(mutex: &Arc<Mutex<EventData<T>>>, cond: &Arc<Condvar>, 
     });
 }
 
+fn set_event_debounce<T>(mutex: &Arc<Mutex<EventData<T>>>, cond: &Arc<Condvar>, e: T, value: Value, timeout: u64)
+    where T: Hash + Eq + Copy + 'static + Send {
+    {
+        let mut data = mutex.lock().unwrap();
+        let val = data.throttled.entry(e).or_insert(Box::new(0));
+        *val = value;
+    }
+    {
+        let mut data = mutex.lock().unwrap();
+        if data.blocked.contains(&e) {
+            return;
+        } else {
+            data.blocked.insert(e);
+        }
+    }
+
+    let mutex = mutex.clone();
+    let cond = cond.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(timeout));
+        let remaining = {
+            let mut data = mutex.lock().unwrap();
+            data.throttled.remove(&e)
+        };
+
+        remaining.map(|v| { set_event(&mutex, &cond, e, v); });
+        let mut data = mutex.lock().unwrap();
+        let _ = data.blocked.remove(&e);
+    });
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use std::thread;
     use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     #[test]
     fn test_wait() {
@@ -195,11 +249,13 @@ mod test {
         let eb2 = eb.clone();
 
         thread::spawn(move || {
+            eb2.set(20, Box::new(20));
             eb2.set(10, Box::new(20));
         });
 
         let val: i32 = *eb.wait_for(10).downcast().unwrap();
         assert_eq!(20, val);
+        assert!(eb.peek(20));
     }
 
     // Not including this test, because we should not rely on eventbox to do the dispatching at

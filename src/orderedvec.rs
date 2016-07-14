@@ -66,6 +66,12 @@ impl<T> OrderedVec<T> where T: Ord {
     pub fn len(&self) -> usize {
         return self.ordered.len() + self.unordered.len();
     }
+
+    pub fn clear(&mut self) {
+        self.ordered.clear();
+        self.unordered.clear();
+        self.sorted = true;
+    }
 }
 
 #[cfg(test)]
@@ -83,12 +89,12 @@ mod test {
         println!("{}", ordered.get(0).unwrap());
 
         //assert_eq!(*ordered.get(0).unwrap(), -2);
-        assert_eq!(*(ordered.get(0).unwrap()), 5);
-        assert_eq!(*(ordered.get(1).unwrap()), 4);
-        assert_eq!(*(ordered.get(2).unwrap()), 3);
+        assert_eq!(*(ordered.get(0).unwrap()), -2);
+        assert_eq!(*(ordered.get(1).unwrap()), -1);
+        assert_eq!(*(ordered.get(2).unwrap()), 0);
         assert_eq!(*(ordered.get(3).unwrap()), 1);
-        assert_eq!(*(ordered.get(4).unwrap()), 0);
-        assert_eq!(*(ordered.get(5).unwrap()), -1);
-        assert_eq!(*(ordered.get(6).unwrap()), -2);
+        assert_eq!(*(ordered.get(4).unwrap()), 3);
+        assert_eq!(*(ordered.get(5).unwrap()), 4);
+        assert_eq!(*(ordered.get(6).unwrap()), 5);
     }
 }

@@ -20,7 +20,9 @@ use std::time::Instant;
 use getopts;
 
 const MATCHER_CHUNK_SIZE: usize = 100;
-const PROCESS_UPDATE_DURATION: u32 = 200; // milliseconds
+const PROCESS_START_UPDATE_DURATION: u32 = 200; // milliseconds
+const PROCESS_UPDATE_DURATION: u64 = 100; // milliseconds
+const RESULT_UPDATE_DURATION: u64 = 300; // milliseconds
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
@@ -31,6 +33,7 @@ pub struct Matcher {
     cache: HashMap<String, MatcherCache>,
     partitions: usize,
     rank_criterion: Arc<Vec<RankCriteria>>,
+    is_interactive: bool,
 }
 
 impl<'a> Matcher {
@@ -53,6 +56,7 @@ impl<'a> Matcher {
                                           RankCriteria::Index,
                                           RankCriteria::Begin,
                                           RankCriteria::End]),
+            is_interactive: false,
         }
     }
 
@@ -65,6 +69,10 @@ impl<'a> Matcher {
                 }
             }
             self.rank_criterion = Arc::new(vec);
+        }
+
+        if options.opt_present("i") {
+            self.is_interactive = true;
         }
     }
 
@@ -84,6 +92,7 @@ impl<'a> Matcher {
             let tx = tx.clone();
             let eb_req = self.eb_req.clone();
             let criterion = self.rank_criterion.clone();
+            let is_interactive = self.is_interactive;
 
             let guard = thread::spawn(move || {
                 let items = items.read().unwrap();
@@ -102,7 +111,7 @@ impl<'a> Matcher {
 
                     for i in start..end {
                         let ref item = items[i];
-                        if let Some(matched) = match_item(i, &item, &query, &criterion) {
+                        if let Some(matched) = match_item(i, &item, &query, &criterion, is_interactive) {
                             let _ = tx.send(Some(matched));
                         }
                     }
@@ -129,8 +138,8 @@ impl<'a> Matcher {
             // update process
             let time = timer.elapsed();
             let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-            if mills > PROCESS_UPDATE_DURATION {
-                self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64));
+            if mills > PROCESS_START_UPDATE_DURATION {
+                self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64), PROCESS_UPDATE_DURATION);
             }
 
             if start_idx >= items_len {
@@ -159,6 +168,10 @@ impl<'a> Matcher {
 
     fn reset_query(&mut self, query: &str) {
         self.query = Query::new(query);
+        if self.is_interactive {
+            self.new_items.write().unwrap().clear();
+            self.cache.remove(&query.to_string());
+        }
         self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
     }
 
@@ -169,6 +182,10 @@ impl<'a> Matcher {
                     Event::EvMatcherNewItem => {}
                     Event::EvMatcherResetQuery => {
                         self.reset_query(&val.downcast::<String>().unwrap());
+                        if self.is_interactive {
+                            self.eb_notify.set(Event::EvMatcherSync, Box::new(true));
+                            let _ = self.eb_req.wait_for(Event::EvModelAck);
+                        }
                     }
                     _ => {}
                 }
@@ -186,14 +203,23 @@ impl<'a> Matcher {
             self.process();
             if !self.eb_req.peek(Event::EvMatcherResetQuery) {
                 let matched_items = self.cache.get_mut(&self.query.get()).unwrap().matched_items.clone();
-                self.eb_notify.set(Event::EvMatcherEnd, Box::new(matched_items));
+                if self.is_interactive {
+                    self.eb_notify.set_debounce(Event::EvMatcherEnd, Box::new(matched_items), RESULT_UPDATE_DURATION);
+                } else {
+                    self.eb_notify.set(Event::EvMatcherEnd, Box::new(matched_items));
+                }
             }
         }
     }
 }
 
-fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
-    let matched_result = score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars());
+fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria], is_interactive: bool) -> Option<MatchedItem> {
+    let matched_result = if !is_interactive {
+        score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars())
+    } else {
+        Some((-(index as i64), Vec::new()))
+    };
+
     if matched_result == None {
         return None;
     }

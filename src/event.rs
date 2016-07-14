@@ -3,10 +3,14 @@
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Event {
     EvReaderNewItem,
+    EvReaderResetQuery,
+    EvReaderSync,
     EvMatcherNewItem,
     EvMatcherResetQuery,
     EvMatcherUpdateProcess,
     EvMatcherEnd,
+    EvMatcherSync,
+    EvModelAck,
     EvQueryChange,
     EvInputKey,
     EvInputInvalid,
