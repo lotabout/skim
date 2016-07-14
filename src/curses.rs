@@ -174,7 +174,6 @@ impl Curses {
     pub fn attr_off(&self, attr: attr_t) {
         attroff(attr);
     }
-
 }
 
 // use default if x is COLOR_UNDEFINED, else use x
