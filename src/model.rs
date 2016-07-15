@@ -82,7 +82,7 @@ impl Model {
             selected_indics: HashSet::new(),
             matched_items: Arc::new(RwLock::new(OrderedVec::new())),
             num_total: 0,
-            percentage: 0,
+            percentage: 100,
             multi_selection: false,
             prompt: "> ".to_string(),
             reading: false,

@@ -136,7 +136,7 @@ fn real_main() -> i32 {
         input.run();
     });
 
-    model.display();
+    model.print_query(); // to place cursor
     model.refresh();
 
     let exit_code;
