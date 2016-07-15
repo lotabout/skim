@@ -45,8 +45,6 @@ fn main() {
 fn real_main() -> i32 {
 
     // option parsing
-    let args: Vec<String> = env::args().collect();
-    let program = args[0].clone();
 
     let mut opts = Options::new();
     opts.optopt("b", "bind", "comma seperated keybindings, such as 'ctrl-j:accept,ctrl-k:kill-line'", "KEY:ACTION");
@@ -61,7 +59,22 @@ fn real_main() -> i32 {
     opts.optflag("", "regex", "use regex instead of fuzzy match");
     opts.optopt("q", "query", "specify the initial query", "\"\"");
 
-    let options = match opts.parse(&args[1..]) {
+    let default_options = match env::var("SKIM_DEFAULT_OPTIONS") {
+        Ok(val) => val,
+        Err(_) => "".to_string(),
+    };
+
+    let mut args = Vec::new();
+    for option in default_options.split(" ") {
+        args.push(option.to_string());
+    }
+
+    let program = env::args().nth(0).unwrap_or("sk".to_string());
+    for arg in env::args().skip(1) {
+        args.push(arg);
+    }
+
+    let options = match opts.parse(args) {
         Ok(m) => { m }
         Err(f) => { panic!(f.to_string()) }
     };
@@ -111,7 +124,7 @@ fn real_main() -> i32 {
     matcher.parse_options(&options);
 
     // reader
-    let default_command = match env::var("FZF_DEFAULT_COMMAND") {
+    let default_command = match env::var("SKIM_DEFAULT_COMMAND") {
         Ok(val) => val,
         Err(_) => "find .".to_string(),
     };
