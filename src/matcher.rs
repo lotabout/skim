@@ -3,7 +3,6 @@
 
 
 extern crate num_cpus;
-extern crate crossbeam;
 
 use std::sync::{Arc, RwLock, Mutex};
 

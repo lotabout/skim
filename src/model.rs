@@ -12,7 +12,6 @@ use curses::*;
 use query::Query;
 use util::eventbox::EventBox;
 use event::Event;
-use std::mem;
 use std::time::{Instant, Duration};
 use std::thread;
 use getopts;
@@ -439,20 +438,21 @@ impl Model {
     pub fn act_select_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let num_matched = self.matched_items.read().unwrap().len();
-        for i in 0..num_matched {
-            self.selected_indics.insert(i);
+        let matched_items = self.matched_items.read().unwrap();
+        for item in matched_items.iter() {
+            self.selected_indics.insert(item.index);
         }
     }
 
     pub fn act_toggle_all(&mut self) {
         if !self.multi_selection {return;}
 
-        let num_matched = self.matched_items.read().unwrap().len();
-        let selected = mem::replace(&mut self.selected_indics, HashSet::new());
-        for i in 0..num_matched {
-            if !selected.contains(&i) {
-                self.selected_indics.insert(i);
+        let matched_items = self.matched_items.read().unwrap();
+        for item in matched_items.iter() {
+            if !self.selected_indics.contains(&item.index) {
+                self.selected_indics.insert(item.index);
+            } else {
+                self.selected_indics.remove(&item.index);
             }
         }
     }

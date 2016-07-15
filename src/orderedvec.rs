@@ -72,6 +72,12 @@ impl<T> OrderedVec<T> where T: Ord {
         self.unordered.clear();
         self.sorted = true;
     }
+
+    pub fn iter<'a>(&'a self) -> Box<Iterator<Item=&'a T> + 'a> {
+        let ref ordered = self.ordered;
+        let ref unordered = self.unordered;
+        Box::new(ordered.iter().chain(unordered.iter()))
+    }
 }
 
 #[cfg(test)]
