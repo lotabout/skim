@@ -104,7 +104,6 @@ impl<'a> Matcher {
             let tx = tx.clone();
             let eb_req = self.eb_req.clone();
             let criterion = self.rank_criterion.clone();
-            let is_interactive = self.is_interactive;
             let algorithm = self.algorithm;
 
             let guard = thread::spawn(move || {
@@ -179,6 +178,38 @@ impl<'a> Matcher {
         self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
     }
 
+    pub fn process_interactive(&mut self) {
+        let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
+        let mut matched_items = cache.matched_items.write().unwrap();
+        let items_len = self.items.read().unwrap().len();
+        let timer = Instant::now();
+        let start_pos = cache.item_pos;
+        let mut last_pos = start_pos;
+
+        for index in start_pos..items_len {
+            let mut matched = MatchedItem::new(index);
+            matched.set_matched_range(MatchedRange::Range(0, 0));
+            matched.set_rank(build_rank(&self.rank_criterion, index as i64, index as i64, 0, 0));
+
+            matched_items.push(matched);
+
+            if self.eb_req.peek(Event::EvMatcherResetQuery) {
+                break;
+            }
+
+            last_pos = index+1;
+
+            // update process
+            let time = timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            if mills > PROCESS_START_UPDATE_DURATION {
+                self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess, Box::new(((index+1) *100/(items_len+1)) as u64), PROCESS_UPDATE_DURATION);
+            }
+        }
+        cache.item_pos = last_pos;
+        self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
+    }
+
     fn reset_query(&mut self, query: &str) {
         self.query = Query::new(query);
         if self.is_interactive {
@@ -213,7 +244,12 @@ impl<'a> Matcher {
                 }
             }
 
-            self.process();
+            if self.is_interactive {
+                self.process_interactive();
+            } else {
+                self.process();
+            }
+
             if !self.eb_req.peek(Event::EvMatcherResetQuery) {
                 let matched_items = self.cache.get_mut(&self.query.get()).unwrap().matched_items.clone();
                 if self.is_interactive {
