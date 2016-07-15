@@ -27,6 +27,10 @@ impl Item {
         }
     }
 
+    pub fn get_text(&self) -> &str {
+        &self.text
+    }
+
     pub fn get_lower_chars(&self) -> &[char] {
         &self.text_lower_chars
     }
