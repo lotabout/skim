@@ -86,6 +86,11 @@ impl<'a> Matcher {
         if options.opt_present("regex") {
             self.algorithm = Algorithm::REGEX;
         }
+
+        if let Some(query) = options.opt_str("q") {
+            self.query = Query::new(&query);
+            self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
+        }
     }
 
     pub fn process(&mut self) {

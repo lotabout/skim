@@ -13,6 +13,14 @@ impl Query {
         }
     }
 
+    pub fn new_with_query(query: &str) -> Self {
+        let mut ret = Query::new();
+        for ch in query.chars() {
+            ret.add_char(ch);
+        }
+        ret
+    }
+
     pub fn get_query(&self) -> String {
         self.query.iter().cloned().collect::<String>()
     }

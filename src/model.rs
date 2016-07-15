@@ -113,6 +113,9 @@ impl Model {
         if let Some(prompt) = options.opt_str("p") {
             self.prompt = prompt.clone();
         }
+        if let Some(query) = options.opt_str("q") {
+            self.query = Query::new_with_query(&query);
+        }
     }
 
     pub fn clear_items(&self) {

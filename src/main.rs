@@ -59,6 +59,7 @@ fn real_main() -> i32 {
     opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
     opts.optflag("i", "interactive", "Use skim as an interactive interface");
     opts.optflag("", "regex", "use regex instead of fuzzy match");
+    opts.optopt("q", "query", "specify the initial query", "\"\"");
 
     let options = match opts.parse(&args[1..]) {
         Ok(m) => { m }

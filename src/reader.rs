@@ -20,6 +20,7 @@ pub struct Reader {
     pub eb_req: Arc<EventBox<Event>>,
     items: Arc<RwLock<Vec<Item>>>, // all items
     use_ansi_color: bool,
+    default_arg: String,
 }
 
 impl Reader {
@@ -30,6 +31,7 @@ impl Reader {
                eb_req: Arc::new(EventBox::new()),
                items: items,
                use_ansi_color: false,
+               default_arg: String::new(),
         }
     }
 
@@ -53,12 +55,16 @@ impl Reader {
         if let Some(cmd) = options.opt_str("c") {
             self.cmd = cmd.clone();
         }
+
+        if let Some(query) = options.opt_str("q") {
+            self.default_arg = query.to_string();
+        }
     }
 
     pub fn run(&mut self) {
         // check if the input is TTY
         let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
-        let mut arg = "".to_string();
+        let mut arg = self.default_arg.clone();
 
         loop {
             let (command, read): (Option<Child>, Box<BufRead>) = if istty {
