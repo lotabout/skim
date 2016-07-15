@@ -17,11 +17,18 @@ use std::cmp::min;
 use std::thread;
 use std::time::Instant;
 use getopts;
+use regex::Regex;
 
 const MATCHER_CHUNK_SIZE: usize = 100;
 const PROCESS_START_UPDATE_DURATION: u32 = 200; // milliseconds
 const PROCESS_UPDATE_DURATION: u64 = 100; // milliseconds
 const RESULT_UPDATE_DURATION: u64 = 300; // milliseconds
+
+#[derive(Clone, Copy)]
+enum Algorithm {
+    FUZZY,
+    REGEX,
+}
 
 pub struct Matcher {
     pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
@@ -33,6 +40,7 @@ pub struct Matcher {
     partitions: usize,
     rank_criterion: Arc<Vec<RankCriteria>>,
     is_interactive: bool,
+    algorithm: Algorithm,
 }
 
 impl<'a> Matcher {
@@ -56,6 +64,7 @@ impl<'a> Matcher {
                                           RankCriteria::Begin,
                                           RankCriteria::End]),
             is_interactive: false,
+            algorithm: Algorithm::FUZZY,
         }
     }
 
@@ -72,6 +81,10 @@ impl<'a> Matcher {
 
         if options.opt_present("i") {
             self.is_interactive = true;
+        }
+
+        if options.opt_present("regex") {
+            self.algorithm = Algorithm::REGEX;
         }
     }
 
@@ -91,7 +104,7 @@ impl<'a> Matcher {
             let tx = tx.clone();
             let eb_req = self.eb_req.clone();
             let criterion = self.rank_criterion.clone();
-            let is_interactive = self.is_interactive;
+            let algorithm = self.algorithm;
 
             let guard = thread::spawn(move || {
                 let items = items.read().unwrap();
@@ -110,7 +123,7 @@ impl<'a> Matcher {
 
                     for i in start..end {
                         let ref item = items[i];
-                        if let Some(matched) = match_item(i, &item, &query, &criterion, is_interactive) {
+                        if let Some(matched) = match_item(i, &item, &query, &criterion, algorithm) {
                             let _ = tx.send(Some(matched));
                         }
                     }
@@ -165,6 +178,38 @@ impl<'a> Matcher {
         self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
     }
 
+    pub fn process_interactive(&mut self) {
+        let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
+        let mut matched_items = cache.matched_items.write().unwrap();
+        let items_len = self.items.read().unwrap().len();
+        let timer = Instant::now();
+        let start_pos = cache.item_pos;
+        let mut last_pos = start_pos;
+
+        for index in start_pos..items_len {
+            let mut matched = MatchedItem::new(index);
+            matched.set_matched_range(MatchedRange::Range(0, 0));
+            matched.set_rank(build_rank(&self.rank_criterion, index as i64, index as i64, 0, 0));
+
+            matched_items.push(matched);
+
+            if self.eb_req.peek(Event::EvMatcherResetQuery) {
+                break;
+            }
+
+            last_pos = index+1;
+
+            // update process
+            let time = timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            if mills > PROCESS_START_UPDATE_DURATION {
+                self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess, Box::new(((index+1) *100/(items_len+1)) as u64), PROCESS_UPDATE_DURATION);
+            }
+        }
+        cache.item_pos = last_pos;
+        self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
+    }
+
     fn reset_query(&mut self, query: &str) {
         self.query = Query::new(query);
         if self.is_interactive {
@@ -199,7 +244,12 @@ impl<'a> Matcher {
                 }
             }
 
-            self.process();
+            if self.is_interactive {
+                self.process_interactive();
+            } else {
+                self.process();
+            }
+
             if !self.eb_req.peek(Event::EvMatcherResetQuery) {
                 let matched_items = self.cache.get_mut(&self.query.get()).unwrap().matched_items.clone();
                 if self.is_interactive {
@@ -212,12 +262,16 @@ impl<'a> Matcher {
     }
 }
 
-fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria], is_interactive: bool) -> Option<MatchedItem> {
-    let matched_result = if !is_interactive {
-        score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars())
-    } else {
-        Some((-(index as i64), Vec::new()))
-    };
+fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria],
+              algorithm: Algorithm) -> Option<MatchedItem> {
+    match algorithm {
+        Algorithm::FUZZY => match_item_fuzzy(index, item, query, criterion),
+        Algorithm::REGEX => match_item_regex(index, item, query, criterion),
+    }
+}
+
+fn match_item_fuzzy(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
+    let matched_result = score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars());
 
     if matched_result == None {
         return None;
@@ -225,19 +279,9 @@ fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteri
 
     let (score, matched_range) = matched_result.unwrap();
 
-    let mut rank = [0; 4];
-    for (idx, criteria) in criterion.iter().enumerate().take(4) {
-        rank[idx] = match *criteria {
-            RankCriteria::Score    => -score,
-            RankCriteria::Index    => index as i64,
-            RankCriteria::Begin    => *matched_range.get(0).unwrap_or(&0) as i64,
-            RankCriteria::End      => *matched_range.last().unwrap_or(&0) as i64,
-            RankCriteria::NegScore => score,
-            RankCriteria::NegIndex => -(index as i64),
-            RankCriteria::NegBegin => -(*matched_range.get(0).unwrap_or(&0) as i64),
-            RankCriteria::NegEnd   => -(*matched_range.last().unwrap_or(&0) as i64),
-        }
-    }
+    let begin = *matched_range.get(0).unwrap_or(&0) as i64;
+    let end = *matched_range.last().unwrap_or(&0) as i64;
+    let rank = build_rank(criterion, -score, index as i64, begin, end);
 
     let mut item = MatchedItem::new(index);
     item.set_matched_range(MatchedRange::Chars(matched_range));
@@ -245,6 +289,43 @@ fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteri
     Some(item)
 }
 
+fn match_item_regex(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
+    let matched_result = if query.empty() {
+        Some((0, 0))
+    } else {
+        score::regex_match(item.get_text(), query.get_regex())
+    };
+
+    if matched_result == None {
+        return None;
+    }
+
+    let (begin, end) = matched_result.unwrap();
+    let score = end - begin;
+    let rank = build_rank(criterion, score as i64, index as i64, begin as i64, end as i64);
+
+    let mut item = MatchedItem::new(index);
+    item.set_matched_range(MatchedRange::Range(begin, end));
+    item.set_rank(rank);
+    Some(item)
+}
+
+fn build_rank(criterion: &[RankCriteria], score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
+    let mut rank = [0; 4];
+    for (idx, criteria) in criterion.iter().enumerate().take(4) {
+        rank[idx] = match *criteria {
+            RankCriteria::Score    => score,
+            RankCriteria::Index    => index,
+            RankCriteria::Begin    => begin,
+            RankCriteria::End      => end,
+            RankCriteria::NegScore => -score,
+            RankCriteria::NegIndex => -index,
+            RankCriteria::NegBegin => -begin,
+            RankCriteria::NegEnd   => -end,
+        }
+    }
+    rank
+}
 
 struct MatcherCache {
     pub matched_items: Arc<RwLock<OrderedVec<MatchedItem>>>,
@@ -291,6 +372,7 @@ struct Query {
     query: String,
     query_chars: Vec<char>,
     query_lower_chars: Vec<char>,
+    regex: Option<Regex>,
 }
 
 impl Query {
@@ -299,6 +381,7 @@ impl Query {
             query: query.to_string(),
             query_chars: query.chars().collect(),
             query_lower_chars: query.to_lowercase().chars().collect(),
+            regex: Regex::new(query).ok(),
         }
     }
 
@@ -312,5 +395,13 @@ impl Query {
 
     pub fn get_lower_chars(&self) -> &[char] {
         &self.query_lower_chars
+    }
+
+    pub fn get_regex(&self) -> &Option<Regex> {
+        &self.regex
+    }
+
+    pub fn empty(&self) -> bool {
+        &self.query == ""
     }
 }

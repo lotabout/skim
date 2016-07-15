@@ -5,6 +5,8 @@
 
 use std::cmp::max;
 use std::cell::RefCell;
+use regex::Regex;
+
 const BONUS_UPPER_MATCH: i64 = 10;
 const BONUS_ADJACENCY: i64 = 10;
 const BONUS_SEPARATOR: i64 = 20;
@@ -112,6 +114,23 @@ pub fn fuzzy_match(choice: &[char],
     }
     picked.reverse();
     Some((score, picked))
+}
+
+pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)>{
+    match *pattern {
+        Some(ref pat) => {
+            let ret = pat.find(choice);
+            if ret.is_none() {
+                return None;
+            }
+
+            let (start, end) = ret.unwrap();
+            let first = (&choice[0..start]).chars().count();
+            let last = first + (&choice[start..end]).chars().count();
+            Some((first, last))
+        }
+        None => None,
+    }
 }
 
 #[cfg(test)]
