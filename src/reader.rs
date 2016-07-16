@@ -11,6 +11,7 @@ use util::eventbox::EventBox;
 use event::Event;
 use item::Item;
 use getopts;
+use regex::Regex;
 
 const READER_EVENT_DURATION: u64 = 30;
 
@@ -21,6 +22,9 @@ pub struct Reader {
     items: Arc<RwLock<Vec<Item>>>, // all items
     use_ansi_color: bool,
     default_arg: String,
+    transform_fields: Vec<FieldRange>,
+    matching_fields: Vec<FieldRange>,
+    delimiter: Regex,
 }
 
 impl Reader {
@@ -32,6 +36,9 @@ impl Reader {
                items: items,
                use_ansi_color: false,
                default_arg: String::new(),
+               transform_fields: Vec::new(),
+               matching_fields: Vec::new(),
+               delimiter: Regex::new(".*? ").unwrap(),
         }
     }
 
@@ -108,7 +115,11 @@ impl Reader {
                         }
                     }
                     let mut items = self.items.write().unwrap();
-                    items.push(Item::new(input, self.use_ansi_color));
+                    items.push(Item::new(input,
+                                         self.use_ansi_color,
+                                         &self.transform_fields,
+                                         &self.matching_fields,
+                                         &self.delimiter));
                 }
                 Err(_err) => {} // String not UTF8 or other error, skip.
             }
@@ -121,3 +132,9 @@ impl Reader {
     }
 }
 
+pub enum FieldRange {
+    Single(i64),
+    LeftInf(i64),
+    RightInf(i64),
+    Both(i64, i64),
+}
