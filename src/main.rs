@@ -58,6 +58,9 @@ fn real_main() -> i32 {
     opts.optflag("i", "interactive", "Use skim as an interactive interface");
     opts.optflag("", "regex", "use regex instead of fuzzy match");
     opts.optopt("q", "query", "specify the initial query", "\"\"");
+    opts.optopt("d", "delimiter", "specify the delimiter(in REGEX) for fields", "\\t");
+    opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
+    opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
 
     let default_options = match env::var("SKIM_DEFAULT_OPTIONS") {
         Ok(val) => val,

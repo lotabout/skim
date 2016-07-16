@@ -74,6 +74,19 @@ impl Item {
     pub fn get_ansi_states(&self) -> &Vec<(usize, attr_t)> {
         &self.ansi_states
     }
+
+    pub fn in_matching_range(&self, begin: usize, end: usize) -> bool {
+        if self.matching_ranges.len() <= 0 {
+            return true;
+        }
+
+        for &(start, stop) in self.matching_ranges.iter() {
+            if begin >= start && end <= stop {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> String {
@@ -140,7 +153,7 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
         FieldRange::Both(left, right) => {
             let left = if left >= 0 {left} else {length + left};
             let right = if right >= 0 {right} else {length + right};
-            if left >= right {
+            if left >= right || left >= length || right < 0 {
                 None
             } else {
                 Some((if left < 0 {0} else {left as usize},
@@ -254,6 +267,8 @@ mod test {
         assert_eq!(super::parse_field_range(&Both(-9, 1), 10), None);
         assert_eq!(super::parse_field_range(&Both(-9, 2), 10), Some((1,2)));
         assert_eq!(super::parse_field_range(&Both(-1,0), 10), None);
+        assert_eq!(super::parse_field_range(&Both(11,20), 10), None);
+        assert_eq!(super::parse_field_range(&Both(-10,-10), 10), None);
     }
 
     #[test]
