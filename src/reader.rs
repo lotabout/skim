@@ -38,7 +38,7 @@ impl Reader {
                default_arg: String::new(),
                transform_fields: Vec::new(),
                matching_fields: Vec::new(),
-               delimiter: Regex::new(".*? ").unwrap(),
+               delimiter: Regex::new(r".*?\t").unwrap(),
         }
     }
 
