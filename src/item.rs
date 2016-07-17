@@ -6,42 +6,58 @@ use ncurses::*;
 use ansi::parse_ansi;
 use regex::Regex;
 use reader::FieldRange;
+use std::mem;
 
 pub struct Item {
-    orig_text: String,
+    output_text: String,
     pub text: String,
     text_lower_chars: Vec<char>, // lower case version of text.
     ansi_states: Vec<(usize, attr_t)>,
     using_transform_fields: bool,
     matching_ranges: Vec<(usize, usize)>,
+    ansi_enabled: bool,
 }
 
 impl Item {
-    pub fn new(text: String,
-               use_ansi: bool,
+    pub fn new(orig_text: String,
+               ansi_enabled: bool,
                trans_fields: &[FieldRange],
                matching_fields: &[FieldRange],
                delimiter: &Regex) -> Self {
+        let using_transform_fields = trans_fields.len() > 0;
 
-        let (orig_text, states) = if use_ansi {
-             parse_ansi(&text)
-        } else {
-            (text, Vec::new())
-        };
+        //        transformed | ANSI             | output
+        //------------------------------------------------------
+        //                    +- T -> trans+ANSI | ANSI
+        //                    |                  |
+        //      +- T -> trans +- F -> trans      | orig
+        // orig |                                |
+        //      +- F -> orig  +- T -> ANSI     ==| ANSI
+        //                    |                  |
+        //                    +- F -> orig       | orig
 
-        let text = if trans_fields.len() > 0 {
-            parse_transform_fields(delimiter, &orig_text, trans_fields)
+        let (text, states_text) = if using_transform_fields && ansi_enabled {
+            // ansi and transform
+            parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
+        } else if using_transform_fields {
+            // transformed, not ansi
+            (parse_transform_fields(delimiter, &orig_text, trans_fields), Vec::new())
+        } else if ansi_enabled {
+            // not transformed, ansi
+            parse_ansi(&orig_text)
         } else {
-            String::new()
+            // normal case
+            ("".to_string(), Vec::new())
         };
 
         let mut ret = Item {
-            orig_text: orig_text,
+            output_text: orig_text,
             text: text,
             text_lower_chars: Vec::new(),
-            ansi_states: states,
+            ansi_states: states_text,
             using_transform_fields: trans_fields.len() > 0,
             matching_ranges: Vec::new(),
+            ansi_enabled: ansi_enabled,
         };
 
         let lower_chars = ret.get_text().to_lowercase().chars().collect();
@@ -56,15 +72,23 @@ impl Item {
     }
 
     pub fn get_text(&self) -> &str {
-        if self.using_transform_fields {
-            &self.text
+        if !self.using_transform_fields && !self.ansi_enabled {
+            &self.output_text
         } else {
-            &self.orig_text
+            &self.text
         }
     }
 
-    pub fn get_orig_text(&self) -> &str {
-        &self.orig_text
+    pub fn get_output_text(&mut self) -> &str {
+        if self.using_transform_fields && self.ansi_enabled {
+            let (text, _) = parse_ansi(&self.output_text);
+            let _ = mem::replace(&mut self.output_text, text);
+            &self.output_text
+        } else if !self.using_transform_fields && self.ansi_enabled {
+            &self.text
+        } else {
+            &self.output_text
+        }
     }
 
     pub fn get_lower_chars(&self) -> &[char] {

@@ -128,9 +128,9 @@ impl Model {
 
         let mut selected = self.selected_indics.iter().collect::<Vec<&usize>>();
         selected.sort();
-        let items = self.items.read().unwrap();
+        let mut items = self.items.write().unwrap();
         for index in selected {
-            println!("{}", items[*index].get_orig_text());
+            println!("{}", items[*index].get_output_text());
         }
     }
 
