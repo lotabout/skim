@@ -25,6 +25,7 @@ pub struct Reader {
     transform_fields: Vec<FieldRange>,
     matching_fields: Vec<FieldRange>,
     delimiter: Regex,
+    replace_str: String,
 }
 
 impl Reader {
@@ -39,6 +40,7 @@ impl Reader {
                transform_fields: Vec::new(),
                matching_fields: Vec::new(),
                delimiter: Regex::new(r".*?\t").unwrap(),
+               replace_str: "{}".to_string(),
         }
     }
 
@@ -46,7 +48,7 @@ impl Reader {
     fn get_command_output(&self, arg: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Error>> {
         let mut command = try!(Command::new("sh")
                            .arg("-c")
-                           .arg(self.cmd.replace("{}", arg))
+                           .arg(self.cmd.replace(&self.replace_str, arg))
                            .stdout(Stdio::piped())
                            .stderr(Stdio::null())
                            .spawn());
@@ -90,6 +92,10 @@ impl Reader {
                 .filter(|range| range.is_some())
                 .map(|range| range.unwrap())
                 .collect();
+        }
+
+        if let Some(replace_str) = options.opt_str("I") {
+            self.replace_str = replace_str.clone();
         }
     }
 

@@ -61,6 +61,7 @@ fn real_main() -> i32 {
     opts.optopt("d", "delimiter", "specify the delimiter(in REGEX) for fields", "\\t");
     opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
     opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
+    opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
 
     let default_options = match env::var("SKIM_DEFAULT_OPTIONS") {
         Ok(val) => val,
