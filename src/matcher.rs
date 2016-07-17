@@ -286,6 +286,11 @@ fn match_item_fuzzy(index: usize, item: &Item, query: &Query, criterion: &[RankC
 
     let begin = *matched_range.get(0).unwrap_or(&0) as i64;
     let end = *matched_range.last().unwrap_or(&0) as i64;
+
+    if !query.empty() && !item.in_matching_range(begin as usize, (end+1) as usize) {
+        return None;
+    }
+
     let rank = build_rank(criterion, -score, index as i64, begin, end);
 
     let mut item = MatchedItem::new(index);
@@ -306,6 +311,11 @@ fn match_item_regex(index: usize, item: &Item, query: &Query, criterion: &[RankC
     }
 
     let (begin, end) = matched_result.unwrap();
+
+    if !query.empty() && !item.in_matching_range(begin, end) {
+        return None;
+    }
+
     let score = end - begin;
     let rank = build_rank(criterion, score as i64, index as i64, begin as i64, end as i64);
 

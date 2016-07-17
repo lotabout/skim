@@ -128,9 +128,9 @@ impl Model {
 
         let mut selected = self.selected_indics.iter().collect::<Vec<&usize>>();
         selected.sort();
-        let items = self.items.read().unwrap();
+        let mut items = self.items.write().unwrap();
         for index in selected {
-            println!("{}", items[*index].text);
+            println!("{}", items[*index].get_output_text());
         }
     }
 
@@ -238,7 +238,7 @@ impl Model {
                     0
                 };
 
-                let (text, mut idx) = reshape_string(&item.text.chars().collect::<Vec<char>>(),
+                let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
                                                      (self.max_x-3) as usize,
                                                      self.hscroll_offset,
                                                      matched_end_pos);
@@ -292,7 +292,7 @@ impl Model {
             }
             Some(MatchedRange::Range(start, end)) => {
                 // pass
-                let (text, mut idx) = reshape_string(&item.text.chars().collect::<Vec<char>>(),
+                let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
                                                      (self.max_x-3) as usize,
                                                      self.hscroll_offset,
                                                      end);
