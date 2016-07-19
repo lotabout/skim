@@ -1,3 +1,5 @@
+Please do NOT clone the project for now, I'm testing the CI build.
+
 Fuzzy Finder in Rust.
 
 TODO: add a new gif demo with new name.

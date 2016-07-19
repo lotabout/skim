@@ -10,6 +10,11 @@ install_c_toolchain() {
             sudo apt-get install -y --no-install-recommends \
                  gcc-aarch64-linux-gnu libc6-arm64-cross libc6-dev-arm64-cross
             ;;
+
+        x86_64-apple-darwin)
+            sudo brew install ncurses
+            sudo brew link ncurses
+            ;;
         *)
             # For other targets, this is handled by addons.apt.packages in .travis.yml
             ;;
