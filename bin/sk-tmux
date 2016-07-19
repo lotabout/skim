@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# sk-tmux: starts skim in a tmux pane
+# usage: sk-tmux [-u|-d [HEIGHT[%]]] [-l|-r [WIDTH[%]]] [--] [sk OPTIONS]
+
+# The MIT License (MIT)
+# 
+# Copyright (c) 2016 Junegunn Choi
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+#
+# Modified by Jinzhouz Zhang
+
+fail() {
+  >&2 echo "$1"
+  exit 2
+}
+
+sk="$(command -v sk 2> /dev/null)" || sk="$(dirname "$0")/sk"
+[[ -x "$sk" ]] || fail 'sk executable not found'
+
+args=()
+opt=""
+skip=""
+swap=""
+close=""
+term=""
+[[ -n "$LINES" ]] && lines=$LINES || lines=$(tput lines)
+
+help() {
+  >&2 echo 'usage: sk-tmux [-u|-d [HEIGHT[%]]] [-l|-r [WIDTH[%]]] [--] [sk OPTIONS]
+
+  Layout
+    -u [HEIGHT[%]]  Split above (up)
+    -d [HEIGHT[%]]  Split below (down)
+    -l [WIDTH[%]]   Split left
+    -r [WIDTH[%]]   Split right
+
+    (default: -d 50%)
+'
+  exit
+}
+
+while [[ $# -gt 0 ]]; do
+  arg="$1"
+  shift
+  [[ -z "$skip" ]] && case "$arg" in
+    -)
+      term=1
+      ;;
+    --help)
+      help
+      ;;
+    --version)
+      echo "sk-tmux (with sk $("$sk" --version))"
+      exit
+      ;;
+    -w*|-h*|-d*|-u*|-r*|-l*)
+      if [[ "$arg" =~ ^.[lrw] ]]; then
+        opt="-h"
+        if [[ "$arg" =~ ^.l ]]; then
+          opt="$opt -d"
+          swap="; swap-pane -D ; select-pane -L"
+          close="; tmux swap-pane -D"
+        fi
+      else
+        opt=""
+        if [[ "$arg" =~ ^.u ]]; then
+          opt="$opt -d"
+          swap="; swap-pane -D ; select-pane -U"
+          close="; tmux swap-pane -D"
+        fi
+      fi
+      if [[ ${#arg} -gt 2 ]]; then
+        size="${arg:2}"
+      else
+        if [[ "$1" =~ ^[0-9]+%?$ ]]; then
+          size="$1"
+          shift
+        else
+          continue
+        fi
+      fi
+
+      if [[ "$size" =~ %$ ]]; then
+        size=${size:0:((${#size}-1))}
+        if [[ -n "$swap" ]]; then
+          opt="$opt -p $(( 100 - size ))"
+        else
+          opt="$opt -p $size"
+        fi
+      else
+        if [[ -n "$swap" ]]; then
+          if [[ "$arg" =~ ^.l ]]; then
+            [[ -n "$COLUMNS" ]] && max=$COLUMNS || max=$(tput cols)
+          else
+            max=$lines
+          fi
+          size=$(( max - size ))
+          [[ $size -lt 0 ]] && size=0
+          opt="$opt -l $size"
+        else
+          opt="$opt -l $size"
+        fi
+      fi
+      ;;
+    --)
+      # "--" can be used to separate sk-tmux options from sk options to
+      # avoid conflicts
+      skip=1
+      continue
+      ;;
+    *)
+      args+=("$arg")
+      ;;
+  esac
+  [[ -n "$skip" ]] && args+=("$arg")
+done
+
+if [[ -z "$TMUX" ]] || [[ "$lines" -le 15 ]]; then
+  "$sk" "${args[@]}"
+  exit $?
+fi
+
+# Handle zoomed tmux pane by moving it to a temp window
+if tmux list-panes -F '#F' | grep -q Z; then
+  zoomed=1
+  original_window=$(tmux display-message -p "#{window_id}")
+  tmp_window=$(tmux new-window -d -P -F "#{window_id}" "bash -c 'while :; do for c in \\| / - \\\\; do sleep 0.2; printf \"\\r\$c sk-tmux is running\\r\"; done; done'")
+  tmux swap-pane -t $tmp_window \; select-window -t $tmp_window
+fi
+
+set -e
+
+# Clean up named pipes on exit
+id=$RANDOM
+argsf="${TMPDIR:-/tmp}/sk-args-$id"
+fifo1="${TMPDIR:-/tmp}/sk-fifo1-$id"
+fifo2="${TMPDIR:-/tmp}/sk-fifo2-$id"
+fifo3="${TMPDIR:-/tmp}/sk-fifo3-$id"
+cleanup() {
+  rm -f $argsf $fifo1 $fifo2 $fifo3
+
+  # Remove temp window if we were zoomed
+  if [[ -n "$zoomed" ]]; then
+    tmux swap-pane -t $original_window \; \
+      select-window -t $original_window \; \
+      kill-window -t $tmp_window \; \
+      resize-pane -Z
+  fi
+}
+trap cleanup EXIT SIGINT SIGTERM
+
+envs="env TERM=$TERM "
+[[ -n "$sk_DEFAULT_OPTS"    ]] && envs="$envs SKIM_DEFAULT_OPTS=$(printf %q "$sk_DEFAULT_OPTS")"
+[[ -n "$sk_DEFAULT_COMMAND" ]] && envs="$envs SKIM_DEFAULT_COMMAND=$(printf %q "$sk_DEFAULT_COMMAND")"
+
+mkfifo -m o+w $fifo2
+mkfifo -m o+w $fifo3
+
+# Build arguments to sk
+opts=""
+for arg in "${args[@]}"; do
+  arg="${arg//\\/\\\\}"
+  arg="${arg//\"/\\\"}"
+  arg="${arg//\`/\\\`}"
+  arg="${arg//$/\\$}"
+  opts="$opts \"$arg\""
+done
+
+if [[ -n "$term" ]] || [[ -t 0 ]]; then
+  cat <<< "\"$sk\" $opts > $fifo2; echo \$? > $fifo3 $close" > $argsf
+  tmux set-window-option synchronize-panes off \;\
+    set-window-option remain-on-exit off \;\
+    split-window $opt "cd $(printf %q "$PWD");$envs bash $argsf" $swap \
+    > /dev/null 2>&1
+else
+  mkfifo $fifo1
+  cat <<< "\"$sk\" $opts < $fifo1 > $fifo2; echo \$? > $fifo3 $close" > $argsf
+  tmux set-window-option synchronize-panes off \;\
+    set-window-option remain-on-exit off \;\
+    split-window $opt "$envs bash $argsf" $swap \
+    > /dev/null 2>&1
+  cat <&0 > $fifo1 &
+fi
+cat $fifo2
+exit "$(cat $fifo3)"
+
