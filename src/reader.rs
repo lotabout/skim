@@ -176,6 +176,11 @@ pub enum FieldRange {
 // "0", "0..", "..10", "1..10", etc.
 fn parse_range(range: &str) -> Option<FieldRange> {
     use self::FieldRange::*;
+
+    if range == ".." {
+        return Some(RightInf(0));
+    }
+
     let range_string: Vec<&str> = range.split("..").collect();
     if range_string.len() <= 0 || range_string.len() > 2 {
         return None;
@@ -189,7 +194,7 @@ fn parse_range(range: &str) -> Option<FieldRange> {
     }
 
     if start.is_none() && end.is_none() {
-        Some(RightInf(0))
+        None
     } else if end.is_none() {
         // 1..
         Some(RightInf(start.unwrap()))
