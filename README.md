@@ -1,8 +1,4 @@
-Please do NOT clone the project for now, I'm testing the CI build.
-
-Fuzzy Finder in Rust.
-
-TODO: add a new gif demo with new name.
+Skim: Fuzzy Finder in Rust. [![Build Status](https://travis-ci.org/lotabout/skim.svg?branch=master)](https://travis-ci.org/lotabout/skim)
 
 # Usage
 
@@ -12,16 +8,16 @@ Current requires nightly rust to build. clone the repo and run:
 cargo build --release
 ```
 
-and put the resulting `target/release/skim` executable on your PATH.
+and put the resulting `target/release/sk` executable on your PATH.
 
 Now try out the following commands:
 
 ```
 # directly invoke skim
-skim
+sk
 
 # or pipe some input to it: (press TAB key select multiple items with -m enabled)
-vim $(find . -name "*.rs" | skim -m)
+vim $(find . -name "*.rs" | sk -m)
 ```
 The above command will allow you to select files with ".rs" extension and open
 the ones you selected in vim.
