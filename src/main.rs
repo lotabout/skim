@@ -62,6 +62,7 @@ fn real_main() -> i32 {
     opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
     opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
+    opts.optflag("", "version", "print out the current version of skim");
 
     let default_options = match env::var("SKIM_DEFAULT_OPTIONS") {
         Ok(val) => val,
@@ -86,6 +87,12 @@ fn real_main() -> i32 {
     // print help message
     if options.opt_present("h") {
         print_usage(&program, opts);
+        return 0;
+    }
+
+    // print version
+    if options.opt_present("version") {
+        println!("0.1.2");
         return 0;
     }
 
