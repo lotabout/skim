@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+# This script trys to download the correct version of binary from github.
+# You can download it manually and put it(i.e. `sk`) under `bin/`.
+#
+# If you know rust or have rust installed, you can build it with
+# `cargo build --release`
+# Note that nightly rust is required.
+
+set -u
+
+version="0.1.2"
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+skim_base="$(pwd)"
+
+check_binary() {
+  echo -n "  - Checking skim executable ... "
+  local output
+  output=$("$skim_base"/bin/sk --version 2>&1)
+  if [ $? -ne 0 ]; then
+    echo "Error: $output"
+  elif [ "$version" != "$output" ]; then
+    echo "$output != $version"
+  else
+    echo "$output"
+    return 0
+  fi
+  rm -f "$skim_base"/bin/sk
+  return 1
+}
+
+
+# download version
+download() {
+  echo "Downloading bin/sk ..."
+  mkdir -p "$skim_base"/bin && cd "$skim_base"/bin
+  if [ $? -ne 0 ]; then
+    binary_error="Failed to create bin directory"
+    return
+  fi
+
+  check_binary
+
+  local url=https://github.com/lotabout/skim/releases/download/v$version/${1}.tar.gz
+  echo "Downloading: $url"
+  if command -v curl > /dev/null; then
+    curl -fL $url | tar -xz -
+  elif command -v wget > /dev/null; then
+    wget -O - $url | tar -xz -
+  else
+    binary_error="curl or wget not found"
+    return
+  fi
+
+  if [ ! -f $1 ]; then
+    binary_error="Failed to download ${1}"
+    return
+  fi
+}
+
+archi=$(uname -sm)
+case "$archi" in
+  Darwin\ x86_64) download skim-v$version-${binary_arch:-x86_64}-apple-darwin;;
+  Linux\ x86_64)  download skim-v$version-${binary_arch:-x86_64}-unknown-linux-gnu;;
+  *) ;;
+esac
+
+echo "Done :)"
