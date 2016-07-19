@@ -12,8 +12,9 @@ install_c_toolchain() {
             ;;
 
         x86_64-apple-darwin)
-            sudo brew install ncurses
-            sudo brew link ncurses
+            brew update
+            brew install homebrew/dupes/ncurses
+            brew link ncurses --force
             ;;
         *)
             # For other targets, this is handled by addons.apt.packages in .travis.yml
