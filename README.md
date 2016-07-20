@@ -1,7 +1,5 @@
 [![Build Status](https://travis-ci.org/lotabout/skim.svg?branch=master)](https://travis-ci.org/lotabout/skim)
 
----
-
 > Life is short, skim!
 
 Half of our lifes we spent on navigation: files, lines, commands... You need
@@ -20,7 +18,7 @@ skim project contains several components:
 
 1. `sk` executable -- the core.
 2. `sk-tmux` -- script for launching `sk` in a tmux plane.
-3. vim/nvim plugin -- to call `sk` inside vim/nvim
+3. vim/nvim plugin -- to call `sk` inside vim/nvim. check [skim.vim](https://github.com/lotabout/skim.vim) for more vim support.
 
 You can directly [download sk executable](https://github.com/lotabout/skim/releases), but extra utilities are recommanded.
 
@@ -129,9 +127,9 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 `sk --bind 'alt-a:select-all,alt-d:deselect-all'`
 
 | Action | Default key |
-|--|--|
-|abort| esc, ctrl-c, ctrl-g, ctrl-q|
-|accept| enter |
+|--------|-------------|
+| abort | esc, ctrl-c, ctrl-g, ctrl-q |
+| accept| enter |
 |backward-char| left, ctrl-b|
 |backward-delete-char| ctrl-h, backspace |
 |backward-kill-word|alt-backspace |
