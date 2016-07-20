@@ -45,9 +45,9 @@ download() {
   local url=https://github.com/lotabout/skim/releases/download/v$version/${1}.tar.gz
   echo "Downloading: $url"
   if command -v curl > /dev/null; then
-    curl -fL $url | tar -xz -
+    curl -fL $url | tar xz
   elif command -v wget > /dev/null; then
-    wget -O - $url | tar -xz -
+    wget -O - $url | tar xz
   else
     binary_error="curl or wget not found"
     return
