@@ -50,6 +50,7 @@ fn real_main() -> i32 {
     opts.optopt("b", "bind", "comma seperated keybindings, such as 'ctrl-j:accept,ctrl-k:kill-line'", "KEY:ACTION");
     opts.optflag("h", "help", "print this help menu");
     opts.optflag("m", "multi", "Enable Multiple Selection");
+    opts.optflag("", "no-multi", "Disable Multiple Selection");
     opts.optopt("p", "prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
@@ -275,6 +276,7 @@ fn real_main() -> i32 {
                 Event::EvActCancel => {}
 
                 Event::EvActClearScreen => {
+                    model.display();
                     immediate_refresh = true;
                 }
 

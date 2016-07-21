@@ -110,6 +110,9 @@ impl Model {
         if options.opt_present("m") {
             self.multi_selection = true;
         }
+        if options.opt_present("no-multi") {
+            self.multi_selection = false;
+        }
         if let Some(prompt) = options.opt_str("p") {
             self.prompt = prompt.clone();
         }
