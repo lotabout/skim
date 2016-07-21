@@ -164,7 +164,6 @@ impl Model {
 
     pub fn print_info(&self) {
         {*self.update_finished.lock().unwrap() = false;}
-        let (orig_y, orig_x) = self.curses.get_yx();
 
         self.curses.mv(self.max_y-2, 0);
         self.curses.clrtoeol();
@@ -190,13 +189,12 @@ impl Model {
             self.curses.cprint(format!(" ({}%)", self.percentage).as_ref(), COLOR_INFO, false);
         }
 
-        self.curses.mv(orig_y, orig_x);
+        self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
         {*self.update_finished.lock().unwrap() = true;}
     }
 
     pub fn print_items(&self) {
         {*self.update_finished.lock().unwrap() = false;}
-        let (orig_y, orig_x) = self.curses.get_yx();
 
         let mut matched_items = self.matched_items.write().unwrap();
         let item_start_pos = self.item_cursor - self.line_cursor;
@@ -214,7 +212,7 @@ impl Model {
             }
         }
 
-        self.curses.mv(orig_y, orig_x);
+        self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
         {*self.update_finished.lock().unwrap() = true;}
     }
 
@@ -369,7 +367,7 @@ impl Model {
 
     // the terminal resizes, so we need to recalculate the margins.
     pub fn resize(&mut self) {
-        clear();
+        self.curses.clear();
         endwin();
         self.refresh();
         let (max_y, max_x) = self.curses.get_maxyx();

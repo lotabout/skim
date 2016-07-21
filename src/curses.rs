@@ -130,13 +130,6 @@ impl Curses {
         mv(y, x);
     }
 
-    pub fn get_yx(&self) -> (i32, i32) {
-        let mut y = 0;
-        let mut x = 0;
-        getyx(stdscr, &mut y, &mut x);
-        (y, x)
-    }
-
     pub fn get_maxyx(&self) -> (i32, i32) {
         let mut max_y = 0;
         let mut max_x = 0;
@@ -146,6 +139,10 @@ impl Curses {
 
     pub fn clrtoeol(&self) {
         clrtoeol();
+    }
+
+    pub fn clear(&self) {
+        clear();
     }
 
     pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {
