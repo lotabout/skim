@@ -124,7 +124,7 @@ try
   if !has_key(dict, 'source') && !empty($SKIM_DEFAULT_COMMAND)
     let temps.source = tempname()
     call writefile(split($SKIM_DEFAULT_COMMAND, "\n"), temps.source)
-    let dict.source = (empty($SHELL) ? 'sh' : $SHELL) . ' ' . s:shellesc(temps.source)
+    let dict.source = (empty($SHELL) ? 'sh' : $SHELL) . ' ' . s:shellesc(temps.source) . ' 2>/dev/null'
   endif
 
   if has_key(dict, 'source')
