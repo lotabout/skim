@@ -242,7 +242,7 @@ impl Model {
                 let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
                                                      (self.max_x-3) as usize,
                                                      self.hscroll_offset,
-                                                     matched_end_pos);
+                                                     matched_end_pos + 1);
                 let mut matched_indics_iter = matched_indics.iter().peekable();
                 let mut ansi_states = item.get_ansi_states().iter().peekable();
 
@@ -604,7 +604,7 @@ fn reshape_string(text: &Vec<char>,
     let mut ret_pos;
 
     // trim right, so that 'String' -> 'Str..'
-    let right_pos = 1 + max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));
+    let right_pos = max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-1));
     let mut left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-2);
     ret_pos = left_pos;
 
@@ -677,23 +677,23 @@ mod test {
     #[test]
     fn test_reshape_string() {
         assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 1, 7),
+                                         6, 1, 8),
                    ("..67..".to_string().chars().collect::<Vec<char>>(), 4));
 
         assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         12, 1, 7),
+                                         12, 1, 8),
                    ("123456789".to_string().chars().collect::<Vec<char>>(), 1));
 
         assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 0, 6),
+                                         6, 0, 7),
                    ("..56..".to_string().chars().collect::<Vec<char>>(), 3));
 
         assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         8, 0, 4),
+                                         8, 0, 5),
                    ("012345..".to_string().chars().collect::<Vec<char>>(), 0));
 
         assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         10, 0, 4),
+                                         10, 0, 5),
                    ("0123456789".to_string().chars().collect::<Vec<char>>(), 0));
     }
 
