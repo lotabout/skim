@@ -3,6 +3,7 @@
 
 
 use std::sync::{Arc, RwLock, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use item::{Item, MatchedItem, MatchedRange};
 use ncurses::*;
 use std::cmp::{min, max};
@@ -61,7 +62,7 @@ pub struct Model {
     height: usize,
 
     refresh_block: Arc<Mutex<u64>>,
-    update_finished: Arc<Mutex<bool>>,
+    update_finished: Arc<AtomicBool>,
 
     pub tabstop: usize,
     pub is_interactive: bool,
@@ -94,7 +95,7 @@ impl Model {
             width: (max_x - 2) as usize,
             height: (max_y - 2) as usize,
             refresh_block: Arc::new(Mutex::new(0)),
-            update_finished: Arc::new(Mutex::new(true)),
+            update_finished: Arc::new(AtomicBool::new(true)),
             tabstop: 8,
             curses: curses,
             timer: timer,
@@ -155,18 +156,18 @@ impl Model {
     }
 
     pub fn print_query(&self) {
-        {*self.update_finished.lock().unwrap() = false;}
+        self.update_finished.store(false, Ordering::Relaxed);
         // > query
         self.curses.mv(self.max_y-1, 0);
         self.curses.clrtoeol();
         self.curses.cprint(&self.prompt, COLOR_PROMPT, false);
         self.curses.cprint(&self.query.get_query(), COLOR_NORMAL, true);
         self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
-        {*self.update_finished.lock().unwrap() = true;}
+        self.update_finished.store(true, Ordering::Relaxed);
     }
 
     pub fn print_info(&self) {
-        {*self.update_finished.lock().unwrap() = false;}
+        self.update_finished.store(false, Ordering::Relaxed);
 
         self.curses.mv(self.max_y-2, 0);
         self.curses.clrtoeol();
@@ -193,11 +194,11 @@ impl Model {
         }
 
         self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
-        {*self.update_finished.lock().unwrap() = true;}
+        self.update_finished.store(true, Ordering::Relaxed);
     }
 
     pub fn print_items(&self) {
-        {*self.update_finished.lock().unwrap() = false;}
+        self.update_finished.store(false, Ordering::Relaxed);
 
         let mut matched_items = self.matched_items.write().unwrap();
         let item_start_pos = self.item_cursor - self.line_cursor;
@@ -216,7 +217,7 @@ impl Model {
         }
 
         self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
-        {*self.update_finished.lock().unwrap() = true;}
+        self.update_finished.store(true, Ordering::Relaxed);
     }
 
     fn print_item(&self, matched: &MatchedItem, is_current: bool) {
@@ -355,7 +356,7 @@ impl Model {
     }
 
     pub fn refresh(&self) {
-        if *self.update_finished.lock().unwrap() {
+        if self.update_finished.load(Ordering::Relaxed) {
             refresh();
         }
     }
@@ -409,7 +410,7 @@ impl Model {
     }
 
     pub fn act_backward_char(&mut self) {
-        let _ = self.query.backward_char();
+        self.query.backward_char();
     }
 
     pub fn act_backward_delete_char(&mut self) {
@@ -446,15 +447,15 @@ impl Model {
     }
 
     pub fn act_end_of_line(&mut self) {
-        let _ = self.query.end_of_line();
+        self.query.end_of_line();
     }
 
     pub fn act_forward_char(&mut self) {
-        let _ = self.query.forward_char();
+        self.query.forward_char();
     }
 
     pub fn act_forward_word(&mut self) {
-        let _ = self.query.forward_word();
+        self.query.forward_word();
     }
 
     pub fn act_kill_line(&mut self) {
@@ -559,7 +560,7 @@ fn display_width(text: &[char]) -> usize {
 
 // calculate from left to right, stop when the max_x exceeds
 fn left_fixed(text: &[char], max_x: usize) -> usize {
-    if max_x <= 0 {
+    if max_x == 0 {
         return 1;
     }
 
@@ -570,11 +571,11 @@ fn left_fixed(text: &[char], max_x: usize) -> usize {
             return idx;
         }
     }
-    return text.len();
+    text.len()
 }
 
 fn right_fixed(text: &[char], max_x: usize) -> usize {
-    if max_x <= 0 {
+    if max_x == 0 {
         return text.len()-1;
     }
 
@@ -586,12 +587,11 @@ fn right_fixed(text: &[char], max_x: usize) -> usize {
         }
     }
     return 0;
-
 }
 
 // return a string and its left position in original string
 // matched_end_pos is char-wise
-fn reshape_string(text: &Vec<char>,
+fn reshape_string(text: &[char],
                   container_width: usize,
                   text_start_pos: usize,
                   matched_start_pos: usize,
@@ -600,7 +600,7 @@ fn reshape_string(text: &Vec<char>,
     let full_width = display_width(&text[text_start_pos..]);
 
     if full_width <= container_width {
-        return (text[text_start_pos..].iter().map(|x| *x).collect(), text_start_pos);
+        return (text[text_start_pos..].iter().cloned().collect(), text_start_pos);
     }
 
     let mut ret = Vec::new();
@@ -641,7 +641,7 @@ fn reshape_string(text: &Vec<char>,
     (ret, if left_pos > text_start_pos {left_pos-2} else {left_pos})
 }
 
-pub fn refresh_throttle(refresh_block: Arc<Mutex<u64>>, update_finished: Arc<Mutex<bool>>) {
+pub fn refresh_throttle(refresh_block: Arc<Mutex<u64>>, update_finished: Arc<AtomicBool>) {
     {
         let mut num_blocks = refresh_block.lock().unwrap();
 
@@ -651,7 +651,7 @@ pub fn refresh_throttle(refresh_block: Arc<Mutex<u64>>, update_finished: Arc<Mut
         }
     }
 
-    if *update_finished.lock().unwrap() {
+    if update_finished.load(Ordering::Relaxed) {
         refresh();
     }
 

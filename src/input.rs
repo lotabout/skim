@@ -129,7 +129,7 @@ impl KeyBoard {
     }
 
     pub fn get_key(&mut self) -> Option<Key> {
-        if self.buf.len() <= 0 {
+        if self.buf.is_empty() {
             self.get_chars();
         }
 
@@ -492,4 +492,3 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::CtrlY, (Event::EvActYank, None));
     ret
 }
-

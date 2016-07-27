@@ -145,7 +145,7 @@ fn set_event_throttle<T>(mutex: &Arc<Mutex<EventData<T>>>, cond: &Arc<Condvar>, 
         }
     }
 
-    set_event(&mutex, &cond, e, value);
+    set_event(mutex, cond, e, value);
 
     let mutex = mutex.clone();
     let cond = cond.clone();

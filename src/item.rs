@@ -62,7 +62,7 @@ impl Item {
 
         let lower_chars = ret.get_text().to_lowercase().chars().collect();
         let matching_ranges = if matching_fields.len() > 0 {
-            parse_matching_fields(delimiter, &ret.get_text(), matching_fields)
+            parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
             Vec::new()
         };
@@ -100,16 +100,12 @@ impl Item {
     }
 
     pub fn in_matching_range(&self, begin: usize, end: usize) -> bool {
-        if self.matching_ranges.len() <= 0 {
-            return true;
-        }
-
         for &(start, stop) in self.matching_ranges.iter() {
             if begin >= start && end <= stop {
                 return true;
             }
         }
-        false
+        self.matching_ranges.is_empty()
     }
 }
 

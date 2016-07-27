@@ -49,7 +49,7 @@ impl<'a> Matcher {
                eb_notify: Arc<EventBox<Event>>) -> Self {
 
         let mut cache = HashMap::new();
-        cache.entry("".to_string()).or_insert(MatcherCache::new());
+        cache.entry("".to_string()).or_insert_with(MatcherCache::new);
 
         Matcher {
             eb_req: Arc::new(EventBox::new()),
@@ -89,7 +89,7 @@ impl<'a> Matcher {
 
         if let Some(query) = options.opt_str("q") {
             self.query = Query::new(&query);
-            self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
+            self.cache.entry(query.to_string()).or_insert_with(MatcherCache::new);
         }
     }
 
@@ -128,7 +128,7 @@ impl<'a> Matcher {
 
                     for i in start..end {
                         let ref item = items[i];
-                        if let Some(matched) = match_item(i, &item, &query, &criterion, algorithm) {
+                        if let Some(matched) = match_item(i, item, &query, &criterion, algorithm) {
                             let _ = tx.send(Some(matched));
                         }
                     }
@@ -221,7 +221,7 @@ impl<'a> Matcher {
             self.new_items.write().unwrap().clear();
             self.cache.remove(&query.to_string());
         }
-        self.cache.entry(query.to_string()).or_insert(MatcherCache::new());
+        self.cache.entry(query.to_string()).or_insert_with(MatcherCache::new);
     }
 
     pub fn run(&mut self) {
