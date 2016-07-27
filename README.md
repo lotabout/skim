@@ -2,10 +2,10 @@
 
 > Life is short, skim!
 
-Half of our lifes we spent on navigation: files, lines, commands... You need
-skim! Skim is a general fuzzy finder that trys to save you life.
+Half of our lives is spent on navigation: files, lines, commands... You need
+skim! It is a general fuzzy finder that saves you time.
 
-It read the data source asynchronously.
+It is blazingly fast as it reads the data source asynchronously.
 
 ![skim demo](https://cloud.githubusercontent.com/assets/1527040/16977618/cc75fd3c-4e89-11e6-9b4a-133f3a3ed616.gif)
 
@@ -20,7 +20,7 @@ skim project contains several components:
 2. `sk-tmux` -- script for launching `sk` in a tmux plane.
 3. vim/nvim plugin -- to call `sk` inside vim/nvim. check [skim.vim](https://github.com/lotabout/skim.vim) for more vim support.
 
-You can directly [download sk executable](https://github.com/lotabout/skim/releases), but extra utilities are recommanded.
+You can directly [download sk executable](https://github.com/lotabout/skim/releases), but extra utilities are recommended.
 
 Please put `sk` into you PATH, or add `~/.skim/bin` into your PATH by putting
 the following line into your `~/.bashrc`
