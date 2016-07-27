@@ -39,6 +39,7 @@ impl Query {
     }
 
     pub fn backward_char(&mut self) {
+        if self.index == 0 { return; }
         if let Some(ch) = self.query.get(self.index-1) {
             self.index -= 1;
             self.pos -= if ch.len_utf8() > 1 {2} else {1};
@@ -164,5 +165,16 @@ impl Query {
             modified = self.backward_delete_char() || modified;
         }
         modified
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Query;
+
+    #[test]
+    fn test_backward_char() {
+        // Test that going back from zero does not overflow.
+        Query::new().backward_char();
     }
 }
