@@ -38,7 +38,7 @@ pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
             DEFAULT16
         };
 
-        init_pairs(&base_theme, &theme, is_black);
+        init_pairs(&base_theme, theme, is_black);
         *use_color = true;
     } else {
         *use_color = false;
@@ -180,10 +180,7 @@ fn shadow(default: i16, x: i16) -> i16 {
 
 
 fn attr_color(pair: i16, is_bold: bool) -> attr_t {
-    let mut attr = 0;
-    if pair > COLOR_NORMAL {
-        attr = COLOR_PAIR(pair);
-    }
+    let attr = if pair > COLOR_NORMAL {COLOR_PAIR(pair)} else {0};
 
     attr | if is_bold {A_BOLD()} else {0}
 }

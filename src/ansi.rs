@@ -19,7 +19,7 @@ pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
     // Because ANSI color code can affect text of next lines. We will save the last attribute and
     // add it to the newest line if no new color is specified.
     match RE.find(text) {
-        Some((start, _)) if start <= 0 => {}
+        Some((start, _)) if start == 0 => {}
         Some(_) | None => {
             last_attr.map(|attr| {
                 colors.push((0, attr));
@@ -59,7 +59,7 @@ fn interpret_code(code: &str) -> Option<attr_t> {
     let mut use_fg = true;
 
     let code = &code[2..code.len()-1]; // ^[[1;30;40m -> 1;30;40
-    if code.len() == 0 {
+    if code.is_empty() {
         return None;
     }
 

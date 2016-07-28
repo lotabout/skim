@@ -1,3 +1,4 @@
+#[derive(Default)]
 pub struct Query {
     query: Vec<char>,
     pub index: usize,
@@ -6,11 +7,7 @@ pub struct Query {
 
 impl Query {
     pub fn new() -> Self {
-        Query {
-            query: Vec::new(),
-            index: 0,
-            pos: 0,
-        }
+        Default::default()
     }
 
     pub fn new_with_query(query: &str) -> Self {
@@ -29,7 +26,7 @@ impl Query {
         self.query.insert(self.index, ch);
         self.index += 1;
         self.pos += if ch.len_utf8() > 1 {2} else {1};
-        return true;
+        true
     }
 
     pub fn backward_delete_char(&mut self) -> bool{
@@ -38,20 +35,15 @@ impl Query {
         let ch = self.query.remove(self.index-1);
         self.index -= 1;
         self.pos -= if ch.len_utf8() > 1 {2} else {1};
-        return true;
+        true
     }
 
-    pub fn backward_char(&mut self) -> bool {
-        if self.index <= 0 { return false; }
-
-        match self.query.get(self.index-1) {
-            Some(ch) => {
-                self.index -= 1;
-                self.pos -= if ch.len_utf8() > 1 {2} else {1};
-            }
-            None => {}
+    pub fn backward_char(&mut self) {
+        if self.index == 0 { return; }
+        if let Some(ch) = self.query.get(self.index-1) {
+            self.index -= 1;
+            self.pos -= if ch.len_utf8() > 1 {2} else {1};
         }
-        false
     }
 
     pub fn backward_kill_word(&mut self) -> bool {
@@ -106,40 +98,28 @@ impl Query {
         if self.index == self.query.len() { return false; }
 
         let _ = self.query.remove(self.index);
-        return true;
+        true
     }
 
-    pub fn forward_char(&mut self) -> bool {
-        if self.index == self.query.len() { return false; }
-
-        match self.query.get(self.index) {
-            Some(ch) => {
-                self.index += 1;
-                self.pos += if ch.len_utf8() > 1 {2} else {1};
-            }
-            None => {}
+    pub fn forward_char(&mut self) {
+        if let Some(ch) = self.query.get(self.index) {
+            self.index += 1;
+            self.pos += if ch.len_utf8() > 1 {2} else {1};
         }
-        false
     }
 
-    pub fn forward_word(&mut self) -> bool {
-        let len = self.query.len();
+    pub fn forward_word(&mut self) {
         // skip whitespace
-        while self.index < len {
-            if let Some(&' ') = self.query.get(self.index) {
-                self.forward_char();
-            } else {
-                break;
-            }
+        while let Some(_) = self.query.get(self.index) {
+            self.forward_char();
         }
 
-        while self.index < len {
+        loop {
             match self.query.get(self.index) {
-                Some(&ch) if ch != ' ' => { self.forward_char(); }
-                Some(_) | None => {break;}
+                Some(&ch) if ch != ' ' => self.forward_char(),
+                Some(_) | None => break
             }
         }
-        false
     }
 
     pub fn kill_word(&mut self) -> bool {
@@ -185,5 +165,16 @@ impl Query {
             modified = self.backward_delete_char() || modified;
         }
         modified
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Query;
+
+    #[test]
+    fn test_backward_char() {
+        // Test that going back from zero does not overflow.
+        Query::new().backward_char();
     }
 }

@@ -71,7 +71,7 @@ fn real_main() -> i32 {
     };
 
     let mut args = Vec::new();
-    for option in default_options.split(" ") {
+    for option in default_options.split(' ') {
         args.push(option.to_string());
     }
 
@@ -107,7 +107,7 @@ fn real_main() -> i32 {
     unsafe {
         sigemptyset(&mut sigset);
         sigaddset(&mut sigset, libc::SIGWINCH);
-        pthread_sigmask(libc::SIG_SETMASK, &mut sigset, ptr::null_mut());
+        pthread_sigmask(libc::SIG_SETMASK, &sigset, ptr::null_mut());
     }
 
     // controller variables
@@ -119,7 +119,7 @@ fn real_main() -> i32 {
         // listen to the resize event;
         loop {
             let mut sig = 0;
-            let _errno = unsafe {sigwait(&mut sigset, &mut sig)};
+            let _errno = unsafe {sigwait(&sigset, &mut sig)};
             eb_clone.set(Event::EvResize, Box::new(true));
         }
     });

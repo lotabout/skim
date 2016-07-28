@@ -118,15 +118,12 @@ impl Reader {
             });
 
             for (e, val) in self.eb_req.wait() {
-                match e {
-                    Event::EvReaderResetQuery => {
-                        let mut items = self.items.write().unwrap();
-                        items.clear();
-                        arg = *val.downcast::<String>().unwrap();
-                        self.eb.set(Event::EvReaderSync, Box::new(true));
-                        let _ = self.eb_req.wait_for(Event::EvModelAck);
-                    }
-                    _ => {}
+                if e == Event::EvReaderResetQuery {
+                    let mut items = self.items.write().unwrap();
+                    items.clear();
+                    arg = *val.downcast::<String>().unwrap();
+                    self.eb.set(Event::EvReaderSync, Box::new(true));
+                    let _ = self.eb_req.wait_for(Event::EvModelAck);
                 }
             }
         }
@@ -137,11 +134,11 @@ impl Reader {
             let mut input = String::new();
             match source.read_line(&mut input) {
                 Ok(n) => {
-                    if n <= 0 { break; }
+                    if n == 0 { break; }
 
-                    if input.ends_with("\n") {
+                    if input.ends_with('\n') {
                         input.pop();
-                        if input.ends_with("\r") {
+                        if input.ends_with('\r') {
                             input.pop();
                         }
                     }
@@ -182,7 +179,7 @@ fn parse_range(range: &str) -> Option<FieldRange> {
     }
 
     let range_string: Vec<&str> = range.split("..").collect();
-    if range_string.len() <= 0 || range_string.len() > 2 {
+    if range_string.is_empty() || range_string.len() > 2 {
         return None;
     }
 

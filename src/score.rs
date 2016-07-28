@@ -74,7 +74,7 @@ pub fn fuzzy_match(choice: &[char],
                 }
             }
 
-            if vec.len() <= 0 {
+            if vec.is_empty() {
                 // not matched
                 return None;
             }
