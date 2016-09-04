@@ -616,7 +616,6 @@ fn reshape_string(text: &[char],
     } else if w1 <= w3 && w1 + w2 <= container_width-2 {
         // left-fixed
         let right_pos = text_start_pos + left_fixed(&text[text_start_pos..], container_width-2);
-        println!("right_pos = {}", right_pos);
         (text_start_pos, right_pos)
     } else {
         // left-right
