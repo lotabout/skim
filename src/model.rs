@@ -347,7 +347,7 @@ impl Model {
             // handle tabstop
             let mut y = 0;
             let mut x = 0;
-            getyx(stdscr, &mut y, &mut x);
+            getyx(stdscr(), &mut y, &mut x);
             let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
             for _ in 0..rest {
                 self.curses.caddch(' ', color, is_bold);
