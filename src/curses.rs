@@ -133,7 +133,7 @@ impl Curses {
     pub fn get_maxyx(&self) -> (i32, i32) {
         let mut max_y = 0;
         let mut max_x = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
+        getmaxyx(stdscr(), &mut max_y, &mut max_x);
         (max_y, max_x)
     }
 
