@@ -20,6 +20,8 @@ skim project contains several components:
 2. `sk-tmux` -- script for launching `sk` in a tmux plane.
 3. vim/nvim plugin -- to call `sk` inside vim/nvim. check [skim.vim](https://github.com/lotabout/skim.vim) for more vim support.
 
+
+## Linux
 You can directly [download sk executable](https://github.com/lotabout/skim/releases), but extra utilities are recommended.
 
 Please put `sk` into you PATH, or add `~/.skim/bin` into your PATH by putting
@@ -27,6 +29,14 @@ the following line into your `~/.bashrc`
 
 ```
 export PATH="$PATH:$HOME/.skim/bin"
+```
+
+## OSX
+
+Use Homebrew:
+
+```
+brew install sbdchd/skim/skim
 ```
 
 **Using Git**
