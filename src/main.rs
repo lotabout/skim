@@ -16,6 +16,7 @@ mod orderedvec;
 mod curses;
 mod query;
 mod ansi;
+mod reader_new;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -42,7 +43,7 @@ fn main() {
     std::process::exit(exit_code);
 }
 
-fn real_main() -> i32 {
+fn real_main_old() -> i32 {
 
     // option parsing
 
@@ -440,4 +441,27 @@ fn real_main() -> i32 {
 fn print_usage(program: &str, opts: Options) {
     let brief = format!("Usage: {} [options]", program);
     print!("{}", opts.usage(&brief));
+}
+
+
+use std::sync::mpsc::{sync_channel, channel};
+use std::io;
+fn real_main() -> i32 {
+    let (tx_reader, rx_reader) = channel();
+    let (tx_item, rx_item) = sync_channel(1024);
+    let mut reader = reader_new::Reader::new(rx_reader, tx_item);
+    thread::spawn(move || {
+        reader.run();
+    });
+
+    tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
+
+    //let mut guess = String::new();
+    //io::stdin().read_line(&mut guess)
+        //.expect("Failed to read line");
+    loop {
+
+    }
+
+    0
 }

@@ -19,6 +19,17 @@ pub struct Item {
 }
 
 impl Item {
+    pub fn new_plain(text: String) -> Self {
+        Item {
+            output_text: "".to_string(),
+            text: text,
+            text_lower_chars: Vec::new(),
+            ansi_states: Vec::new(),
+            using_transform_fields: false,
+            matching_ranges: Vec::new(),
+            ansi_enabled: false,
+        }
+    }
     pub fn new(orig_text: String,
                ansi_enabled: bool,
                trans_fields: &[FieldRange],
