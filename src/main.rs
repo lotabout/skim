@@ -36,7 +36,7 @@ use curses::{ColorTheme, Curses};
 use getopts::Options;
 use std::env;
 use orderedvec::OrderedVec;
-use item::MatchedItem;
+use item::{Item, MatchedItem};
 
 fn main() {
     let exit_code = real_main();
@@ -456,12 +456,17 @@ fn real_main() -> i32 {
 
     tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
 
-    //let mut guess = String::new();
-    //io::stdin().read_line(&mut guess)
-        //.expect("Failed to read line");
-    loop {
-
+    let mut counter = 0;
+    while let Ok((ev, arg)) = rx_item.recv() {
+        println!("{:?}, {:?}", ev, *arg.downcast::<Item>().unwrap());
+        counter += 1;
+        if counter >= 10 {break;}
     }
 
+    tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
+
+    while let Ok((ev, arg)) = rx_item.recv() {
+        println!("== {:?}, {:?}", ev, *arg.downcast::<Item>().unwrap());
+    }
     0
 }

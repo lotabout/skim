@@ -8,6 +8,7 @@ use regex::Regex;
 use reader::FieldRange;
 use std::mem;
 
+#[derive(Debug)]
 pub struct Item {
     output_text: String,
     pub text: String,
@@ -117,6 +118,20 @@ impl Item {
             }
         }
         self.matching_ranges.is_empty()
+    }
+}
+
+impl Clone for Item {
+    fn clone(&self) -> Item {
+        Item {
+            output_text: self.output_text.clone(),
+            text: self.text.clone(),
+            text_lower_chars: Vec::new(),
+            ansi_states: Vec::new(),
+            using_transform_fields: false,
+            matching_ranges: Vec::new(),
+            ansi_enabled: false,
+        }
     }
 }
 

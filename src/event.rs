@@ -6,10 +6,12 @@ pub type EventArg = Box<Any + 'static + Send>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Event {
+    EvReaderRestart,
+    EvReaderEnd,
+
     EvReaderNewItem,
     EvReaderResetQuery,
     EvReaderSync,
-    EvReaderRestart,
     EvMatcherNewItem,
     EvMatcherResetQuery,
     EvMatcherUpdateProcess,
