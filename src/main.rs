@@ -20,6 +20,8 @@ mod ansi;
 mod reader_new;
 mod matcher_new;
 mod model_new;
+mod query_new;
+mod input_new;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -450,6 +452,15 @@ fn print_usage(program: &str, opts: Options) {
 use std::sync::mpsc::{sync_channel, channel};
 use std::io;
 fn real_main() -> i32 {
+
+    // parse options
+
+    // bring up needed sub module
+    let mut query = query_new::Query::new(None);
+
+    // the data flow:
+    // reader -> matcher -> model
+
     let (tx_reader, rx_reader) = channel();
     let (tx_item, rx_item) = sync_channel(1024);
     let mut reader = reader_new::Reader::new(rx_reader, tx_item);
@@ -457,9 +468,9 @@ fn real_main() -> i32 {
         reader.run();
     });
 
-
     let (tx_model, rx_model) = channel();
-    let mut matcher = matcher_new::Matcher::new(rx_item, tx_model);
+    let tx_model_clone = tx_model.clone();
+    let mut matcher = matcher_new::Matcher::new(rx_item, tx_model_clone);
     let mut model = model_new::Model::new(rx_model);
 
     thread::spawn(move || {
@@ -470,12 +481,33 @@ fn real_main() -> i32 {
         model.run();
     });
 
+    let (tx_input, rx_input) = channel();
+    let mut input = input_new::Input::new(tx_input);
+    thread::spawn(move || {
+        input.run();
+    });
 
-    // start the items
+    // now we can use
+    // tx_reader: send message to reader
+    // tx_model:  send message to model
+    // rx_input:  receive keystroke events
+
+    // light up the fire
     tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
 
-    loop {
+    // listen user input
+    while let Ok((ev, arg)) = rx_input.recv() {
+        match ev {
+            Event::EvActAddChar =>  {
+                let ch: char = *arg.downcast().unwrap();
+                query.act_add_char(ch);
+                query.print_screen();
+                tx_reader.send((Event::EvReaderRestart, Box::new(query.get_query())));
+            }
 
+            _ => {}
+        }
     }
+
     0
 }
