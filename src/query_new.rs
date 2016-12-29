@@ -3,21 +3,29 @@ use termion::raw::{RawTerminal, IntoRawMode};
 use std::io::{Write, stdout, Stdout};
 
 pub struct Query {
-    before: Vec<char>,
-    after: Vec<char>,
+    cmd_before: Vec<char>,
+    cmd_after: Vec<char>,
+    query_before: Vec<char>,
+    query_after: Vec<char>,
     stdout: RawTerminal<Stdout>,
 }
 
 impl Query {
-    pub fn new(query: Option<&str>) -> Self {
+    pub fn new(cmd: Option<&str>, query: Option<&str>) -> Self {
         Query {
-            before: query.unwrap_or(&"").chars().collect(),
-            after: Vec::new(),
+            cmd_before: cmd.unwrap_or(&"").chars().collect(),
+            cmd_after: Vec::new(),
+            query_before: query.unwrap_or(&"").chars().collect(),
+            query_after: Vec::new(),
             stdout: stdout().into_raw_mode().unwrap(),
         }
     }
     pub fn get_query(&self) -> String {
-        self.before.iter().cloned().chain(self.after.iter().cloned().rev()).collect()
+        self.query_before.iter().cloned().chain(self.query_after.iter().cloned().rev()).collect()
+    }
+
+    pub fn get_cmd(&self) -> String {
+        self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect()
     }
 
     pub fn print_screen(&mut self) {
@@ -34,7 +42,7 @@ impl Query {
 // Actions
 //
     pub fn act_add_char(&mut self, ch: char) {
-        self.before.push(ch);
+        self.query_before.push(ch);
     }
 
 

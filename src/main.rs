@@ -460,7 +460,7 @@ fn real_main() -> i32 {
     // parse options
 
     // bring up needed sub module
-    let mut query = query_new::Query::new(None);
+    let mut query = query_new::Query::new(Some("ls"), None);
 
     // the data flow:
     // reader -> matcher -> model
@@ -511,7 +511,7 @@ fn real_main() -> i32 {
     // rx_input:  receive keystroke events
 
     // light up the fire
-    tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
+    tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
 
     // listen user input
     while let Ok((ev, arg)) = rx_input.recv() {
@@ -520,7 +520,7 @@ fn real_main() -> i32 {
                 let ch: char = *arg.downcast().unwrap();
                 query.act_add_char(ch);
 
-                tx_reader.send((Event::EvReaderRestart, Box::new(query.get_query())));
+                tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
 
                 // send redraw event
                 tx_input.send((Event::EvActRedraw, Box::new(true)));

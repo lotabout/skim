@@ -33,28 +33,33 @@ impl Reader {
         let mut tx_reader: Option<Sender<bool>> = None;
         let mut tx_sender: Option<Sender<bool>> = None;
 
+        let mut last_command = "".to_string();
+
         while let Ok((ev, arg)) = self.rx_cmd.recv() {
             match ev {
                 Event::EvReaderRestart => {
                     // close existing command or file if exists
-                    tx_reader.map(|tx| {tx.send(true)});
-                    thread_reader.take().map(|thrd| {thrd.join()});
+                    let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
+
+                    if cmd != last_command {
+                        tx_reader.take().map(|tx| {tx.send(true)});
+                        thread_reader.take().map(|thrd| {thrd.join()});
+                    }
 
                     // send message to stop existing matcher
                     tx_sender.map(|tx| {tx.send(true)});
                     thread_sender.take().map(|thrd| {thrd.join()});
 
-                    // start command with new query
-                    let cmd = *arg.downcast::<String>().unwrap();
-                    let items = self.items.clone();
-                    let (tx, rx_reader) = channel();
-                    tx_reader = Some(tx);
-                    thread::spawn(move || {
-                        reader(&cmd, rx_reader, items);
-                    });
-
-                    // tell matcher that reader will start to send new items.
-                    self.tx_item.send((Event::EvMatcherRestart, Box::new("query".to_string())));
+                    if cmd != last_command {
+                        // start command with new query
+                        let items = self.items.clone();
+                        let (tx, rx_reader) = channel();
+                        tx_reader = Some(tx);
+                        let cmd_clone = cmd.clone();
+                        thread::spawn(move || {
+                            reader(&cmd_clone, rx_reader, items);
+                        });
+                    }
 
                     // start sending loop to matcher
                     let tx_item = self.tx_item.clone();
@@ -64,6 +69,11 @@ impl Reader {
                     thread::spawn(move || {
                         sender(rx_sender, tx_item, items);
                     });
+
+                    // tell matcher that reader will start to send new items.
+                    self.tx_item.send((Event::EvMatcherRestart, Box::new(query)));
+
+                    last_command = cmd;
                 }
                 _ => {
                     // do nothing
@@ -151,7 +161,7 @@ fn sender(rx_cmd: Receiver<bool>, tx: SyncSender<(Event, EventArg)>, items: Arc<
 
         let items = items.read().unwrap();
         if index < items.len() {
-            tx.send((Event::EvReaderNewItem, Box::new(items[index].clone())));
+            tx.send((Event::EvMatcherNewItem, Box::new(items[index].clone())));
             index += 1;
         } else if index == items.len() {
             thread::sleep(Duration::from_millis(5));

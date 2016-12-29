@@ -20,12 +20,12 @@ impl Matcher {
         let mut query;
         while let Ok((ev, arg)) = self.rx_item.recv() {
             match ev {
-                Event::EvReaderNewItem => {
+                Event::EvMatcherNewItem => {
                     let item = *arg.downcast::<Item>().unwrap();
 
                     // TODO: filter logic
 
-                    self.tx_result.send((Event::EvMatcherNewItem, Box::new(item)));
+                    self.tx_result.send((Event::EvModelNewItem, Box::new(item)));
                 }
 
                 Event::EvMatcherRestart => {

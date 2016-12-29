@@ -40,12 +40,12 @@ impl Model {
             // check for new item
             if let Ok((ev, arg)) = self.rx_cmd.try_recv() {
                 match ev {
-                    Event::EvMatcherNewItem => {
+                    Event::EvModelNewItem => {
                         let item = *arg.downcast::<Item>().unwrap();
                         self.new_item(item);
                     }
 
-                    Event::EvMatcherRestart => {
+                    Event::EvModelRestart => {
                         // clean the model
                         self.clean_model();
                     }
@@ -76,8 +76,8 @@ impl Model {
         let (width, height) = terminal_size().unwrap();
         let (width, height) = (width as usize, height as usize);
 
-        for (l, item) in self.items[.. min(height-1, self.items.len())].iter().enumerate() {
-            write!(self.stdout, "{}{}", cursor::Goto(1, (l+1) as u16), clear::CurrentLine);
+        for (l, item) in self.items[0 .. min(height-1, self.items.len())].iter().enumerate() {
+            write!(self.stdout, "{}{}", cursor::Goto(3, (l+1) as u16), clear::CurrentLine);
             write!(self.stdout, "{}", item.text);
         }
         self.stdout.flush().unwrap();
