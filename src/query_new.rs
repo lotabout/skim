@@ -45,6 +45,9 @@ impl Query {
         self.query_before.push(ch);
     }
 
+    pub fn act_backward_delete_char(&mut self) {
+        self.query_before.pop();
+    }
 
 }
 

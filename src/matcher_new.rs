@@ -17,7 +17,7 @@ impl Matcher {
 
 
     pub fn run(&self) {
-        let mut query;
+        let mut query = "".to_string();
         while let Ok((ev, arg)) = self.rx_item.recv() {
             match ev {
                 Event::EvMatcherNewItem => {
@@ -25,7 +25,11 @@ impl Matcher {
 
                     // TODO: filter logic
 
-                    self.tx_result.send((Event::EvModelNewItem, Box::new(item)));
+                    if query == "" {
+                        self.tx_result.send((Event::EvModelNewItem, Box::new(item)));
+                    } else if item.text.starts_with(&query) {
+                        self.tx_result.send((Event::EvModelNewItem, Box::new(item)));
+                    }
                 }
 
                 Event::EvMatcherRestart => {

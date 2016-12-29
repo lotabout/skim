@@ -513,17 +513,25 @@ fn real_main() -> i32 {
     // light up the fire
     tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
 
+    let on_query_change = |query: &query_new::Query| {
+        // restart the reader with new parameter
+        tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+        // send redraw event
+        tx_input.send((Event::EvActRedraw, Box::new(true)));
+    };
+
     // listen user input
     while let Ok((ev, arg)) = rx_input.recv() {
         match ev {
             Event::EvActAddChar =>  {
                 let ch: char = *arg.downcast().unwrap();
                 query.act_add_char(ch);
+                on_query_change(&query);
+            }
 
-                tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
-
-                // send redraw event
-                tx_input.send((Event::EvActRedraw, Box::new(true)));
+            Event::EvActBackwardDeleteChar => {
+                query.act_backward_delete_char();
+                on_query_change(&query);
             }
 
             Event::EvActAccept => {
