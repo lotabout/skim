@@ -1,6 +1,11 @@
+use termion::{clear, cursor, terminal_size};
+use termion::raw::{RawTerminal, IntoRawMode};
+use std::io::{Write, stdout, Stdout};
+
 pub struct Query {
     before: Vec<char>,
     after: Vec<char>,
+    stdout: RawTerminal<Stdout>,
 }
 
 impl Query {
@@ -8,15 +13,21 @@ impl Query {
         Query {
             before: query.unwrap_or(&"").chars().collect(),
             after: Vec::new(),
+            stdout: stdout().into_raw_mode().unwrap(),
         }
     }
     pub fn get_query(&self) -> String {
         self.before.iter().cloned().chain(self.after.iter().cloned().rev()).collect()
     }
 
-    pub fn print_screen(&self) {
-        // print the query to screen
-        println!("Query = '{}'", self.get_query());
+    pub fn print_screen(&mut self) {
+        let (width, height) = terminal_size().unwrap();
+        let (width, height) = (width as usize, height as usize);
+        let query = self.get_query();
+
+        write!(self.stdout, "{}{}", cursor::Goto(1, height as u16), clear::CurrentLine);
+        write!(self.stdout, "> {}", query);
+        self.stdout.flush().unwrap();
     }
 
 //------------------------------------------------------------------------------

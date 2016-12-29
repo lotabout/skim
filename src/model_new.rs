@@ -3,6 +3,11 @@ use event::{Event, EventArg};
 use item::Item;
 use std::thread;
 use std::time::Duration;
+use termion::raw::{RawTerminal, IntoRawMode};
+use std::io::{Write, stdout, Stdout};
+use termion::{clear, cursor, terminal_size};
+use std::fmt;
+use std::cmp::{max, min};
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
@@ -12,6 +17,7 @@ pub struct Model {
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
+    stdout: RawTerminal<Stdout>,
 }
 
 impl Model {
@@ -24,20 +30,11 @@ impl Model {
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
+            stdout: stdout().into_raw_mode().unwrap(),
         }
     }
 
     pub fn run(&mut self) {
-        let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
-
-        // start a timer for notifying refresh
-        thread::spawn(move || {
-            loop {
-                thread::sleep(Duration::from_millis(2000));
-                tx.send(true);
-            }
-        });
-
         // main loop
         loop {
             // check for new item
@@ -53,13 +50,12 @@ impl Model {
                         self.clean_model();
                     }
 
+                    Event::EvModelRedraw => {
+                        self.print_screen();
+                    }
+
                     _ => {}
                 }
-            }
-
-            // check if we need to update the view
-            if let Ok(refresh) = rx.try_recv() {
-                self.print_screen();
             }
         }
     }
@@ -76,9 +72,14 @@ impl Model {
         self.items.push(item);
     }
 
-    fn print_screen(&self) {
-        for item in self.items.iter() {
-            println!("{:?}", item);
+    fn print_screen(&mut self) {
+        let (width, height) = terminal_size().unwrap();
+        let (width, height) = (width as usize, height as usize);
+
+        for (l, item) in self.items[.. min(height-1, self.items.len())].iter().enumerate() {
+            write!(self.stdout, "{}{}", cursor::Goto(1, (l+1) as u16), clear::CurrentLine);
+            write!(self.stdout, "{}", item.text);
         }
+        self.stdout.flush().unwrap();
     }
 }

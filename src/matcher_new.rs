@@ -30,7 +30,6 @@ impl Matcher {
 
                 Event::EvMatcherRestart => {
                     query = *arg.downcast::<String>().unwrap();
-                    println!("Query = {}", query);
 
                     // notifiy the model that the query had been changed
                     self.tx_result.send((Event::EvModelRestart, Box::new(true)));

@@ -10,6 +10,8 @@ pub enum Event {
     EvReaderEnd,
     EvMatcherRestart,
     EvModelRestart,
+    EvActRedraw,
+    EvModelRedraw,
 
     EvReaderNewItem,
     EvReaderResetQuery,

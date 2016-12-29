@@ -4,6 +4,7 @@ extern crate ncurses;
 extern crate getopts;
 extern crate regex;
 #[macro_use] extern crate lazy_static;
+extern crate termion;
 mod util;
 mod item;
 mod reader;
@@ -22,6 +23,8 @@ mod matcher_new;
 mod model_new;
 mod query_new;
 mod input_new;
+use termion::raw::{RawTerminal, IntoRawMode};
+use std::io::{Write, stdout, Stdout};
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -29,6 +32,7 @@ use std::time::Duration;
 use std::mem;
 use std::ptr;
 use util::eventbox::EventBox;
+use termion::clear;
 
 use ncurses::*;
 use event::Event;
@@ -482,10 +486,24 @@ fn real_main() -> i32 {
     });
 
     let (tx_input, rx_input) = channel();
-    let mut input = input_new::Input::new(tx_input);
+    let tx_input_clone = tx_input.clone();
+    let mut input = input_new::Input::new(tx_input_clone);
     thread::spawn(move || {
         input.run();
     });
+
+
+    // start a timer for notifying refresh
+    let tx_input_clone = tx_input.clone();
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(20));
+            tx_input_clone.send((Event::EvActRedraw, Box::new(true)));
+        }
+    });
+
+
+    let mut stdout = stdout().into_raw_mode().unwrap();
 
     // now we can use
     // tx_reader: send message to reader
@@ -501,8 +519,23 @@ fn real_main() -> i32 {
             Event::EvActAddChar =>  {
                 let ch: char = *arg.downcast().unwrap();
                 query.act_add_char(ch);
-                query.print_screen();
+
                 tx_reader.send((Event::EvReaderRestart, Box::new(query.get_query())));
+
+                // send redraw event
+                tx_input.send((Event::EvActRedraw, Box::new(true)));
+            }
+
+            Event::EvActAccept => {
+                break;
+            }
+
+            Event::EvActRedraw => {
+                write!(stdout, "{}", clear::All);
+                stdout.flush().unwrap();
+
+                query.print_screen();
+                tx_model.send((Event::EvModelRedraw, Box::new(true)));
             }
 
             _ => {}
