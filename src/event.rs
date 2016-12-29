@@ -8,6 +8,8 @@ pub type EventArg = Box<Any + 'static + Send>;
 pub enum Event {
     EvReaderRestart,
     EvReaderEnd,
+    EvMatcherRestart,
+    EvModelRestart,
 
     EvReaderNewItem,
     EvReaderResetQuery,

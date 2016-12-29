@@ -53,6 +53,9 @@ impl Reader {
                         reader(&cmd, rx_reader, items);
                     });
 
+                    // tell matcher that reader will start to send new items.
+                    self.tx_item.send((Event::EvMatcherRestart, Box::new("query".to_string())));
+
                     // start sending loop to matcher
                     let tx_item = self.tx_item.clone();
                     let items = self.items.clone();

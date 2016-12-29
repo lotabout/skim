@@ -16,7 +16,9 @@ mod orderedvec;
 mod curses;
 mod query;
 mod ansi;
+
 mod reader_new;
+mod matcher_new;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -454,19 +456,32 @@ fn real_main() -> i32 {
         reader.run();
     });
 
+
+    let (tx_result, rx_result) = channel();
+    let mut matcher = matcher_new::Matcher::new(rx_item, tx_result);
+    thread::spawn(move || {
+        matcher.run();
+    });
+
+
+    // start the items
+
     tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
 
     let mut counter = 0;
-    while let Ok((ev, arg)) = rx_item.recv() {
-        println!("{:?}, {:?}", ev, *arg.downcast::<Item>().unwrap());
-        counter += 1;
-        if counter >= 10 {break;}
-    }
+    while let Ok((ev, arg)) = rx_result.recv() {
+        match ev {
+            Event::EvModelRestart => {
 
-    tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
+            }
 
-    while let Ok((ev, arg)) = rx_item.recv() {
-        println!("== {:?}, {:?}", ev, *arg.downcast::<Item>().unwrap());
+            Event::EvMatcherNewItem => {
+                println!("{:?}, {:?}", ev, *arg.downcast::<Item>().unwrap());
+                counter += 1;
+                if counter >= 10 {break;}
+            }
+            _ => {}
+        }
     }
     0
 }

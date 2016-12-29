@@ -1,0 +1,43 @@
+use std::sync::mpsc::{Receiver, Sender};
+use event::{Event, EventArg};
+use item::Item;
+
+pub struct Matcher {
+    tx_result: Sender<(Event, EventArg)>,
+    rx_item: Receiver<(Event, EventArg)>,
+}
+
+impl Matcher {
+    pub fn new(rx_item: Receiver<(Event, EventArg)>, tx_result: Sender<(Event, EventArg)>) -> Self {
+        Matcher {
+            rx_item: rx_item,
+            tx_result: tx_result,
+        }
+    }
+
+
+    pub fn run(&self) {
+        let mut query;
+        while let Ok((ev, arg)) = self.rx_item.recv() {
+            match ev {
+                Event::EvReaderNewItem => {
+                    let item = *arg.downcast::<Item>().unwrap();
+
+                    // TODO: filter logic
+
+                    self.tx_result.send((Event::EvMatcherNewItem, Box::new(item)));
+                }
+
+                Event::EvMatcherRestart => {
+                    query = *arg.downcast::<String>().unwrap();
+                    println!("Query = {}", query);
+
+                    // notifiy the model that the query had been changed
+                    self.tx_result.send((Event::EvModelRestart, Box::new(true)));
+                }
+
+                _ => {}
+            }
+        }
+    }
+}
