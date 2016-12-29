@@ -19,6 +19,7 @@ mod ansi;
 
 mod reader_new;
 mod matcher_new;
+mod model_new;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -457,31 +458,24 @@ fn real_main() -> i32 {
     });
 
 
-    let (tx_result, rx_result) = channel();
-    let mut matcher = matcher_new::Matcher::new(rx_item, tx_result);
+    let (tx_model, rx_model) = channel();
+    let mut matcher = matcher_new::Matcher::new(rx_item, tx_model);
+    let mut model = model_new::Model::new(rx_model);
+
     thread::spawn(move || {
         matcher.run();
     });
 
+    thread::spawn(move || {
+        model.run();
+    });
+
 
     // start the items
-
     tx_reader.send((Event::EvReaderRestart, Box::new("ls".to_string())));
 
-    let mut counter = 0;
-    while let Ok((ev, arg)) = rx_result.recv() {
-        match ev {
-            Event::EvModelRestart => {
+    loop {
 
-            }
-
-            Event::EvMatcherNewItem => {
-                println!("{:?}, {:?}", ev, *arg.downcast::<Item>().unwrap());
-                counter += 1;
-                if counter >= 10 {break;}
-            }
-            _ => {}
-        }
     }
     0
 }
