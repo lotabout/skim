@@ -9,6 +9,14 @@ use termion::{clear, cursor, terminal_size};
 use std::fmt;
 use std::cmp::{max, min};
 
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
+
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
     items: Vec<Item>, // all items

@@ -2,6 +2,15 @@ use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
 use item::Item;
 
+use std::io::Write;
+
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 pub struct Matcher {
     tx_result: Sender<(Event, EventArg)>,
     rx_item: Receiver<(Event, EventArg)>,

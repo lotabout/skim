@@ -11,6 +11,16 @@ use std::thread::{spawn, JoinHandle};
 use std::thread;
 use std::time::Duration;
 
+use std::io::Write;
+
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
+
 pub struct Reader {
     rx_cmd: Receiver<(Event, EventArg)>,
     tx_item: SyncSender<(Event, EventArg)>,
@@ -159,12 +169,19 @@ fn sender(rx_cmd: Receiver<bool>, tx: SyncSender<(Event, EventArg)>, items: Arc<
             break;
         }
 
-        let items = items.read().unwrap();
-        if index < items.len() {
-            tx.send((Event::EvMatcherNewItem, Box::new(items[index].clone())));
-            index += 1;
-        } else if index == items.len() {
-            thread::sleep(Duration::from_millis(5));
+        let all_read;
+
+        {
+            let items = items.read().unwrap();
+            all_read = index >= items.len();
+            if !all_read {
+                tx.send((Event::EvMatcherNewItem, Box::new(items[index].clone())));
+                index += 1;
+            }
+        }
+
+        if all_read {
+            thread::sleep(Duration::from_millis(1));
         }
     }
 }
