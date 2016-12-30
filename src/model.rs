@@ -1,6 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender, channel};
 use event::{Event, EventArg};
-use item::{MatchedItem, Item};
+use item::{Item, MatchedItem, MatchedRange};
 use std::thread;
 use std::time::Duration;
 use std::io::{Write, stdout, Stdout};
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use curses::{ColorTheme, Curses};
+use curses::*;
 use curses;
 
 macro_rules! println_stderr(
@@ -37,6 +38,7 @@ pub struct Model {
 
 
     multi_selection: bool,
+    pub tabstop: usize,
 }
 
 impl Model {
@@ -55,6 +57,7 @@ impl Model {
             width: 0,
 
             multi_selection: true,
+            tabstop: 8,
         }
     }
 
@@ -158,12 +161,9 @@ impl Model {
         for i in lower..upper {
             let l = i - lower;
             curses.mv((if self.reverse {l+1} else {h-2 - l} ) as i32, 0);
-            // print a single item
-            if l == self.line_cursor {
-                curses.printw(">");
-            } else {
-                curses.printw(" ");
-            }
+            // print the cursor label
+            let label = if l == self.line_cursor {">"} else {" "};
+            curses.cprint(label, COLOR_CURSOR, true);
 
             let item = self.items.get(i).unwrap().clone();
             self.print_item(curses, &item);
@@ -174,17 +174,98 @@ impl Model {
         print_query(curses);
     }
 
-    fn print_item(&self, curses: &Curses, item: &MatchedItem) {
-        let index = item.item.get_full_index();
+    fn print_item(&self, curses: &Curses, matched_item: &MatchedItem) {
+        let index = matched_item.item.get_full_index();
+        let is_current = matched_item.item.get_index() == self.item_cursor + self.line_cursor;
+
         if self.selected.contains_key(&index) {
-            curses.printw(">");
+            curses.cprint(">", COLOR_SELECTED, true);
         } else {
-            curses.printw(" ");
+            curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
         }
 
-        curses.printw(&(item.item.get_text()));
+        match matched_item.matched_range {
+            Some(MatchedRange::Chars(ref matched_indics)) => {
+                let (matched_start_pos, matched_end_pos) = if matched_indics.len() > 0 {
+                    (matched_indics[0], matched_indics[matched_indics.len()-1] + 1)
+                } else {
+                    (0, 1)
+                };
+
+                let item = &matched_item.item;
+                let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
+                                                     (self.width-3) as usize,
+                                                     self.hscroll_offset,
+                                                     matched_start_pos,
+                                                     matched_end_pos);
+                let mut matched_indics_iter = matched_indics.iter().peekable();
+                let mut ansi_states = item.get_ansi_states().iter().peekable();
+
+                // skip indics
+                while let Some(&&index) = matched_indics_iter.peek() {
+                    if idx > index {
+                        let _ = matched_indics_iter.next();
+                    } else {
+                        break;
+                    }
+                }
+
+                // skip ansi states
+                let mut last_attr = 0;
+                while let Some(&&(index, attr)) = ansi_states.peek() {
+                    if idx > index {
+                        last_attr = attr;
+                        let _ = ansi_states.next();
+                    } else {
+                        break;
+                    }
+                }
+                curses.attr_on(last_attr);
+
+                for &ch in text.iter() {
+                    match matched_indics_iter.peek() {
+                        Some(&&index) if idx == index => {
+                            self.print_char(curses, ch, COLOR_MATCHED, is_current);
+                            let _ = matched_indics_iter.next();
+                        }
+                        Some(_) | None => {
+                            match ansi_states.peek() {
+                                Some(&&(index, attr)) if idx == index => {
+                                    // print ansi color codes.
+                                    curses.attr_off(last_attr);
+                                    curses.attr_on(attr);
+                                    last_attr = attr;
+                                    let _ = ansi_states.next();
+                                }
+                                Some(_) | None => {}
+                            }
+                            self.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                        }
+                    }
+                    idx += 1;
+                }
+                curses.attr_off(last_attr);
+
+            }
+
+            _ => {
+                curses.printw(&(matched_item.item.get_text()));
+            }
+        }
     }
 
+    fn print_char(&self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
+        if ch != '\t' {
+            curses.caddch(ch, color, is_bold);
+        } else {
+            // handle tabstop
+            let (y, x) = curses.getyx();
+            let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
+            for _ in 0..rest {
+                curses.caddch(' ', color, is_bold);
+            }
+        }
+    }
 
     //--------------------------------------------------------------------------
     // Actions
@@ -231,5 +312,155 @@ impl Model {
         for (k, item) in output {
             println!("{}", item.item.get_output_text());
         }
+    }
+}
+
+//==============================================================================
+// helper functions
+
+// wide character will take two unit
+fn display_width(text: &[char]) -> usize {
+    text.iter()
+        .map(|c| {if c.len_utf8() > 1 {2} else {1}})
+        .fold(0, |acc, n| acc + n)
+}
+
+
+// calculate from left to right, stop when the max_x exceeds
+fn left_fixed(text: &[char], max_x: usize) -> usize {
+    if max_x == 0 {
+        return 1;
+    }
+
+    let mut w = 0;
+    for (idx, &c) in text.iter().enumerate() {
+        w += if c.len_utf8() > 1 {2} else {1};
+        if w > max_x {
+            return idx;
+        }
+    }
+    text.len()
+}
+
+fn right_fixed(text: &[char], max_x: usize) -> usize {
+    if max_x == 0 {
+        return text.len()-1;
+    }
+
+    let mut w = 0;
+    for (idx, &c) in text.iter().enumerate().rev() {
+        w += if c.len_utf8() > 1 {2} else {1};
+        if w > max_x {
+            return idx+1;
+        }
+    }
+    return 0;
+}
+
+// return a string and its left position in original string
+// matched_end_pos is char-wise
+fn reshape_string(text: &[char],
+                  container_width: usize,
+                  text_start_pos: usize,
+                  matched_start_pos: usize,
+                  matched_end_pos: usize) -> (Vec<char>, usize) {
+    let text_start_pos = min(max(0, text.len() as i32 - 1) as usize, text_start_pos);
+    let full_width = display_width(&text[text_start_pos..]);
+
+    if full_width <= container_width {
+        return (text[text_start_pos..].iter().cloned().collect(), text_start_pos);
+    }
+
+    let mut ret = Vec::new();
+
+    let w1 = display_width(&text[text_start_pos..matched_start_pos]);
+    let w2 = display_width(&text[matched_start_pos..matched_end_pos]);
+    let w3 = display_width(&text[matched_end_pos..]);
+
+    let (left_pos, right_pos) = if (w1 > w3 && w2+w3 <= container_width-2) || (w3 <= 2) {
+        // right-fixed
+        let left_pos = text_start_pos + right_fixed(&text[text_start_pos..], container_width-2);
+        (left_pos, text.len())
+    } else if w1 <= w3 && w1 + w2 <= container_width-2 {
+        // left-fixed
+        let right_pos = text_start_pos + left_fixed(&text[text_start_pos..], container_width-2);
+        (text_start_pos, right_pos)
+    } else {
+        // left-right
+        let right_pos = max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));
+        let left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-4);
+        (left_pos, right_pos)
+    };
+
+    if left_pos > text_start_pos {
+        ret.push('.'); ret.push('.');
+    }
+
+    // so we should print [left_pos..(right_pos+1)]
+    for ch in text[left_pos..right_pos].iter() {
+        ret.push(*ch);
+    }
+
+    if right_pos < text.len() {
+        ret.push('.'); ret.push('.');
+    }
+
+    (ret, if left_pos > text_start_pos {left_pos-2} else {left_pos})
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_display_width() {
+        assert_eq!(super::display_width(&"abcdefg".to_string().chars().collect::<Vec<char>>()), 7);
+        assert_eq!(super::display_width(&"This is 中国".to_string().chars().collect::<Vec<char>>()), 12);
+    }
+
+    #[test]
+    fn test_left_fixed() {
+        assert_eq!(super::left_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 4);
+        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 2);
+        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 1);
+    }
+
+    #[test]
+    fn test_right_fixed() {
+        assert_eq!(super::right_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 2);
+        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 0);
+        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 1);
+    }
+
+    #[test]
+    fn test_reshape_string() {
+        // show all
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         12, 0, 1, 8),
+                   ("0123456789".to_string().chars().collect::<Vec<char>>(), 0));
+
+        // both ellipsis
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 0, 5, 6),
+                   ("..45..".to_string().chars().collect::<Vec<char>>(), 2));
+
+        // left fixed
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 0, 3, 4),
+                   ("0123..".to_string().chars().collect::<Vec<char>>(), 0));
+
+        // right fixed
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 0, 6, 7),
+                   ("..6789".to_string().chars().collect::<Vec<char>>(), 4));
+
+        // right fixed because the remaining is short
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 0, 1, 8),
+                   ("..6789".to_string().chars().collect::<Vec<char>>(), 4));
+
+        // text start pos
+        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
+                                         6, 2, 3, 5),
+                   ("2345..".to_string().chars().collect::<Vec<char>>(), 2));
+
     }
 }
