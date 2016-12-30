@@ -1,6 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender, channel};
 use event::{Event, EventArg};
-use item::Item;
+use item::{MatchedItem, Item};
 use std::thread;
 use std::time::Duration;
 use std::io::{Write, stdout, Stdout};
@@ -21,7 +21,7 @@ pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
-    items: Vec<Item>, // all items
+    items: Vec<MatchedItem>, // all items
     total_item: usize,
 
     item_cursor: usize, // the index of matched item currently highlighted.
@@ -61,7 +61,7 @@ impl Model {
             if let Ok((ev, arg)) = self.rx_cmd.try_recv() {
                 match ev {
                     Event::EvModelNewItem => {
-                        let item = *arg.downcast::<Item>().unwrap();
+                        let item = *arg.downcast::<MatchedItem>().unwrap();
                         self.new_item(item);
                     }
 
@@ -120,7 +120,7 @@ impl Model {
         self.width = w-2;
     }
 
-    fn new_item(&mut self, item: Item) {
+    fn new_item(&mut self, item: MatchedItem) {
         self.items.push(item);
     }
 
@@ -146,7 +146,7 @@ impl Model {
                 curses.printw(" ");
             }
             curses.printw(" ");
-            curses.printw(&item.text);
+            curses.printw(&(item.item.text));
         }
 
         // print query
