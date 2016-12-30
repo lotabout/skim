@@ -27,6 +27,9 @@ pub struct Model {
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
+    reverse: bool,
+    height: i32,
+    width: i32,
 }
 
 impl Model {
@@ -39,6 +42,9 @@ impl Model {
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
+            reverse: false,
+            height: 0,
+            width: 0,
         }
     }
 
@@ -62,14 +68,15 @@ impl Model {
                     Event::EvModelRestart => {
                         // clean the model
                         self.clean_model();
+                        self.update_size(&curses);
                     }
 
                     Event::EvModelRedraw => {
-                        let hook = *arg.downcast::<ClosureType>().unwrap();
+                        self.update_size(&curses);
 
+                        let print_query = *arg.downcast::<ClosureType>().unwrap();
                         curses.clear();
-                        self.print_screen(&curses);
-                        hook(&curses);
+                        self.print_screen(&curses, print_query);
                         curses.refresh();
                     }
 
@@ -78,7 +85,16 @@ impl Model {
 
                         curses.close();
 
+                        // TODO: output the selected items
+
                         tx_ack.send(true);
+                    }
+                    Event::EvActUp => {
+                        self.act_move_line_cursor(1);
+                    }
+                    Event::EvActDown => {
+                        let (h, w) = curses.get_maxyx();
+                        self.act_move_line_cursor(-1);
                     }
 
                     _ => {}
@@ -97,18 +113,68 @@ impl Model {
         self.hscroll_offset = 0;
     }
 
+    fn update_size(&mut self, curses: &Curses) {
+        // update the (height, width)
+        let (h, w) = curses.get_maxyx();
+        self.height = h-1;
+        self.width = w-2;
+    }
+
     fn new_item(&mut self, item: Item) {
         self.items.push(item);
     }
 
-    fn print_screen(&mut self, curses: &Curses) {
-        let (width, height) = curses.get_maxyx();
-        let (width, height) = (width as usize, height as usize);
+    fn print_screen(&mut self, curses: &Curses, print_query: ClosureType) {
+        let (h, w) = curses.get_maxyx();
+        let (h, w) = (h as usize, w as usize);
 
-        for (l, item) in self.items[0 .. min(height-1, self.items.len())].iter().enumerate() {
-            curses.mv(l as i32, 0);
-            curses.printw("  ");
+        // screen-line: y         <--->   item-line: (height - y - 1)
+        //              h-1                          h-(h-1)-1 = 0
+        //              0                            h-1
+        // screen-line: (h-l-1)   <--->   item-line: l
+
+        let lower = self.item_cursor;
+        let upper = min(self.item_cursor + h-1, self.items.len());
+
+        for (l, item) in self.items[lower .. upper].iter().enumerate() {
+            curses.mv((if self.reverse {l+1} else {h-2 - l} ) as i32, 0);
+
+            // print a single item
+            if l == self.line_cursor {
+                curses.printw(">");
+            } else {
+                curses.printw(" ");
+            }
+            curses.printw(" ");
             curses.printw(&item.text);
         }
+
+        // print query
+        curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
+        print_query(curses);
+    }
+
+
+    pub fn act_move_line_cursor(&mut self, diff: i32) {
+        let diff = if self.reverse {-diff} else {diff};
+        let mut line_cursor = self.line_cursor as i32;
+        let mut item_cursor = self.item_cursor as i32;
+        let item_len = self.items.len() as i32;
+
+        line_cursor += diff;
+        if line_cursor >= self.height {
+            item_cursor += line_cursor - self.height + 1;
+            item_cursor = max(0, min(item_cursor, item_len -self.height));
+            line_cursor = min(self.height-1, item_len - item_cursor);
+        } else if line_cursor < 0 {
+            item_cursor += line_cursor;
+            item_cursor = max(item_cursor, 0);
+            line_cursor = 0;
+        } else {
+            line_cursor = min(line_cursor, item_len-1 - item_cursor);
+        }
+
+        self.item_cursor = item_cursor as usize;
+        self.line_cursor = line_cursor as usize;
     }
 }

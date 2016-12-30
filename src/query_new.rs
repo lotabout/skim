@@ -92,8 +92,6 @@ impl Query {
         Box::new(move |curses| {
             let (h, w) = curses.get_maxyx();
 
-            curses.mv(h - 1, 0);
-
             match mode {
                 QueryMode::CMD   => curses.printw("C"),
                 QueryMode::QUERY => curses.printw("Q"),

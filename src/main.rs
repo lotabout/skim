@@ -493,12 +493,11 @@ fn real_main() -> i32 {
         input.run();
     });
 
-
     // start a timer for notifying refresh
     let tx_input_clone = tx_input.clone();
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(20));
+            thread::sleep(Duration::from_millis(50));
             tx_input_clone.send((Event::EvActRedraw, Box::new(true)));
         }
     });
@@ -559,6 +558,10 @@ fn real_main() -> i32 {
 
             Event::EvActRedraw => {
                 let _ = tx_model.send((Event::EvModelRedraw, Box::new(query.get_print_func())));
+            }
+
+            Event::EvActUp | Event::EvActDown => {
+                let _ = tx_model.send((ev, arg));
             }
 
             _ => {}
