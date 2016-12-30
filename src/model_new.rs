@@ -73,10 +73,20 @@ impl Model {
                         curses.refresh();
                     }
 
+                    Event::EvActAccept => {
+                        let tx_ack = *arg.downcast::<Sender<bool>>().unwrap();
+
+                        curses.close();
+
+                        tx_ack.send(true);
+                    }
+
                     _ => {}
                 }
             }
         }
+
+        curses.close();
     }
 
     fn clean_model(&mut self) {

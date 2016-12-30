@@ -479,6 +479,7 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::PgDn,  (Event::EvActPageDown, None));
     ret.insert(Key::PgUp,  (Event::EvActPageUp, None));
     ret.insert(Key::CtrlP, (Event::EvActPreviousHistory, None));
+    ret.insert(Key::CtrlR, (Event::EvActRotateMode, None));
     ret.insert(Key::AltH,  (Event::EvActScrollLeft, None));
     ret.insert(Key::AltL,  (Event::EvActScrollRight, None));
     //ret.insert(Key::AltZ,  (Event::EvActSelectAll, None));

@@ -54,6 +54,7 @@ pub enum Event {
     EvActPageDown,
     EvActPageUp,
     EvActPreviousHistory,
+    EvActRotateMode,
     EvActScrollLeft,
     EvActScrollRight,
     EvActSelectAll,

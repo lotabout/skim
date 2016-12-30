@@ -51,17 +51,23 @@ impl Reader {
                     // close existing command or file if exists
                     let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
 
-                    if cmd != last_command {
-                        tx_reader.take().map(|tx| {tx.send(true)});
-                        thread_reader.take().map(|thrd| {thrd.join()});
-                    }
-
                     // send message to stop existing matcher
                     tx_sender.map(|tx| {tx.send(true)});
                     thread_sender.take().map(|thrd| {thrd.join()});
 
+                    // restart command with new `command`
                     if cmd != last_command {
-                        // start command with new query
+                        // stop existing command
+                        tx_reader.take().map(|tx| {tx.send(true)});
+                        thread_reader.take().map(|thrd| {thrd.join()});
+
+                        {
+                            // remove existing items
+                            let mut items = self.items.write().unwrap();
+                            items.clear();
+                        }
+
+                        // start new command
                         let items = self.items.clone();
                         let (tx, rx_reader) = channel();
                         tx_reader = Some(tx);
@@ -71,17 +77,16 @@ impl Reader {
                         });
                     }
 
-                    // start sending loop to matcher
+                    // start "sending loop" to matcher
                     let tx_item = self.tx_item.clone();
                     let items = self.items.clone();
                     let (tx, rx_sender) = channel();
                     tx_sender = Some(tx);
                     thread::spawn(move || {
+                        // tell matcher that reader will start to send new items.
+                        tx_item.send((Event::EvMatcherRestart, Box::new(query)));
                         sender(rx_sender, tx_item, items);
                     });
-
-                    // tell matcher that reader will start to send new items.
-                    self.tx_item.send((Event::EvMatcherRestart, Box::new(query)));
 
                     last_command = cmd;
                 }
@@ -105,7 +110,6 @@ fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Er
 }
 
 fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>) {
-    // start the command
     let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
 
     let (command, mut source): (Option<Child>, Box<BufRead>) = if istty {

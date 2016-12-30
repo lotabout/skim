@@ -449,7 +449,7 @@ fn print_usage(program: &str, opts: Options) {
 }
 
 
-use std::sync::mpsc::{sync_channel, channel};
+use std::sync::mpsc::{sync_channel, channel, Sender, Receiver};
 use std::io;
 use model_new::ClosureType;
 
@@ -459,7 +459,9 @@ fn real_main() -> i32 {
     // parse options
 
     // bring up needed sub module
-    let mut query = query_new::Query::new(Some("ls"), None);
+    let mut query = query_new::Query::builder()
+        .cmd("ls {}")
+        .build();
 
     // the data flow:
     // reader -> matcher -> model
@@ -541,7 +543,17 @@ fn real_main() -> i32 {
                 let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
             }
 
+            Event::EvActRotateMode => {
+                query.act_query_rotate_mode();
+                let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
+            }
+
             Event::EvActAccept => {
+                // sync with model to quit
+
+                let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
+                let _ = tx_model.send((Event::EvActAccept, Box::new(tx)));
+                let _ = rx.recv();
                 break;
             }
 

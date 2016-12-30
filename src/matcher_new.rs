@@ -36,9 +36,13 @@ impl Matcher {
 
                     if query == "" {
                         self.tx_result.send((Event::EvModelNewItem, Box::new(item)));
-                    } else if item.text.starts_with(&query) {
+                    } else if item.text.contains(&query) {
                         self.tx_result.send((Event::EvModelNewItem, Box::new(item)));
                     }
+                }
+
+                Event::EvReaderEnd => {
+                    // reader had stopped,
                 }
 
                 Event::EvMatcherRestart => {
