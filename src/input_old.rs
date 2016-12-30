@@ -2,7 +2,7 @@
 /// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
 
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::io::prelude::*;
 use std::fs::File;
@@ -10,20 +10,21 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use event::{Event, EventArg, parse_action};
+use util::eventbox::EventBox;
+use event::{Event, parse_action};
 
 pub struct Input {
-    tx_input: Sender<(Event, EventArg)>,
+    eb: Arc<EventBox<Event>>,
     keyboard: KeyBoard,
     keymap: HashMap<Key, (Event, Option<String>)>,
 }
 
 impl Input {
-    pub fn new(tx_input: Sender<(Event, EventArg)>) -> Self {
+    pub fn new(eb: Arc<EventBox<Event>>) -> Self {
         let f = File::open("/dev/tty").unwrap();
         let keyboard = KeyBoard::new(f);
         Input {
-            tx_input: tx_input,
+            eb: eb,
             keyboard: keyboard,
             keymap: get_default_key_map(),
         }
@@ -34,23 +35,17 @@ impl Input {
             match self.keyboard.get_key() {
                 Some(key) => {
                     if let Key::Char(ch) = key {
-                        self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
+                        self.eb.set(Event::EvActAddChar, Box::new(ch));
                     } else {
                         // search event from keymap
                         match self.keymap.get(&key) {
-                            Some(&(ev, Some(ref args))) => {
-                                self.tx_input.send((ev, Box::new(Some(args.clone()))));
-                            }
-                            Some(&(ev, None)) => {
-                                self.tx_input.send((ev, Box::new(None as Option<String>)));
-                            }
-                            None => {
-                                self.tx_input.send((Event::EvInputKey, Box::new(key)));
-                            }
+                            Some(&(ev, Some(ref args))) => self.eb.set(ev, Box::new(Some(args.clone()))),
+                            Some(&(ev, None)) => self.eb.set(ev, Box::new(None as Option<String>)),
+                            None => self.eb.set(Event::EvInputKey, Box::new(key)),
                         }
                     }
                 }
-                None => {self.tx_input.send((Event::EvInputInvalid, Box::new(true)));}
+                None => {self.eb.set(Event::EvInputInvalid, Box::new(true));}
             }
         }
     }
@@ -479,7 +474,6 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::PgDn,  (Event::EvActPageDown, None));
     ret.insert(Key::PgUp,  (Event::EvActPageUp, None));
     ret.insert(Key::CtrlP, (Event::EvActPreviousHistory, None));
-    ret.insert(Key::CtrlR, (Event::EvActRotateMode, None));
     ret.insert(Key::AltH,  (Event::EvActScrollLeft, None));
     ret.insert(Key::AltL,  (Event::EvActScrollRight, None));
     //ret.insert(Key::AltZ,  (Event::EvActSelectAll, None));
@@ -496,5 +490,6 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::CtrlK, (Event::EvActUp, None));
     ret.insert(Key::Up,    (Event::EvActUp, None));
     ret.insert(Key::CtrlY, (Event::EvActYank, None));
+
     ret
 }

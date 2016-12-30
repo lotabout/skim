@@ -1,180 +1,160 @@
-#[derive(Default)]
+use std::io::{Write, stdout, Stdout};
+use model::ClosureType;
+
+#[derive(Clone, Copy)]
+enum QueryMode {
+    CMD,
+    QUERY,
+}
+
 pub struct Query {
-    query: Vec<char>,
-    pub index: usize,
-    pub pos: usize,
+    cmd_before: Vec<char>,
+    cmd_after: Vec<char>,
+    query_before: Vec<char>,
+    query_after: Vec<char>,
+
+    mode: QueryMode,
+    cmd: String,
+    replstr: String,
 }
 
 impl Query {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn builder() -> Self {
+        Query {
+            cmd_before: Vec::new(),
+            cmd_after: Vec::new(),
+            query_before: Vec::new(),
+            query_after: Vec::new(),
+            mode: QueryMode::QUERY,
+            cmd: String::new(),
+            replstr: "{}".to_string(),
+        }
     }
 
-    pub fn new_with_query(query: &str) -> Self {
-        let mut ret = Query::new();
-        for ch in query.chars() {
-            ret.add_char(ch);
-        }
-        ret
+    // builder
+    pub fn cmd(mut self, cmd: &str) -> Self {
+        self.cmd = cmd.to_owned();
+        self
+    }
+
+    pub fn cmd_arg(mut self,arg: &str) -> Self {
+        self.cmd_before = arg.chars().collect();
+        self
+    }
+
+    pub fn query(mut self, query: &str) -> Self {
+        self.query_before = query.chars().collect();
+        self
+    }
+
+    pub fn replstr(mut self, replstr: &str) -> Self {
+        self.replstr = replstr.to_owned();
+        self
+    }
+
+    pub fn mode(mut self, mode: QueryMode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    pub fn build(self) -> Self {
+        self
     }
 
     pub fn get_query(&self) -> String {
-        self.query.iter().cloned().collect::<String>()
+        self.query_before.iter().cloned().chain(self.query_after.iter().cloned().rev()).collect()
     }
 
-    pub fn add_char (&mut self, ch: char) -> bool {
-        self.query.insert(self.index, ch);
-        self.index += 1;
-        self.pos += if ch.len_utf8() > 1 {2} else {1};
-        true
+    pub fn get_cmd(&self) -> String {
+        let arg: String = self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect();
+        self.cmd.replace(&self.replstr, &arg)
     }
 
-    pub fn backward_delete_char(&mut self) -> bool{
-        if self.index == 0 { return false; }
-
-        let ch = self.query.remove(self.index-1);
-        self.index -= 1;
-        self.pos -= if ch.len_utf8() > 1 {2} else {1};
-        true
-    }
-
-    pub fn backward_char(&mut self) {
-        if self.index == 0 { return; }
-        if let Some(ch) = self.query.get(self.index-1) {
-            self.index -= 1;
-            self.pos -= if ch.len_utf8() > 1 {2} else {1};
+    fn get_before(&self) -> String {
+        match self.mode {
+            QueryMode::CMD   => self.cmd_before.iter().cloned().collect(),
+            QueryMode::QUERY => self.query_before.iter().cloned().collect(),
         }
     }
 
-    pub fn backward_kill_word(&mut self) -> bool {
-        let mut modified = false;
-        // skip whitespace
-        while self.index > 0 {
-            if let Some(&' ') = self.query.get(self.index-1) {
-                modified = self.backward_delete_char() || modified;
-            } else {
-                break;
+    fn get_after(&self) -> String {
+        match self.mode {
+            QueryMode::CMD   => self.cmd_after.iter().cloned().collect(),
+            QueryMode::QUERY => self.query_after.iter().cloned().collect(),
+        }
+    }
+
+    pub fn get_print_func(&self) -> ClosureType {
+        let before = self.get_before();
+        let after = self.get_after();
+        let mode = self.mode;
+
+        Box::new(move |curses| {
+            let (h, w) = curses.get_maxyx();
+
+            match mode {
+                QueryMode::CMD   => curses.printw("C"),
+                QueryMode::QUERY => curses.printw("Q"),
             }
-        }
 
-        while self.index > 0 {
-            match self.query.get(self.index-1) {
-                Some(&ch) if ch != ' ' => {
-                    modified = self.backward_delete_char() || modified;
-                }
-                Some(_) | None => {break;}
-            }
-        }
-        modified
+            curses.printw("> ");
+            curses.printw(&before);
+            let (y, x) = curses.getyx();
+            curses.printw(&after);
+            curses.mv(y, x);
+        })
     }
 
-    pub fn backward_word(&mut self) -> bool {
-        // skip whitespace
-        while self.index > 0 {
-            if let Some(&' ') = self.query.get(self.index-1) {
-                self.backward_char();
-            } else {
-                break;
-            }
-        }
-
-        while self.index > 0 {
-            match self.query.get(self.index-1) {
-                Some(&ch) if ch != ' ' => { self.backward_char(); }
-                Some(_) | None => {break;}
-            }
-        }
-        false
-    }
-
-    pub fn beginning_of_line(&mut self) -> bool {
-        self.index = 0;
-        self.pos = 0;
-        false
-    }
-
-    // delete char forward
-    pub fn delete_char(&mut self) -> bool {
-        if self.index == self.query.len() { return false; }
-
-        let _ = self.query.remove(self.index);
-        true
-    }
-
-    pub fn forward_char(&mut self) {
-        if let Some(ch) = self.query.get(self.index) {
-            self.index += 1;
-            self.pos += if ch.len_utf8() > 1 {2} else {1};
+    fn get_ref(&mut self) -> (&mut Vec<char>, &mut Vec<char>) {
+        match self.mode {
+            QueryMode::QUERY => (&mut self.query_before, &mut self.query_after),
+            QueryMode::CMD   => (&mut self.cmd_before, &mut self.cmd_after)
         }
     }
 
-    pub fn forward_word(&mut self) {
-        // skip whitespace
-        while let Some(_) = self.query.get(self.index) {
-            self.forward_char();
-        }
-
-        loop {
-            match self.query.get(self.index) {
-                Some(&ch) if ch != ' ' => self.forward_char(),
-                Some(_) | None => break
-            }
+//------------------------------------------------------------------------------
+// Actions
+//
+    pub fn act_query_rotate_mode(&mut self) {
+        self.mode = match self.mode {
+            QueryMode::QUERY => QueryMode::CMD,
+            QueryMode::CMD   => QueryMode::QUERY,
         }
     }
 
-    pub fn kill_word(&mut self) -> bool {
-        let len = self.query.len();
-        let mut modified = false;
-        // skip whitespace
-        while self.index < len {
-            if let Some(&' ') = self.query.get(self.index) {
-                modified = self.delete_char() || modified;
-            } else {
-                break;
-            }
-        }
-
-        while self.index < len {
-            match self.query.get(self.index) {
-                Some(&ch) if ch != ' ' => { modified = self.delete_char() || modified; }
-                Some(_) | None => {break;}
-            }
-        }
-        modified
+    pub fn act_add_char(&mut self, ch: char) {
+        let (before, _) = self.get_ref();
+        before.push(ch);
     }
 
-    pub fn end_of_line(&mut self) -> bool {
-        let len = self.query.len();
-        while self.index < len {
-            self.forward_char();
-        }
-        false
+    pub fn act_backward_delete_char(&mut self) {
+        let (before, _) = self.get_ref();
+        before.pop();
     }
 
-    pub fn kill_line(&mut self) -> bool {
-        if self.index == self.query.len() {return false}
-        while self.query.len() > self.index {
-            let _ = self.query.pop();
-        }
-        true
+    pub fn act_backward_char(&mut self) {
+        let (before, after) = self.get_ref();
+        before.pop().map(|ch| {
+            after.push(ch);
+        });
     }
 
-    pub fn line_discard(&mut self) -> bool {
-        let mut modified = false;
-        while self.index > 0 {
-            modified = self.backward_delete_char() || modified;
-        }
-        modified
+    pub fn act_forward_char(&mut self) {
+        let (before, after) = self.get_ref();
+        after.pop().map(|ch| {
+            before.push(ch);
+        });
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Query;
-
+mod test {
     #[test]
-    fn test_backward_char() {
-        // Test that going back from zero does not overflow.
-        Query::new().backward_char();
+    fn test_new_query() {
+        let query1 = super::Query::new(None);
+        assert_eq!(query1.get_query(), "");
+
+        let query2 = super::Query::new(Some("abc"));
+        assert_eq!(query2.get_query(), "abc");
     }
 }
