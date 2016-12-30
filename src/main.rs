@@ -485,7 +485,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // query
     let mut query = query::Query::builder()
-        .cmd("ls {}")
+        .cmd("find {}")
         .build();
     query.parse_options(&options);
 

@@ -104,8 +104,9 @@ impl Reader {
         let mut thread_sender: Option<JoinHandle<()>> = None;
         let mut tx_reader: Option<Sender<bool>> = None;
         let mut tx_sender: Option<Sender<bool>> = None;
-
         let mut last_command = "".to_string();
+
+        let reader_stopped = Arc::new(RwLock::new(false));
 
         while let Ok((ev, arg)) = self.rx_cmd.recv() {
             match ev {
@@ -135,8 +136,16 @@ impl Reader {
                         tx_reader = Some(tx);
                         let cmd_clone = cmd.clone();
                         let option_clone = self.option.clone();
+                        let tx_item = self.tx_item.clone();
+                        let reader_stopped_clone = reader_stopped.clone();
                         thread::spawn(move || {
+                            {*reader_stopped_clone.write().unwrap() = false;}
+                            tx_item.send((Event::EvReaderStopped, Box::new(false)));
+
                             reader(&cmd_clone, rx_reader, items, option_clone);
+
+                            tx_item.send((Event::EvReaderStopped, Box::new(true)));
+                            {*reader_stopped_clone.write().unwrap() = true;}
                         });
                     }
 
@@ -145,10 +154,12 @@ impl Reader {
                     let items = self.items.clone();
                     let (tx, rx_sender) = channel();
                     tx_sender = Some(tx);
+                    let reader_stopped_clone = reader_stopped.clone();
                     thread::spawn(move || {
                         // tell matcher that reader will start to send new items.
                         tx_item.send((Event::EvMatcherRestart, Box::new(query)));
-                        sender(rx_sender, tx_item, items);
+                        sender(rx_sender, &tx_item, items, reader_stopped_clone);
+                        tx_item.send((Event::EvSenderStopped, Box::new(true)));
                     });
 
                     last_command = cmd;
@@ -182,7 +193,10 @@ lazy_static! {
     static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
 }
 
-fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>, option: Arc<RwLock<ReaderOption>>) {
+fn reader(cmd: &str,
+          rx_cmd: Receiver<bool>,
+          items: Arc<RwLock<Vec<Item>>>,
+          option: Arc<RwLock<ReaderOption>>) {
     let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
 
     let (command, mut source): (Option<Child>, Box<BufRead>) = if istty {
@@ -258,16 +272,17 @@ fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>, opti
     tx_control.send(true);
 }
 
-fn sender(rx_cmd: Receiver<bool>, tx: SyncSender<(Event, EventArg)>, items: Arc<RwLock<Vec<Item>>>) {
+fn sender(rx_cmd: Receiver<bool>,
+          tx: &SyncSender<(Event, EventArg)>,
+          items: Arc<RwLock<Vec<Item>>>,
+          reader_stopped: Arc<RwLock<bool>>) {
     let mut index = 0;
     loop {
         if let Ok(quit) = rx_cmd.try_recv() {
-            tx.send((Event::EvReaderEnd, Box::new(true)));
             break;
         }
 
         let all_read;
-
         {
             let items = items.read().unwrap();
             all_read = index >= items.len();
@@ -277,7 +292,9 @@ fn sender(rx_cmd: Receiver<bool>, tx: SyncSender<(Event, EventArg)>, items: Arc<
             }
         }
 
-        if all_read {
+        if *reader_stopped.read().unwrap() && all_read {
+            break;
+        } else if all_read {
             thread::sleep(Duration::from_millis(1));
         }
     }

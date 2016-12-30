@@ -2,7 +2,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use event::{Event, EventArg};
 use item::{Item, MatchedItem, MatchedRange};
 use std::thread;
-use std::time::Duration;
+use std::time::{Instant, Duration};
 use std::io::{Write, stdout, Stdout};
 use std::fmt;
 use std::cmp::{max, min};
@@ -23,6 +23,10 @@ macro_rules! println_stderr(
 
 pub type ClosureType = Box<Fn(&Curses) + Send>;
 
+const SPINNER_DURATION: u32 = 200;
+const REFRESH_DURATION: u64 = 100;
+const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
     items: OrderedVec<Arc<MatchedItem>>, // all items
@@ -36,9 +40,12 @@ pub struct Model {
     height: i32,
     width: i32,
 
-
     multi_selection: bool,
     pub tabstop: usize,
+
+    reader_stopped: bool,
+    sender_stopped: bool,
+    timer: Instant,
 }
 
 impl Model {
@@ -58,6 +65,10 @@ impl Model {
 
             multi_selection: true,
             tabstop: 8,
+
+            reader_stopped: false,
+            sender_stopped: false,
+            timer: Instant::now(),
         }
     }
 
@@ -91,6 +102,19 @@ impl Model {
                         curses.clear();
                         self.print_screen(&curses, print_query);
                         curses.refresh();
+                    }
+
+                    Event::EvModelNotifyTotal => {
+                        if ! self.reader_stopped {
+                            self.total_item = *arg.downcast::<usize>().unwrap();
+                        }
+                    }
+
+                    Event::EvSenderStopped => {
+                        self.sender_stopped = *arg.downcast::<bool>().unwrap();
+                    }
+                    Event::EvReaderStopped => {
+                        self.reader_stopped = *arg.downcast::<bool>().unwrap();
                     }
 
                     Event::EvActAccept => {
@@ -129,16 +153,19 @@ impl Model {
 
     fn clean_model(&mut self) {
         self.items.clear();
-        self.total_item = 0;
         self.item_cursor = 0;
         self.line_cursor = 0;
         self.hscroll_offset = 0;
+        self.sender_stopped = false;
+        if !self.reader_stopped {
+            self.total_item = 0;
+        }
     }
 
     fn update_size(&mut self, curses: &Curses) {
         // update the (height, width)
         let (h, w) = curses.get_maxyx();
-        self.height = h-1;
+        self.height = h-2;
         self.width = w-2;
     }
 
@@ -156,11 +183,11 @@ impl Model {
         // screen-line: (h-l-1)   <--->   item-line: l
 
         let lower = self.item_cursor;
-        let upper = min(self.item_cursor + h-1, self.items.len());
+        let upper = min(self.item_cursor + h-2, self.items.len());
 
         for i in lower..upper {
             let l = i - lower;
-            curses.mv((if self.reverse {l+1} else {h-2 - l} ) as i32, 0);
+            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as i32, 0);
             // print the cursor label
             let label = if l == self.line_cursor {">"} else {" "};
             curses.cprint(label, COLOR_CURSOR, true);
@@ -169,9 +196,33 @@ impl Model {
             self.print_item(curses, &item);
         }
 
+        // print status line
+        self.print_status_line(curses);
+
         // print query
         curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
         print_query(curses);
+    }
+
+    fn print_status_line(&self, curses: &Curses) {
+        curses.mv(if self.reverse {1} else {self.height} , 0);
+        curses.clrtoeol();
+
+        // display spinner
+        if self.reader_stopped && self.sender_stopped {
+            self.print_char(curses, ' ', COLOR_NORMAL, false);
+        } else {
+            let time = self.timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
+            self.print_char(curses, SPINNERS[index as usize], COLOR_SPINNER, true);
+        }
+
+        curses.cprint(format!(" {}/{}", self.items.len(), self.total_item).as_ref(), COLOR_INFO, false);
+
+        if self.multi_selection && self.selected.len() > 0 {
+            curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
+        }
     }
 
     fn print_item(&self, curses: &Curses, matched_item: &MatchedItem) {

@@ -50,9 +50,11 @@ impl Matcher {
     pub fn run(&self) {
         let mut query = "".to_string();
         let mut matcher_engine: Option<MatchingEngine> = None;
+        let mut total_num: usize = 0;
         while let Ok((ev, arg)) = self.rx_item.recv() {
             match ev {
                 Event::EvMatcherNewItem => {
+                    total_num += 1;
                     let item = *arg.downcast::<Item>().unwrap();
 
                     matcher_engine.as_ref().map(|mat| {
@@ -61,13 +63,20 @@ impl Matcher {
                             self.tx_result.send((Event::EvModelNewItem, Box::new(matched_item.unwrap())));
                         }
                     });
+
+                    // report total number
+                    if total_num % 11 == 0 {
+                        self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
+                    }
                 }
 
-                Event::EvReaderEnd => {
-                    // reader had stopped,
+                Event::EvSenderStopped | Event::EvReaderStopped => {
+                    self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
+                    self.tx_result.send((ev, arg));
                 }
 
                 Event::EvMatcherRestart => {
+                    total_num = 0;
                     query = *arg.downcast::<String>().unwrap();
 
                     // notifiy the model that the query had been changed
