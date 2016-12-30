@@ -55,7 +55,6 @@ impl Matcher {
                 Event::EvMatcherNewItem => {
                     let item = *arg.downcast::<Item>().unwrap();
 
-                    // TODO: filter logic
                     matcher_engine.as_ref().map(|mat| {
                         let matched_item = mat.match_item(item);
                         if matched_item != None {

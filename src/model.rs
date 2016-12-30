@@ -6,6 +6,9 @@ use std::time::Duration;
 use std::io::{Write, stdout, Stdout};
 use std::fmt;
 use std::cmp::{max, min};
+use orderedvec::OrderedVec;
+use std::sync::Arc;
+use std::collections::HashMap;
 
 use curses::{ColorTheme, Curses};
 use curses;
@@ -21,8 +24,9 @@ pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
-    items: Vec<MatchedItem>, // all items
+    items: OrderedVec<Arc<MatchedItem>>, // all items
     total_item: usize,
+    selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
@@ -30,14 +34,18 @@ pub struct Model {
     reverse: bool,
     height: i32,
     width: i32,
+
+
+    multi_selection: bool,
 }
 
 impl Model {
     pub fn new(rx_cmd: Receiver<(Event, EventArg)>) -> Self {
         Model {
             rx_cmd: rx_cmd,
-            items: Vec::new(),
+            items: OrderedVec::new(),
             total_item: 0,
+            selected: HashMap::new(),
 
             item_cursor: 0,
             line_cursor: 0,
@@ -45,6 +53,8 @@ impl Model {
             reverse: false,
             height: 0,
             width: 0,
+
+            multi_selection: true,
         }
     }
 
@@ -84,8 +94,7 @@ impl Model {
                         let tx_ack = *arg.downcast::<Sender<bool>>().unwrap();
 
                         curses.close();
-
-                        // TODO: output the selected items
+                        self.act_output();
 
                         tx_ack.send(true);
                     }
@@ -93,8 +102,18 @@ impl Model {
                         self.act_move_line_cursor(1);
                     }
                     Event::EvActDown => {
-                        let (h, w) = curses.get_maxyx();
                         self.act_move_line_cursor(-1);
+                    }
+                    Event::EvActToggle => {
+                        self.act_toggle();
+                    }
+                    Event::EvActToggleDown => {
+                        self.act_toggle();
+                        self.act_move_line_cursor(-1);
+                    }
+                    Event::EvActToggleUp => {
+                        self.act_toggle();
+                        self.act_move_line_cursor(1);
                     }
 
                     _ => {}
@@ -121,7 +140,7 @@ impl Model {
     }
 
     fn new_item(&mut self, item: MatchedItem) {
-        self.items.push(item);
+        self.items.push(Arc::new(item));
     }
 
     fn print_screen(&mut self, curses: &Curses, print_query: ClosureType) {
@@ -136,17 +155,18 @@ impl Model {
         let lower = self.item_cursor;
         let upper = min(self.item_cursor + h-1, self.items.len());
 
-        for (l, item) in self.items[lower .. upper].iter().enumerate() {
+        for i in lower..upper {
+            let l = i - lower;
             curses.mv((if self.reverse {l+1} else {h-2 - l} ) as i32, 0);
-
             // print a single item
             if l == self.line_cursor {
                 curses.printw(">");
             } else {
                 curses.printw(" ");
             }
-            curses.printw(" ");
-            curses.printw(&(item.item.get_text()));
+
+            let item = self.items.get(i).unwrap().clone();
+            self.print_item(curses, &item);
         }
 
         // print query
@@ -154,6 +174,20 @@ impl Model {
         print_query(curses);
     }
 
+    fn print_item(&self, curses: &Curses, item: &MatchedItem) {
+        let index = item.item.get_full_index();
+        if self.selected.contains_key(&index) {
+            curses.printw(">");
+        } else {
+            curses.printw(" ");
+        }
+
+        curses.printw(&(item.item.get_text()));
+    }
+
+
+    //--------------------------------------------------------------------------
+    // Actions
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
         let diff = if self.reverse {-diff} else {diff};
@@ -176,5 +210,26 @@ impl Model {
 
         self.item_cursor = item_cursor as usize;
         self.line_cursor = line_cursor as usize;
+    }
+
+    pub fn act_toggle(&mut self) {
+        if !self.multi_selection {return;}
+
+        let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+        let index = current_item.item.get_full_index();
+        if !self.selected.contains_key(&index) {
+            self.selected.insert(index, current_item.clone());
+        } else {
+            self.selected.remove(&index);
+        }
+
+    }
+
+    pub fn act_output(&mut self) {
+        let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
+        output.sort_by_key(|k| k.0);
+        for (k, item) in output {
+            println!("{}", item.item.get_output_text());
+        }
     }
 }

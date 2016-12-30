@@ -10,6 +10,7 @@ use event::{Event, EventArg};
 use std::thread::{spawn, JoinHandle};
 use std::thread;
 use std::time::Duration;
+use std::collections::HashMap;
 
 use std::io::Write;
 use getopts;
@@ -171,8 +172,14 @@ fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Er
     Ok((Some(command), Box::new(BufReader::new(stdout))))
 }
 
+// Consider that you invoke a command with different arguments several times
+// If you select some items each time, how will skim remeber it?
+// => Well, we'll give each invokation a number, i.e. RUN_NUM
+// What if you invoke the same command and same arguments twice?
+// => We use NUM_MAP to specify the same run number.
 lazy_static! {
     static ref RUN_NUM: RwLock<usize> = RwLock::new(0);
+    static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
 }
 
 fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>, option: Arc<RwLock<ReaderOption>>) {
@@ -210,7 +217,17 @@ fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>, opti
     });
 
     let opt = option.read().unwrap();
-    let run_num = {*RUN_NUM.read().unwrap()};
+
+    // set the proper run number
+    let mut run_num = {*RUN_NUM.read().unwrap()};
+    let run_num = *NUM_MAP.write()
+            .unwrap()
+            .entry(cmd.to_string())
+            .or_insert_with(|| {
+                *(RUN_NUM.write().unwrap()) = run_num + 1;
+                run_num + 1
+            });
+
     let mut index = 0;
     loop {
         // start reading
@@ -238,7 +255,6 @@ fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>, opti
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
     }
-    *(RUN_NUM.write().unwrap()) = run_num + 1;
     tx_control.send(true);
 }
 

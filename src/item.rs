@@ -7,6 +7,7 @@ use ansi::parse_ansi;
 use regex::Regex;
 use reader::FieldRange;
 use std::mem;
+use std::borrow::Cow;
 
 use std::io::Write;
 macro_rules! println_stderr(
@@ -36,7 +37,7 @@ pub struct Item {
     output_text: String,
 
     // The text that will shown into the screen. Can be transformed.
-    pub text: String,
+    text: String,
 
     // cache of the lower case version of text. To improve speed
     text_lower_chars: Vec<char>,
@@ -50,7 +51,7 @@ pub struct Item {
     ansi_enabled: bool,
 }
 
-impl Item {
+impl<'a> Item {
     pub fn new(orig_text: String,
                ansi_enabled: bool,
                trans_fields: &[FieldRange],
@@ -114,15 +115,14 @@ impl Item {
         }
     }
 
-    pub fn get_output_text(&mut self) -> &str {
+    pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
             let (text, _) = parse_ansi(&self.output_text);
-            let _ = mem::replace(&mut self.output_text, text);
-            &self.output_text
+            Cow::Owned(text)
         } else if !self.using_transform_fields && self.ansi_enabled {
-            &self.text
+            Cow::Borrowed(&self.text)
         } else {
-            &self.output_text
+            Cow::Borrowed(&self.output_text)
         }
     }
 
@@ -136,6 +136,10 @@ impl Item {
 
     pub fn get_index(&self) -> usize {
         self.index.1
+    }
+
+    pub fn get_full_index(&self) -> (usize, usize) {
+        self.index
     }
 
     pub fn get_matching_ranges(&self) -> &[(usize, usize)] {

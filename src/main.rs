@@ -25,7 +25,7 @@ use std::ptr;
 use util::eventbox::EventBox;
 
 use ncurses::*;
-use event::Event;
+use event::Event::*;
 use input::Input;
 use reader::Reader;
 use matcher::Matcher;
@@ -532,7 +532,7 @@ fn real_main() -> i32 {
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_millis(50));
-            tx_input_clone.send((Event::EvActRedraw, Box::new(true)));
+            tx_input_clone.send((EvActRedraw, Box::new(true)));
         }
     });
 
@@ -544,58 +544,59 @@ fn real_main() -> i32 {
     // rx_input:  receive keystroke events
 
     // light up the fire
-    tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+    tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
 
     let on_query_change = |query: &query::Query| {
         // restart the reader with new parameter
-        tx_reader.send((Event::EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+        tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
         // send redraw event
-        tx_input.send((Event::EvActRedraw, Box::new(true)));
+        tx_input.send((EvActRedraw, Box::new(true)));
     };
 
     // listen user input
     while let Ok((ev, arg)) = rx_input.recv() {
         match ev {
-            Event::EvActAddChar =>  {
+            EvActAddChar =>  {
                 let ch: char = *arg.downcast().unwrap();
                 query.act_add_char(ch);
                 on_query_change(&query);
             }
 
-            Event::EvActBackwardDeleteChar => {
+            EvActBackwardDeleteChar => {
                 query.act_backward_delete_char();
                 on_query_change(&query);
             }
 
-            Event::EvActBackwardChar => {
+            EvActBackwardChar => {
                 query.act_backward_char();
-                let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
             }
 
-            Event::EvActForwardChar => {
+            EvActForwardChar => {
                 query.act_forward_char();
-                let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
             }
 
-            Event::EvActRotateMode => {
+            EvActRotateMode => {
                 query.act_query_rotate_mode();
-                let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
             }
 
-            Event::EvActAccept => {
+            EvActAccept => {
                 // sync with model to quit
 
                 let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
-                let _ = tx_model.send((Event::EvActAccept, Box::new(tx)));
+                let _ = tx_model.send((EvActAccept, Box::new(tx)));
                 let _ = rx.recv();
                 break;
             }
 
-            Event::EvActRedraw => {
-                let _ = tx_model.send((Event::EvModelRedraw, Box::new(query.get_print_func())));
+            EvActRedraw => {
+                let _ = tx_model.send((EvModelRedraw, Box::new(query.get_print_func())));
             }
 
-            Event::EvActUp | Event::EvActDown => {
+            EvActUp | EvActDown
+                | EvActToggle | EvActToggleDown | EvActToggleUp => {
                 let _ = tx_model.send((ev, arg));
             }
 
