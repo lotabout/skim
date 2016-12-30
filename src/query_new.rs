@@ -1,6 +1,7 @@
 use termion::{clear, cursor, terminal_size};
 use termion::raw::{RawTerminal, IntoRawMode};
 use std::io::{Write, stdout, Stdout};
+use model_new::ClosureType;
 
 pub struct Query {
     cmd_before: Vec<char>,
@@ -28,14 +29,15 @@ impl Query {
         self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect()
     }
 
-    pub fn print_screen(&mut self) {
+    pub fn get_print_func(&self) -> ClosureType {
         let (width, height) = terminal_size().unwrap();
         let (width, height) = (width as usize, height as usize);
         let query = self.get_query();
 
-        write!(self.stdout, "{}{}", cursor::Goto(1, height as u16), clear::CurrentLine);
-        write!(self.stdout, "> {}", query);
-        self.stdout.flush().unwrap();
+        Box::new(move |stdout| {
+            write!(stdout, "{}{}", cursor::Goto(1, height as u16), clear::CurrentLine);
+            write!(stdout, "> {}", query);
+        })
     }
 
 //------------------------------------------------------------------------------

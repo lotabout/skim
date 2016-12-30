@@ -16,6 +16,7 @@ macro_rules! println_stderr(
     } }
 );
 
+pub type ClosureType = Box<Fn(&mut RawTerminal<Stdout>) + Send>;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
@@ -59,7 +60,11 @@ impl Model {
                     }
 
                     Event::EvModelRedraw => {
+                        let hook = *arg.downcast::<ClosureType>().unwrap();
+                        write!(self.stdout, "{}", clear::All);
                         self.print_screen();
+                        hook(&mut self.stdout);
+                        self.stdout.flush().unwrap();
                     }
 
                     _ => {}

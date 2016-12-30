@@ -455,6 +455,9 @@ fn print_usage(program: &str, opts: Options) {
 
 use std::sync::mpsc::{sync_channel, channel};
 use std::io;
+use model_new::ClosureType;
+
+
 fn real_main() -> i32 {
 
     // parse options
@@ -539,11 +542,7 @@ fn real_main() -> i32 {
             }
 
             Event::EvActRedraw => {
-                write!(stdout, "{}", clear::All);
-                stdout.flush().unwrap();
-
-                query.print_screen();
-                tx_model.send((Event::EvModelRedraw, Box::new(true)));
+                let _ = tx_model.send((Event::EvModelRedraw, Box::new(query.get_print_func())));
             }
 
             _ => {}
