@@ -4,7 +4,6 @@ extern crate ncurses;
 extern crate getopts;
 extern crate regex;
 #[macro_use] extern crate lazy_static;
-extern crate termion;
 mod util;
 mod item;
 mod reader;
@@ -23,8 +22,6 @@ mod matcher_new;
 mod model_new;
 mod query_new;
 mod input_new;
-use termion::raw::{RawTerminal, IntoRawMode};
-use std::io::{Write, stdout, Stdout};
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -32,7 +29,6 @@ use std::time::Duration;
 use std::mem;
 use std::ptr;
 use util::eventbox::EventBox;
-use termion::clear;
 
 use ncurses::*;
 use event::Event;
@@ -506,8 +502,6 @@ fn real_main() -> i32 {
     });
 
 
-    let mut stdout = stdout().into_raw_mode().unwrap();
-
     // now we can use
     // tx_reader: send message to reader
     // tx_model:  send message to model
@@ -535,6 +529,16 @@ fn real_main() -> i32 {
             Event::EvActBackwardDeleteChar => {
                 query.act_backward_delete_char();
                 on_query_change(&query);
+            }
+
+            Event::EvActBackwardChar => {
+                query.act_backward_char();
+                let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
+            }
+
+            Event::EvActForwardChar => {
+                query.act_forward_char();
+                let _ = tx_input.send((Event::EvActRedraw, Box::new(true)));
             }
 
             Event::EvActAccept => {

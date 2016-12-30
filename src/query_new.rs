@@ -1,5 +1,3 @@
-use termion::{clear, cursor, terminal_size};
-use termion::raw::{RawTerminal, IntoRawMode};
 use std::io::{Write, stdout, Stdout};
 use model_new::ClosureType;
 
@@ -8,7 +6,6 @@ pub struct Query {
     cmd_after: Vec<char>,
     query_before: Vec<char>,
     query_after: Vec<char>,
-    stdout: RawTerminal<Stdout>,
 }
 
 impl Query {
@@ -18,11 +15,18 @@ impl Query {
             cmd_after: Vec::new(),
             query_before: query.unwrap_or(&"").chars().collect(),
             query_after: Vec::new(),
-            stdout: stdout().into_raw_mode().unwrap(),
         }
     }
     pub fn get_query(&self) -> String {
         self.query_before.iter().cloned().chain(self.query_after.iter().cloned().rev()).collect()
+    }
+
+    fn get_before(&self) -> String {
+        self.query_before.iter().cloned().collect()
+    }
+
+    fn get_after(&self) -> String {
+        self.query_after.iter().cloned().rev().collect()
     }
 
     pub fn get_cmd(&self) -> String {
@@ -30,13 +34,18 @@ impl Query {
     }
 
     pub fn get_print_func(&self) -> ClosureType {
-        let (width, height) = terminal_size().unwrap();
-        let (width, height) = (width as usize, height as usize);
-        let query = self.get_query();
+        let before = self.get_before();
+        let after = self.get_after();
 
-        Box::new(move |stdout| {
-            write!(stdout, "{}{}", cursor::Goto(1, height as u16), clear::CurrentLine);
-            write!(stdout, "> {}", query);
+        Box::new(move |curses| {
+            let (h, w) = curses.get_maxyx();
+
+            curses.mv(h - 1, 0);
+            curses.printw("> ");
+            curses.printw(&before);
+            let (y, x) = curses.getyx();
+            curses.printw(&after);
+            curses.mv(y, x);
         })
     }
 
@@ -51,6 +60,17 @@ impl Query {
         self.query_before.pop();
     }
 
+    pub fn act_backward_char(&mut self) {
+        self.query_before.pop().map(|ch| {
+            self.query_after.push(ch);
+        });
+    }
+
+    pub fn act_forward_char(&mut self) {
+        self.query_after.pop().map(|ch| {
+            self.query_before.push(ch);
+        });
+    }
 }
 
 #[cfg(test)]

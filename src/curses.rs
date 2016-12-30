@@ -108,8 +108,9 @@ impl Curses {
         setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
         let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
         let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
-        let screen = newterm(None, stderr, stdin);
-        set_term(screen);
+        //let screen = newterm(None, stderr, stdin);
+        //set_term(screen);
+        let screen = initscr();
         raw();
         noecho();
 
@@ -137,6 +138,13 @@ impl Curses {
         (max_y, max_x)
     }
 
+    pub fn getyx(&self) -> (i32, i32) {
+        let mut y = 0;
+        let mut x = 0;
+        getyx(stdscr(), &mut y, &mut x);
+        (y, x)
+    }
+
     pub fn clrtoeol(&self) {
         clrtoeol();
     }
@@ -159,6 +167,10 @@ impl Curses {
         attroff(attr);
     }
 
+    pub fn printw(&self, text: &str) {
+        printw(text);
+    }
+
     pub fn close(&self) {
         endwin();
         delscreen(self.screen);
@@ -170,6 +182,10 @@ impl Curses {
 
     pub fn attr_off(&self, attr: attr_t) {
         attroff(attr);
+    }
+
+    pub fn refresh(&self) {
+        refresh();
     }
 }
 

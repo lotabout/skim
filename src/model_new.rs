@@ -3,11 +3,12 @@ use event::{Event, EventArg};
 use item::Item;
 use std::thread;
 use std::time::Duration;
-use termion::raw::{RawTerminal, IntoRawMode};
 use std::io::{Write, stdout, Stdout};
-use termion::{clear, cursor, terminal_size};
 use std::fmt;
 use std::cmp::{max, min};
+
+use curses::{ColorTheme, Curses};
+use curses;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -16,7 +17,7 @@ macro_rules! println_stderr(
     } }
 );
 
-pub type ClosureType = Box<Fn(&mut RawTerminal<Stdout>) + Send>;
+pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
@@ -26,7 +27,6 @@ pub struct Model {
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
-    stdout: RawTerminal<Stdout>,
 }
 
 impl Model {
@@ -39,11 +39,16 @@ impl Model {
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
-            stdout: stdout().into_raw_mode().unwrap(),
         }
     }
 
     pub fn run(&mut self) {
+        // generate a new instance of curses for printing
+
+        let curses = Curses::new();
+        let theme = ColorTheme::new();
+        curses::init(Some(&theme), false, false);
+
         // main loop
         loop {
             // check for new item
@@ -61,10 +66,11 @@ impl Model {
 
                     Event::EvModelRedraw => {
                         let hook = *arg.downcast::<ClosureType>().unwrap();
-                        write!(self.stdout, "{}", clear::All);
-                        self.print_screen();
-                        hook(&mut self.stdout);
-                        self.stdout.flush().unwrap();
+
+                        curses.clear();
+                        self.print_screen(&curses);
+                        hook(&curses);
+                        curses.refresh();
                     }
 
                     _ => {}
@@ -85,14 +91,14 @@ impl Model {
         self.items.push(item);
     }
 
-    fn print_screen(&mut self) {
-        let (width, height) = terminal_size().unwrap();
+    fn print_screen(&mut self, curses: &Curses) {
+        let (width, height) = curses.get_maxyx();
         let (width, height) = (width as usize, height as usize);
 
         for (l, item) in self.items[0 .. min(height-1, self.items.len())].iter().enumerate() {
-            write!(self.stdout, "{}{}", cursor::Goto(3, (l+1) as u16), clear::CurrentLine);
-            write!(self.stdout, "{}", item.text);
+            curses.mv(l as i32, 0);
+            curses.printw("  ");
+            curses.printw(&item.text);
         }
-        self.stdout.flush().unwrap();
     }
 }
