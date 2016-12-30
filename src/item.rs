@@ -8,6 +8,14 @@ use regex::Regex;
 use reader::FieldRange;
 use std::mem;
 
+use std::io::Write;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 // An item will store everything that one line input will need to be operated and displayed.
 //
 // What's special about an item?
@@ -43,18 +51,6 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new_plain(text: String) -> Self {
-        Item {
-            output_text: "".to_string(),
-            text: text,
-            text_lower_chars: Vec::new(),
-            ansi_states: Vec::new(),
-            using_transform_fields: false,
-            matching_ranges: Vec::new(),
-            ansi_enabled: false,
-            index: (0, 0),
-        }
-    }
     pub fn new(orig_text: String,
                ansi_enabled: bool,
                trans_fields: &[FieldRange],
@@ -104,6 +100,7 @@ impl Item {
         } else {
             vec![(0, lower_chars.len())]
         };
+
         ret.text_lower_chars = lower_chars;
         ret.matching_ranges = matching_ranges;
         ret
@@ -149,14 +146,14 @@ impl Item {
 impl Clone for Item {
     fn clone(&self) -> Item {
         Item {
+            index: self.index,
             output_text: self.output_text.clone(),
             text: self.text.clone(),
-            text_lower_chars: Vec::new(),
-            ansi_states: Vec::new(),
-            using_transform_fields: false,
-            matching_ranges: Vec::new(),
-            ansi_enabled: false,
-            index: self.index,
+            text_lower_chars: self.text_lower_chars.clone(),
+            ansi_states: self.ansi_states.clone(),
+            using_transform_fields: self.using_transform_fields,
+            matching_ranges: self.matching_ranges.clone(),
+            ansi_enabled: self.ansi_enabled,
         }
     }
 }
@@ -240,13 +237,13 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
 pub type Rank = [i64; 4]; // score, index, start, end
 
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum MatchedRange {
     Range(usize, usize),
     Chars(Vec<usize>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MatchedItem {
     pub item: Item,
     pub rank: Rank,

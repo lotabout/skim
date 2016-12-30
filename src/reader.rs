@@ -12,6 +12,8 @@ use std::thread;
 use std::time::Duration;
 
 use std::io::Write;
+use getopts;
+use regex::Regex;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -20,10 +22,64 @@ macro_rules! println_stderr(
     } }
 );
 
+struct ReaderOption {
+    pub use_ansi_color: bool,
+    pub default_arg: String,
+    pub transform_fields: Vec<FieldRange>,
+    pub matching_fields: Vec<FieldRange>,
+    pub delimiter: Regex,
+    pub replace_str: String,
+}
+
+impl ReaderOption {
+    pub fn new() -> Self {
+        ReaderOption {
+            use_ansi_color: false,
+            default_arg: String::new(),
+            transform_fields: Vec::new(),
+            matching_fields: Vec::new(),
+            delimiter: Regex::new(r".*?\t").unwrap(),
+            replace_str: "{}".to_string(),
+        }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if options.opt_present("ansi") {
+            self.use_ansi_color = true;
+        }
+
+        if let Some(delimiter) = options.opt_str("d") {
+            self.delimiter = Regex::new(&(".*?".to_string() + &delimiter))
+                .unwrap_or(Regex::new(r".*?\t").unwrap());
+        }
+
+        if let Some(transform_fields) = options.opt_str("with-nth") {
+            self.transform_fields = transform_fields.split(',')
+                .map(|string| {
+                    parse_range(string)
+                })
+                .filter(|range| range.is_some())
+                .map(|range| range.unwrap())
+                .collect();
+        }
+
+        if let Some(matching_fields) = options.opt_str("nth") {
+            self.matching_fields = matching_fields.split(',')
+                .map(|string| {
+                    parse_range(string)
+                })
+                .filter(|range| range.is_some())
+                .map(|range| range.unwrap())
+                .collect();
+        }
+    }
+}
+
 pub struct Reader {
     rx_cmd: Receiver<(Event, EventArg)>,
     tx_item: SyncSender<(Event, EventArg)>,
     items: Arc<RwLock<Vec<Item>>>, // all items
+    option: Arc<RwLock<ReaderOption>>,
 }
 
 impl Reader {
@@ -32,7 +88,13 @@ impl Reader {
             rx_cmd: rx_cmd,
             tx_item: tx_item,
             items: Arc::new(RwLock::new(Vec::new())),
+            option: Arc::new(RwLock::new(ReaderOption::new()))
         }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        let mut option = self.option.write().unwrap();
+        option.parse_options(options);
     }
 
     pub fn run(&mut self) {
@@ -71,8 +133,9 @@ impl Reader {
                         let (tx, rx_reader) = channel();
                         tx_reader = Some(tx);
                         let cmd_clone = cmd.clone();
+                        let option_clone = self.option.clone();
                         thread::spawn(move || {
-                            reader(&cmd_clone, rx_reader, items);
+                            reader(&cmd_clone, rx_reader, items, option_clone);
                         });
                     }
 
@@ -108,7 +171,11 @@ fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Er
     Ok((Some(command), Box::new(BufReader::new(stdout))))
 }
 
-fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>) {
+lazy_static! {
+    static ref RUN_NUM: RwLock<usize> = RwLock::new(0);
+}
+
+fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>, option: Arc<RwLock<ReaderOption>>) {
     let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
 
     let (command, mut source): (Option<Child>, Box<BufRead>) = if istty {
@@ -142,6 +209,9 @@ fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>) {
         }
     });
 
+    let opt = option.read().unwrap();
+    let run_num = {*RUN_NUM.read().unwrap()};
+    let mut index = 0;
     loop {
         // start reading
         let mut input = String::new();
@@ -156,11 +226,19 @@ fn reader(cmd: &str, rx_cmd: Receiver<bool>, items: Arc<RwLock<Vec<Item>>>) {
                     }
                 }
                 let mut items = items.write().unwrap();
-                items.push(Item::new_plain(input));
+                items.push(Item::new(input,
+                                     opt.use_ansi_color,
+                                     &opt.transform_fields,
+                                     &opt.matching_fields,
+                                     &opt.delimiter,
+                                     (run_num, index)));
+
+                index += 1;
             }
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
     }
+    *(RUN_NUM.write().unwrap()) = run_num + 1;
     tx_control.send(true);
 }
 
@@ -195,4 +273,62 @@ pub enum FieldRange {
     LeftInf(i64),
     RightInf(i64),
     Both(i64, i64),
+}
+
+// range: "start..end", end is excluded.
+// "0", "0..", "..10", "1..10", etc.
+fn parse_range(range: &str) -> Option<FieldRange> {
+    use self::FieldRange::*;
+
+    if range == ".." {
+        return Some(RightInf(0));
+    }
+
+    let range_string: Vec<&str> = range.split("..").collect();
+    if range_string.is_empty() || range_string.len() > 2 {
+        return None;
+    }
+
+    let start = range_string.get(0).and_then(|x| x.parse::<i64>().ok());
+    let end = range_string.get(1).and_then(|x| x.parse::<i64>().ok());
+
+    if range_string.len() == 1 {
+        return if start.is_none() {None} else {Some(Single(start.unwrap()))};
+    }
+
+    if start.is_none() && end.is_none() {
+        None
+    } else if end.is_none() {
+        // 1..
+        Some(RightInf(start.unwrap()))
+    } else if start.is_none() {
+        // ..1
+        Some(LeftInf(end.unwrap()))
+    } else {
+        Some(Both(start.unwrap(), end.unwrap()))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::FieldRange::*;
+    #[test]
+    fn test_parse_range() {
+        assert_eq!(super::parse_range("1"), Some(Single(1)));
+        assert_eq!(super::parse_range("-1"), Some(Single(-1)));
+
+        assert_eq!(super::parse_range("1.."), Some(RightInf(1)));
+        assert_eq!(super::parse_range("-1.."), Some(RightInf(-1)));
+
+        assert_eq!(super::parse_range("..1"), Some(LeftInf(1)));
+        assert_eq!(super::parse_range("..-1"), Some(LeftInf(-1)));
+
+        assert_eq!(super::parse_range("1..3"), Some(Both(1, 3)));
+        assert_eq!(super::parse_range("-1..-3"), Some(Both(-1, -3)));
+
+        assert_eq!(super::parse_range(".."), Some(RightInf(0)));
+        assert_eq!(super::parse_range("a.."), None);
+        assert_eq!(super::parse_range("..b"), None);
+        assert_eq!(super::parse_range("a..b"), None);
+    }
 }

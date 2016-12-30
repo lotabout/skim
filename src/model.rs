@@ -146,7 +146,7 @@ impl Model {
                 curses.printw(" ");
             }
             curses.printw(" ");
-            curses.printw(&(item.item.text));
+            curses.printw(&(item.item.get_text()));
         }
 
         // print query

@@ -450,36 +450,75 @@ use model::ClosureType;
 
 fn real_main() -> i32 {
 
+    //------------------------------------------------------------------------------
     // parse options
+    let mut opts = Options::new();
+    opts.optopt("b", "bind", "comma seperated keybindings, such as 'ctrl-j:accept,ctrl-k:kill-line'", "KEY:ACTION");
+    opts.optflag("h", "help", "print this help menu");
+    opts.optflag("m", "multi", "Enable Multiple Selection");
+    opts.optflag("", "no-multi", "Disable Multiple Selection");
+    opts.optopt("p", "prompt", "prompt string", "'> '");
+    opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
+    opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
+    opts.optflag("", "ansi", "parse ANSI color codes for input strings");
+    opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
+    opts.optflag("i", "interactive", "Use skim as an interactive interface");
+    opts.optflag("", "regex", "use regex instead of fuzzy match");
+    opts.optopt("q", "query", "specify the initial query", "\"\"");
+    opts.optopt("d", "delimiter", "specify the delimiter(in REGEX) for fields", "\\t");
+    opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
+    opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
+    opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
+    opts.optflag("", "version", "print out the current version of skim");
 
-    // bring up needed sub module
+    let mut args = Vec::new();
+
+    let program = env::args().nth(0).unwrap_or("sk".to_string());
+    for arg in env::args().skip(1) {
+        args.push(arg);
+    }
+    let options = match opts.parse(args) {
+        Ok(m) => { m }
+        Err(f) => { panic!(f.to_string()) }
+    };
+
+    //------------------------------------------------------------------------------
+    // query
     let mut query = query::Query::builder()
         .cmd("ls {}")
         .build();
+    query.parse_options(&options);
 
-    // the data flow:
-    // reader -> matcher -> model
-
+    //------------------------------------------------------------------------------
+    // reader
     let (tx_reader, rx_reader) = channel();
     let (tx_item, rx_item) = sync_channel(1024);
     let mut reader = reader::Reader::new(rx_reader, tx_item);
+    reader.parse_options(&options);
     thread::spawn(move || {
         reader.run();
     });
 
+    //------------------------------------------------------------------------------
+    // matcher
     let (tx_model, rx_model) = channel();
     let tx_model_clone = tx_model.clone();
     let mut matcher = matcher::Matcher::new(rx_item, tx_model_clone);
-    let mut model = model::Model::new(rx_model);
+    matcher.parse_options(&options);
 
     thread::spawn(move || {
         matcher.run();
     });
 
+    //------------------------------------------------------------------------------
+    // model
+    let mut model = model::Model::new(rx_model);
     thread::spawn(move || {
         model.run();
     });
 
+    //------------------------------------------------------------------------------
+    // input
     let (tx_input, rx_input) = channel();
     let tx_input_clone = tx_input.clone();
     let mut input = input::Input::new(tx_input_clone);
@@ -487,6 +526,7 @@ fn real_main() -> i32 {
         input.run();
     });
 
+    //------------------------------------------------------------------------------
     // start a timer for notifying refresh
     let tx_input_clone = tx_input.clone();
     thread::spawn(move || {
@@ -497,6 +537,7 @@ fn real_main() -> i32 {
     });
 
 
+    //------------------------------------------------------------------------------
     // now we can use
     // tx_reader: send message to reader
     // tx_model:  send message to model

@@ -1,5 +1,6 @@
 use std::io::{Write, stdout, Stdout};
 use model::ClosureType;
+use getopts;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -59,6 +60,24 @@ impl Query {
 
     pub fn build(self) -> Self {
         self
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if let Some(cmd) = options.opt_str("c") {
+            self.cmd = cmd.clone();
+        }
+
+        if let Some(query) = options.opt_str("q") {
+            self.query_before = query.chars().collect();
+        }
+
+        if let Some(replstr) = options.opt_str("I") {
+            self.replstr = replstr.clone();
+        }
+
+        if options.opt_present("i") {
+            self.mode = QueryMode::CMD;
+        }
     }
 
     pub fn get_query(&self) -> String {

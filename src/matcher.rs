@@ -3,6 +3,7 @@ use event::{Event, EventArg};
 use item::{Item, MatchedItem, MatchedRange};
 use std::sync::Arc;
 
+use getopts;
 use std::io::Write;
 use score;
 
@@ -22,7 +23,7 @@ enum Algorithm {
 pub struct Matcher {
     tx_result: Sender<(Event, EventArg)>,
     rx_item: Receiver<(Event, EventArg)>,
-    rank_criterion: Arc<Vec<RankCriteria>>,
+    rank_criterion: Vec<RankCriteria>,
 }
 
 impl Matcher {
@@ -30,10 +31,21 @@ impl Matcher {
         Matcher {
             rx_item: rx_item,
             tx_result: tx_result,
-            rank_criterion: Arc::new(Vec::new()),
+            rank_criterion: vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End],
         }
     }
 
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if let Some(tie_breaker) = options.opt_str("t") {
+            let mut vec = Vec::new();
+            for criteria in tie_breaker.split(',') {
+                if let Some(c) = parse_criteria(criteria) {
+                    vec.push(c);
+                }
+            }
+            self.rank_criterion = vec;
+        }
+    }
 
     pub fn run(&self) {
         let mut query = "".to_string();
@@ -62,7 +74,9 @@ impl Matcher {
                     // notifiy the model that the query had been changed
                     self.tx_result.send((Event::EvModelRestart, Box::new(true)));
 
-                    matcher_engine = Some(MatchingEngine::builder(&query).build());
+                    matcher_engine = Some(MatchingEngine::builder(&query)
+                                          .rank(&self.rank_criterion)
+                                          .build());
                 }
 
                 _ => {}
@@ -185,6 +199,7 @@ impl<'a> MatchingEngine<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum RankCriteria {
     Score,
     Index,
