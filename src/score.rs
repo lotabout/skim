@@ -116,6 +116,7 @@ pub fn fuzzy_match(choice: &[char],
     Some((score, picked))
 }
 
+#[allow(dead_code)]
 pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)>{
     match *pattern {
         Some(ref pat) => {

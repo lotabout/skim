@@ -1,7 +1,6 @@
 /// Input will listens to user input, modify the query string, send special
 /// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
 
-use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::io::prelude::*;
@@ -34,23 +33,25 @@ impl Input {
             match self.keyboard.get_key() {
                 Some(key) => {
                     if let Key::Char(ch) = key {
-                        self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
+                        let _ = self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
                     } else {
                         // search event from keymap
                         match self.keymap.get(&key) {
                             Some(&(ev, Some(ref args))) => {
-                                self.tx_input.send((ev, Box::new(Some(args.clone()))));
+                                let _ = self.tx_input.send((ev, Box::new(Some(args.clone()))));
                             }
                             Some(&(ev, None)) => {
-                                self.tx_input.send((ev, Box::new(None as Option<String>)));
+                                let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
                             }
                             None => {
-                                self.tx_input.send((Event::EvInputKey, Box::new(key)));
+                                let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
                             }
                         }
                     }
                 }
-                None => {self.tx_input.send((Event::EvInputInvalid, Box::new(true)));}
+                None => {
+                    let _ = self.tx_input.send((Event::EvInputInvalid, Box::new(true)));
+                }
             }
         }
     }

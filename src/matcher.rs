@@ -1,7 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
 use item::{Item, MatchedItem, MatchedRange};
-use std::sync::Arc;
 
 use getopts;
 use score;
@@ -48,7 +47,6 @@ impl Matcher {
     }
 
     pub fn run(&self) {
-        let mut query = "".to_string();
         let mut matcher_engine: Option<MatchingEngine> = None;
         let mut total_num: usize = 0;
         while let Ok((ev, arg)) = self.rx_item.recv() {
@@ -60,28 +58,28 @@ impl Matcher {
                     matcher_engine.as_ref().map(|mat| {
                         let matched_item = mat.match_item(item);
                         if matched_item != None {
-                            self.tx_result.send((Event::EvModelNewItem, Box::new(matched_item.unwrap())));
+                            let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_item.unwrap())));
                         }
                     });
 
                     // report total number
                     if total_num % 11 == 0 {
-                        self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
+                        let _ = self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
                     }
                 }
 
                 Event::EvSenderStopped | Event::EvReaderStopped => {
-                    self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
-                    self.tx_result.send((ev, arg));
+                    let _ = self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
+                    let _ = self.tx_result.send((ev, arg));
                 }
-                Event::EvReaderStarted => { self.tx_result.send((ev, arg)); }
+                Event::EvReaderStarted => { let _ = self.tx_result.send((ev, arg)); }
 
                 Event::EvMatcherRestart => {
                     total_num = 0;
-                    query = *arg.downcast::<String>().unwrap();
+                    let query = *arg.downcast::<String>().unwrap();
 
                     // notifiy the model that the query had been changed
-                    self.tx_result.send((Event::EvModelRestart, Box::new(true)));
+                    let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
 
                     matcher_engine = Some(MatchingEngine::builder(&query)
                                           .rank(&self.rank_criterion)
@@ -100,7 +98,6 @@ struct MatchingEngine<'a> {
     query_chars: Vec<char>,
     query_lower_chars: Vec<char>,
     rank_criterion: Option<&'a [RankCriteria]>,
-    weights: Option<i32>, // not used
 }
 
 impl<'a> MatchingEngine<'a> {
@@ -110,7 +107,6 @@ impl<'a> MatchingEngine<'a> {
             query_chars: query.chars().collect(),
             query_lower_chars: query.to_lowercase().chars().collect(),
             rank_criterion: None,
-            weights: None,
         }
     }
 

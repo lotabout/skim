@@ -6,7 +6,6 @@ use ncurses::*;
 use ansi::parse_ansi;
 use regex::Regex;
 use reader::FieldRange;
-use std::mem;
 use std::borrow::Cow;
 
 use std::io::Write;
@@ -242,6 +241,7 @@ pub type Rank = [i64; 4]; // score, index, start, end
 
 
 #[derive(PartialEq, Eq, Clone, Debug)]
+#[allow(dead_code)]
 pub enum MatchedRange {
     Range(usize, usize),
     Chars(Vec<usize>),

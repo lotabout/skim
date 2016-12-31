@@ -1,9 +1,7 @@
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
-use item::{Item, MatchedItem, MatchedRange};
-use std::thread;
-use std::time::{Instant, Duration};
-use std::fmt;
+use item::{MatchedItem, MatchedRange};
+use std::time::Instant;
 use std::cmp::{max, min};
 use orderedvec::OrderedVec;
 use std::sync::Arc;
@@ -14,10 +12,7 @@ use curses::*;
 use curses;
 use getopts;
 
-use std::process::exit;
-
 use std::io::Write;
-
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -28,7 +23,6 @@ macro_rules! println_stderr(
 pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
-const REFRESH_DURATION: u64 = 100;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 
 pub struct Model {
@@ -92,7 +86,6 @@ impl Model {
         let curses = Curses::new();
         let theme = ColorTheme::new();
         curses::init(Some(&theme), false, false);
-        let mut debug_timer = None;
 
         // main loop
         loop {
@@ -108,7 +101,6 @@ impl Model {
                         // clean the model
                         self.clean_model();
                         self.update_size(&curses);
-                        debug_timer = Some(Instant::now());
                     }
 
                     Event::EvModelRedraw => {
@@ -128,11 +120,6 @@ impl Model {
 
                     Event::EvSenderStopped => {
                         self.sender_stopped = true;
-
-                        // end of matcher
-                        let time = debug_timer.take().map(|t| t.elapsed()).unwrap_or(Duration::from_millis(0));
-                        let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-                        //println_stderr!("matcher spend time: {}ms", mills);
                     }
                     Event::EvReaderStopped => { self.reader_stopped = true; }
                     Event::EvReaderStarted => { self.reader_stopped = false; }
@@ -151,7 +138,8 @@ impl Model {
 
                         self.act_output();
 
-                        tx_ack.send(self.selected.len());
+                        let _ = tx_ack.send(self.selected.len());
+                        break;
                     }
                     Event::EvActUp => {
                         self.act_move_line_cursor(1);
@@ -198,8 +186,6 @@ impl Model {
                 }
             }
         }
-
-        curses.close();
     }
 
     fn clean_model(&mut self) {
@@ -226,7 +212,7 @@ impl Model {
 
     fn print_screen(&mut self, curses: &Curses, print_query: ClosureType) {
         let (h, w) = curses.get_maxyx();
-        let (h, w) = (h as usize, w as usize);
+        let (h, _) = (h as usize, w as usize);
 
         // screen-line: y         <--->   item-line: (height - y - 1)
         //              h-1                          h-(h-1)-1 = 0
@@ -367,7 +353,7 @@ impl Model {
             curses.caddch(ch, color, is_bold);
         } else {
             // handle tabstop
-            let (y, x) = curses.getyx();
+            let (_, x) = curses.getyx();
             let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
             for _ in 0..rest {
                 curses.caddch(' ', color, is_bold);
@@ -443,7 +429,7 @@ impl Model {
 
         let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
         output.sort_by_key(|k| k.0);
-        for (k, item) in output {
+        for (_, item) in output {
             println!("{}", item.item.get_output_text());
         }
     }

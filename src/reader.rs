@@ -7,9 +7,9 @@ use std::sync::{Arc, RwLock};
 use std::process::{Command, Stdio, Child};
 use std::io::{stdin, BufRead, BufReader};
 use event::{Event, EventArg};
-use std::thread::{spawn, JoinHandle};
+use std::thread::JoinHandle;
 use std::thread;
-use std::time::{Instant, Duration};
+use std::time::Duration;
 use std::collections::HashMap;
 
 use std::io::Write;
@@ -105,8 +105,6 @@ impl Reader {
         let mut last_command = "".to_string();
         let mut last_query = "".to_string();
 
-        let reader_stopped = Arc::new(RwLock::new(false));
-
         // start sender
         let (tx_sender, rx_sender) = channel();
         let tx_item = self.tx_item.clone();
@@ -138,22 +136,16 @@ impl Reader {
 
                         // start the new command
                         thread::spawn(move || {
-                            let debug_timer = Instant::now();
-
-                            tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
-                            tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
+                            let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
+                            let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
 
                             reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
 
-                            tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
-
-                            let time = debug_timer.elapsed();
-                            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-                            //println_stderr!("reader spend time: {}ms", mills);
+                            let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
                         });
                     } else {
                         // tell sender to restart
-                        tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
+                        let _ = tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
                     }
 
                     last_command = cmd;
@@ -206,7 +198,7 @@ fn reader(cmd: &str,
         // listen to `rx` for command to quit reader
         // kill command if it is got
         loop {
-            if let Ok(quit) = rx_cmd.try_recv() {
+            if let Ok(_) = rx_cmd.try_recv() {
                 // clean up resources
                 command.map(|mut x| {
                     let _ = x.kill();
@@ -215,7 +207,7 @@ fn reader(cmd: &str,
                 break;
             }
 
-            if let Ok(quit) = rx_control.recv_timeout(Duration::from_millis(10)) {
+            if let Ok(_) = rx_control.recv_timeout(Duration::from_millis(10)) {
                 command.map(|mut x| {
                     let _ = x.kill();
                     let _ = x.wait();
@@ -228,7 +220,7 @@ fn reader(cmd: &str,
     let opt = option.read().unwrap();
 
     // set the proper run number
-    let mut run_num = {*RUN_NUM.read().unwrap()};
+    let run_num = {*RUN_NUM.read().unwrap()};
     let run_num = *NUM_MAP.write()
             .unwrap()
             .entry(cmd.to_string())
@@ -251,19 +243,19 @@ fn reader(cmd: &str,
                         input.pop();
                     }
                 }
-                tx_sender.send((Event::EvReaderNewItem,
-                                Box::new(Item::new(input,
-                                                   opt.use_ansi_color,
-                                                   &opt.transform_fields,
-                                                   &opt.matching_fields,
-                                                   &opt.delimiter,
-                                                   (run_num, index)))));
+                let _ = tx_sender.send((Event::EvReaderNewItem,
+                                        Box::new(Item::new(input,
+                                                           opt.use_ansi_color,
+                                                           &opt.transform_fields,
+                                                           &opt.matching_fields,
+                                                           &opt.delimiter,
+                                                           (run_num, index)))));
                 index += 1;
             }
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
     }
-    tx_control.send(true);
+    let _ = tx_control.send(true);
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]

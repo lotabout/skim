@@ -1,4 +1,3 @@
-use std::io::{Write, stdout, Stdout};
 use model::ClosureType;
 use getopts;
 use curses::*;
@@ -40,26 +39,6 @@ impl Query {
     // builder
     pub fn cmd(mut self, cmd: &str) -> Self {
         self.cmd = cmd.to_owned();
-        self
-    }
-
-    pub fn cmd_arg(mut self,arg: &str) -> Self {
-        self.cmd_before = arg.chars().collect();
-        self
-    }
-
-    pub fn query(mut self, query: &str) -> Self {
-        self.query_before = query.chars().collect();
-        self
-    }
-
-    pub fn replstr(mut self, replstr: &str) -> Self {
-        self.replstr = replstr.to_owned();
-        self
-    }
-
-    pub fn mode(mut self, mode: QueryMode) -> Self {
-        self.mode = mode;
         self
     }
 
@@ -124,8 +103,6 @@ impl Query {
         let query_prompt = self.query_prompt.clone();
 
         Box::new(move |curses| {
-            let (h, w) = curses.get_maxyx();
-
             match mode {
                 QueryMode::CMD   => {
                     curses.cprint(&cmd_prompt, COLOR_PROMPT, false);
@@ -190,7 +167,7 @@ impl Query {
     }
 
     pub fn act_backward_kill_word(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, _) = self.get_ref();
 
         // skip whitespace
         while before.len() > 0 && before[before.len()-1].is_whitespace() {
@@ -204,7 +181,7 @@ impl Query {
     }
 
     pub fn act_kill_word(&mut self) {
-        let (before, after) = self.get_ref();
+        let (_, after) = self.get_ref();
 
         // kill word until whitespace
         while after.len() > 0 && !after[after.len()-1].is_whitespace() {
