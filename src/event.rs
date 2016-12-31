@@ -25,6 +25,8 @@ pub enum Event {
     EvSenderRestart,
     EvSenderStopped,
 
+    EvViewRedraw,
+
 
     EvActAddChar,
 

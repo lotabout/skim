@@ -501,7 +501,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // reader
     let (tx_reader, rx_reader) = channel();
-    let (tx_item, rx_item) = sync_channel(50024);
+    let (tx_item, rx_item) = sync_channel(1024);
     let mut reader = reader::Reader::new(rx_reader, tx_item);
     reader.parse_options(&options);
     thread::spawn(move || {
@@ -540,19 +540,25 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // start a timer for notifying refresh
     let tx_input_clone = tx_input.clone();
+    let (tx_view, rx_view) = channel();
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(200));
-            tx_input_clone.send((EvActRedraw, Box::new(true)));
+            let timeout = rx_view.recv_timeout(Duration::from_millis(150));
+            if timeout.is_ok() {
+                // some urgent refresh is needed
+                tx_input_clone.send((EvActRedraw, Box::new(true)));
+
+                // to prevent from bounds, remove sequent urgent refresh
+                thread::sleep(Duration::from_millis(50));
+                while let Ok(_) = rx_view.try_recv() {}
+            } else {
+                tx_input_clone.send((EvActRedraw, Box::new(true)));
+            }
         }
     });
 
-
     //------------------------------------------------------------------------------
-    // now we can use
-    // tx_reader: send message to reader
-    // tx_model:  send message to model
-    // rx_input:  receive keystroke events
+    // Helper functions
 
     // light up the fire
     let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
@@ -561,10 +567,18 @@ fn real_main() -> i32 {
         // restart the reader with new parameter
         let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
         // send redraw event
-        let _ = tx_input.send((EvActRedraw, Box::new(true)));
+        let _ = tx_view.send(true);
     };
 
-    // listen user input
+    let redraw_screen = || { let _ = tx_view.send(true); };
+
+    //------------------------------------------------------------------------------
+    // main loop, listen for user input
+    // now we can use
+    // tx_reader: send message to reader
+    // tx_model:  send message to model
+    // rx_input:  receive keystroke events
+
     let mut exit_code = 0;
     while let Ok((ev, arg)) = rx_input.recv() {
         match ev {
@@ -586,12 +600,12 @@ fn real_main() -> i32 {
 
             EvActBackwardChar => {
                 query.act_backward_char();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActForwardChar => {
                 query.act_forward_char();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActBackwardKillWord | EvActUnixWordRubout => {
@@ -601,22 +615,22 @@ fn real_main() -> i32 {
 
             EvActBackwardWord => {
                 query.act_backward_word();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActForwardWord => {
                 query.act_forward_word();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActBeginningOfLine => {
                 query.act_beginning_of_line();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActEndOfLine => {
                 query.act_end_of_line();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActKillLine => {
@@ -636,7 +650,7 @@ fn real_main() -> i32 {
 
             EvActRotateMode => {
                 query.act_query_rotate_mode();
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             EvActAccept => {
@@ -661,7 +675,7 @@ fn real_main() -> i32 {
             EvActUp | EvActDown
                 | EvActToggle | EvActToggleDown | EvActToggleUp => {
                 let _ = tx_model.send((ev, arg));
-                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+                redraw_screen();
             }
 
             _ => {}

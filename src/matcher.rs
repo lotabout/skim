@@ -4,8 +4,8 @@ use item::{Item, MatchedItem, MatchedRange};
 use std::sync::Arc;
 
 use getopts;
-use std::io::Write;
 use score;
+use std::io::Write;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
