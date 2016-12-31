@@ -1,4 +1,6 @@
+#![feature(alloc_system)]
 #![feature(io)]
+extern crate alloc_system;
 extern crate libc;
 extern crate ncurses;
 extern crate getopts;
@@ -16,6 +18,7 @@ mod orderedvec;
 mod curses;
 mod query;
 mod ansi;
+mod sender;
 
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -485,14 +488,14 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // query
     let mut query = query::Query::builder()
-        .cmd("find {}")
+        .cmd("find ~/tmp")
         .build();
     query.parse_options(&options);
 
     //------------------------------------------------------------------------------
     // reader
     let (tx_reader, rx_reader) = channel();
-    let (tx_item, rx_item) = sync_channel(1024);
+    let (tx_item, rx_item) = sync_channel(50024);
     let mut reader = reader::Reader::new(rx_reader, tx_item);
     reader.parse_options(&options);
     thread::spawn(move || {
@@ -531,7 +534,7 @@ fn real_main() -> i32 {
     let tx_input_clone = tx_input.clone();
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(50));
+            thread::sleep(Duration::from_millis(200));
             tx_input_clone.send((EvActRedraw, Box::new(true)));
         }
     });
@@ -544,13 +547,13 @@ fn real_main() -> i32 {
     // rx_input:  receive keystroke events
 
     // light up the fire
-    tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+    let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
 
     let on_query_change = |query: &query::Query| {
         // restart the reader with new parameter
-        tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+        let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
         // send redraw event
-        tx_input.send((EvActRedraw, Box::new(true)));
+        let _ = tx_input.send((EvActRedraw, Box::new(true)));
     };
 
     // listen user input
@@ -598,6 +601,7 @@ fn real_main() -> i32 {
             EvActUp | EvActDown
                 | EvActToggle | EvActToggleDown | EvActToggleUp => {
                 let _ = tx_model.send((ev, arg));
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
             }
 
             _ => {}

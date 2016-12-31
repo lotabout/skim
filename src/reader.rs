@@ -9,12 +9,13 @@ use std::io::{stdin, BufRead, BufReader};
 use event::{Event, EventArg};
 use std::thread::{spawn, JoinHandle};
 use std::thread;
-use std::time::Duration;
+use std::time::{Instant, Duration};
 use std::collections::HashMap;
 
 use std::io::Write;
 use getopts;
 use regex::Regex;
+use sender::CachedSender;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -79,7 +80,6 @@ impl ReaderOption {
 pub struct Reader {
     rx_cmd: Receiver<(Event, EventArg)>,
     tx_item: SyncSender<(Event, EventArg)>,
-    items: Arc<RwLock<Vec<Item>>>, // all items
     option: Arc<RwLock<ReaderOption>>,
 }
 
@@ -88,7 +88,6 @@ impl Reader {
         Reader {
             rx_cmd: rx_cmd,
             tx_item: tx_item,
-            items: Arc::new(RwLock::new(Vec::new())),
             option: Arc::new(RwLock::new(ReaderOption::new()))
         }
     }
@@ -101,22 +100,30 @@ impl Reader {
     pub fn run(&mut self) {
         // event loop
         let mut thread_reader: Option<JoinHandle<()>> = None;
-        let mut thread_sender: Option<JoinHandle<()>> = None;
         let mut tx_reader: Option<Sender<bool>> = None;
-        let mut tx_sender: Option<Sender<bool>> = None;
+
         let mut last_command = "".to_string();
+        let mut last_query = "".to_string();
 
         let reader_stopped = Arc::new(RwLock::new(false));
+
+        // start sender
+        let (tx_sender, rx_sender) = channel();
+        let tx_item = self.tx_item.clone();
+        let mut sender = CachedSender::new(rx_sender, tx_item);
+        thread::spawn(move || {
+            sender.run();
+        });
 
         while let Ok((ev, arg)) = self.rx_cmd.recv() {
             match ev {
                 Event::EvReaderRestart => {
                     // close existing command or file if exists
                     let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
+                    if (cmd == last_command && query == last_query) { continue; }
 
-                    // send message to stop existing matcher
-                    tx_sender.map(|tx| {tx.send(true)});
-                    thread_sender.take().map(|thrd| {thrd.join()});
+                    // tell sender to restart
+                    tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
 
                     // restart command with new `command`
                     if cmd != last_command {
@@ -124,45 +131,27 @@ impl Reader {
                         tx_reader.take().map(|tx| {tx.send(true)});
                         thread_reader.take().map(|thrd| {thrd.join()});
 
-                        {
-                            // remove existing items
-                            let mut items = self.items.write().unwrap();
-                            items.clear();
-                        }
-
                         // start new command
-                        let items = self.items.clone();
                         let (tx, rx_reader) = channel();
                         tx_reader = Some(tx);
                         let cmd_clone = cmd.clone();
                         let option_clone = self.option.clone();
-                        let tx_item = self.tx_item.clone();
-                        let reader_stopped_clone = reader_stopped.clone();
+                        let tx_sender_clone = tx_sender.clone();
                         thread::spawn(move || {
-                            {*reader_stopped_clone.write().unwrap() = false;}
-                            tx_item.send((Event::EvReaderStopped, Box::new(false)));
+                            let debug_timer = Instant::now();
 
-                            reader(&cmd_clone, rx_reader, items, option_clone);
+                            tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
+                            reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
+                            tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
 
-                            tx_item.send((Event::EvReaderStopped, Box::new(true)));
-                            {*reader_stopped_clone.write().unwrap() = true;}
+                            let time = debug_timer.elapsed();
+                            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+                            //println_stderr!("reader spend time: {}ms", mills);
                         });
                     }
 
-                    // start "sending loop" to matcher
-                    let tx_item = self.tx_item.clone();
-                    let items = self.items.clone();
-                    let (tx, rx_sender) = channel();
-                    tx_sender = Some(tx);
-                    let reader_stopped_clone = reader_stopped.clone();
-                    thread::spawn(move || {
-                        // tell matcher that reader will start to send new items.
-                        tx_item.send((Event::EvMatcherRestart, Box::new(query)));
-                        sender(rx_sender, &tx_item, items, reader_stopped_clone);
-                        tx_item.send((Event::EvSenderStopped, Box::new(true)));
-                    });
-
                     last_command = cmd;
+                    last_query = query;
                 }
                 _ => {
                     // do nothing
@@ -195,7 +184,7 @@ lazy_static! {
 
 fn reader(cmd: &str,
           rx_cmd: Receiver<bool>,
-          items: Arc<RwLock<Vec<Item>>>,
+          tx_sender: &Sender<(Event, EventArg)>,
           option: Arc<RwLock<ReaderOption>>) {
     let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
 
@@ -256,48 +245,19 @@ fn reader(cmd: &str,
                         input.pop();
                     }
                 }
-                let mut items = items.write().unwrap();
-                items.push(Item::new(input,
-                                     opt.use_ansi_color,
-                                     &opt.transform_fields,
-                                     &opt.matching_fields,
-                                     &opt.delimiter,
-                                     (run_num, index)));
-
+                tx_sender.send((Event::EvReaderNewItem,
+                                Box::new(Item::new(input,
+                                                   opt.use_ansi_color,
+                                                   &opt.transform_fields,
+                                                   &opt.matching_fields,
+                                                   &opt.delimiter,
+                                                   (run_num, index)))));
                 index += 1;
             }
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
     }
     tx_control.send(true);
-}
-
-fn sender(rx_cmd: Receiver<bool>,
-          tx: &SyncSender<(Event, EventArg)>,
-          items: Arc<RwLock<Vec<Item>>>,
-          reader_stopped: Arc<RwLock<bool>>) {
-    let mut index = 0;
-    loop {
-        if let Ok(quit) = rx_cmd.try_recv() {
-            break;
-        }
-
-        let all_read;
-        {
-            let items = items.read().unwrap();
-            all_read = index >= items.len();
-            if !all_read {
-                tx.send((Event::EvMatcherNewItem, Box::new(items[index].clone())));
-                index += 1;
-            }
-        }
-
-        if *reader_stopped.read().unwrap() && all_read {
-            break;
-        } else if all_read {
-            thread::sleep(Duration::from_millis(1));
-        }
-    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]

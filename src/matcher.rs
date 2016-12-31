@@ -74,6 +74,7 @@ impl Matcher {
                     self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
                     self.tx_result.send((ev, arg));
                 }
+                Event::EvReaderStarted => { self.tx_result.send((ev, arg)); }
 
                 Event::EvMatcherRestart => {
                     total_num = 0;

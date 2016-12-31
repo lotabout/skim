@@ -14,6 +14,8 @@ use curses::{ColorTheme, Curses};
 use curses::*;
 use curses;
 
+use std::process::exit;
+
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -78,11 +80,12 @@ impl Model {
         let curses = Curses::new();
         let theme = ColorTheme::new();
         curses::init(Some(&theme), false, false);
+        let mut debug_timer = None;
 
         // main loop
         loop {
             // check for new item
-            if let Ok((ev, arg)) = self.rx_cmd.try_recv() {
+            if let Ok((ev, arg)) = self.rx_cmd.recv() {
                 match ev {
                     Event::EvModelNewItem => {
                         let item = *arg.downcast::<MatchedItem>().unwrap();
@@ -93,6 +96,7 @@ impl Model {
                         // clean the model
                         self.clean_model();
                         self.update_size(&curses);
+                        debug_timer = Some(Instant::now());
                     }
 
                     Event::EvModelRedraw => {
@@ -111,11 +115,15 @@ impl Model {
                     }
 
                     Event::EvSenderStopped => {
-                        self.sender_stopped = *arg.downcast::<bool>().unwrap();
+                        self.sender_stopped = true;
+
+                        // end of matcher
+                        let time = debug_timer.take().map(|t| t.elapsed()).unwrap_or(Duration::from_millis(0));
+                        let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+                        //println_stderr!("matcher spend time: {}ms", mills);
                     }
-                    Event::EvReaderStopped => {
-                        self.reader_stopped = *arg.downcast::<bool>().unwrap();
-                    }
+                    Event::EvReaderStopped => { self.reader_stopped = true; }
+                    Event::EvReaderStarted => { self.reader_stopped = false; }
 
                     Event::EvActAccept => {
                         let tx_ack = *arg.downcast::<Sender<bool>>().unwrap();

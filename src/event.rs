@@ -6,30 +6,25 @@ pub type EventArg = Box<Any + 'static + Send>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Event {
-    EvReaderRestart,
-    EvReaderStopped,
-    EvSenderQuit,
-    EvSenderStopped,
-    EvMatcherRestart,
-    EvModelRestart,
-    EvActRedraw,
-    EvModelRedraw,
-    EvModelNewItem,
-    EvModelNotifyTotal,
-
-    EvReaderNewItem,
-    EvReaderResetQuery,
-    EvReaderSync,
-    EvMatcherNewItem,
-    EvMatcherResetQuery,
-    EvMatcherUpdateProcess,
-    EvMatcherEnd,
-    EvMatcherSync,
-    EvModelAck,
-    EvQueryChange,
     EvInputKey,
     EvInputInvalid,
-    EvResize,
+
+    EvMatcherNewItem,
+    EvMatcherRestart,
+
+    EvModelNewItem,
+    EvModelNotifyTotal,
+    EvModelRedraw,
+    EvModelRestart,
+
+    EvReaderNewItem,
+    EvReaderStarted,
+    EvReaderStopped,
+    EvReaderRestart,
+
+    EvSenderRestart,
+    EvSenderStopped,
+
 
     EvActAddChar,
 
@@ -57,6 +52,7 @@ pub enum Event {
     EvActPageDown,
     EvActPageUp,
     EvActPreviousHistory,
+    EvActRedraw,
     EvActRotateMode,
     EvActScrollLeft,
     EvActScrollRight,
