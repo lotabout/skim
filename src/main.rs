@@ -467,7 +467,7 @@ fn real_main() -> i32 {
     opts.optflag("m", "multi", "Enable Multiple Selection");
     opts.optflag("", "no-multi", "Disable Multiple Selection");
     opts.optopt("p", "prompt", "prompt string", "'> '");
-    opts.optopt("e", "expect", "comma seperated keys that can be used to complete fzf", "KEYS");
+    opts.optopt("e", "expect", "comma seperated keys that can be used to complete skim", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
     opts.optflag("", "ansi", "parse ANSI color codes for input strings");
     opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
@@ -522,6 +522,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // model
     let mut model = model::Model::new(rx_model);
+    model.parse_options(&options);
     thread::spawn(move || {
         model.run();
     });
@@ -546,13 +547,13 @@ fn real_main() -> i32 {
             let timeout = rx_view.recv_timeout(Duration::from_millis(150));
             if timeout.is_ok() {
                 // some urgent refresh is needed
-                tx_input_clone.send((EvActRedraw, Box::new(true)));
+                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
 
                 // to prevent from bounds, remove sequent urgent refresh
                 thread::sleep(Duration::from_millis(50));
                 while let Ok(_) = rx_view.try_recv() {}
             } else {
-                tx_input_clone.send((EvActRedraw, Box::new(true)));
+                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
             }
         }
     });
@@ -579,7 +580,7 @@ fn real_main() -> i32 {
     // tx_model:  send message to model
     // rx_input:  receive keystroke events
 
-    let mut exit_code = 0;
+    let mut exit_code = 1;
     while let Ok((ev, arg)) = rx_input.recv() {
         match ev {
             EvActAddChar =>  {
@@ -656,9 +657,13 @@ fn real_main() -> i32 {
             EvActAccept => {
                 // sync with model to quit
 
-                let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
-                let _ = tx_model.send((EvActAccept, Box::new(tx)));
-                let _ = rx.recv();
+                let accept_key = *arg.downcast::<Option<String>>()
+                    .unwrap_or(Box::new(None));
+
+                let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
+                let _ = tx_model.send((EvActAccept, Box::new((accept_key, tx))));
+                let selected = rx.recv().unwrap_or(0);;
+                exit_code = if selected > 0 {0} else {1};
                 break;
             }
 
@@ -671,9 +676,11 @@ fn real_main() -> i32 {
                 break;
             }
 
-
             EvActUp | EvActDown
-                | EvActToggle | EvActToggleDown | EvActToggleUp => {
+                | EvActToggle | EvActToggleDown | EvActToggleUp
+                | EvActToggleAll | EvActSelectAll | EvActDeselectAll
+                | EvActPageDown | EvActPageUp
+                | EvActScrollLeft | EvActScrollRight => {
                 let _ = tx_model.send((ev, arg));
                 redraw_screen();
             }

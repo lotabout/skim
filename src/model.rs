@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use curses::{ColorTheme, Curses};
 use curses::*;
 use curses;
+use getopts;
 
 use std::process::exit;
 
@@ -66,12 +67,22 @@ impl Model {
             height: 0,
             width: 0,
 
-            multi_selection: true,
+            multi_selection: false,
             tabstop: 8,
 
             reader_stopped: false,
             sender_stopped: false,
             timer: Instant::now(),
+        }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if options.opt_present("m") {
+            self.multi_selection = true;
+        }
+
+        if options.opt_present("no-multi") {
+            self.multi_selection = false;
         }
     }
 
@@ -126,13 +137,21 @@ impl Model {
                     Event::EvReaderStopped => { self.reader_stopped = true; }
                     Event::EvReaderStarted => { self.reader_stopped = false; }
 
-                    Event::EvActAccept => {
-                        let tx_ack = *arg.downcast::<Sender<bool>>().unwrap();
+                    //---------------------------------------------------------
+                    // Actions
 
+                    Event::EvActAccept => {
                         curses.close();
+
+                        // output the expect key
+                        let (accept_key, tx_ack): (Option<String>, Sender<usize>) = *arg.downcast().unwrap();
+                        accept_key.map(|key| {
+                            println!("{}", key);
+                        });
+
                         self.act_output();
 
-                        tx_ack.send(true);
+                        tx_ack.send(self.selected.len());
                     }
                     Event::EvActUp => {
                         self.act_move_line_cursor(1);
@@ -150,6 +169,29 @@ impl Model {
                     Event::EvActToggleUp => {
                         self.act_toggle();
                         self.act_move_line_cursor(1);
+                    }
+                    Event::EvActToggleAll => {
+                        self.act_toggle_all();
+                    }
+                    Event::EvActSelectAll => {
+                        self.act_select_all();
+                    }
+                    Event::EvActDeselectAll => {
+                        self.act_deselect_all();
+                    }
+                    Event::EvActPageDown => {
+                        let height = 1-self.height;
+                        self.act_move_line_cursor(height);
+                    }
+                    Event::EvActPageUp => {
+                        let height = self.height-1;
+                        self.act_move_line_cursor(height);
+                    }
+                    Event::EvActScrollLeft => {
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-2)));
+                    }
+                    Event::EvActScrollRight => {
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(2)));
                     }
 
                     _ => {}
@@ -363,16 +405,50 @@ impl Model {
         } else {
             self.selected.remove(&index);
         }
+    }
 
+    pub fn act_toggle_all(&mut self) {
+        for current_item in self.items.iter() {
+            let index = current_item.item.get_full_index();
+            if !self.selected.contains_key(&index) {
+                self.selected.insert(index, current_item.clone());
+            } else {
+                self.selected.remove(&index);
+            }
+        }
+    }
+
+    pub fn act_select_all(&mut self) {
+        for current_item in self.items.iter() {
+            let index = current_item.item.get_full_index();
+            self.selected.insert(index, current_item.clone());
+        }
+    }
+
+    pub fn act_deselect_all(&mut self) {
+        self.selected.clear();
     }
 
     pub fn act_output(&mut self) {
+        // select the current one
+        let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+        let index = current_item.item.get_full_index();
+        self.selected.insert(index, current_item.clone());
+
         let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
         output.sort_by_key(|k| k.0);
         for (k, item) in output {
             println!("{}", item.item.get_output_text());
         }
     }
+
+    pub fn act_scroll(&mut self, offset: i32) {
+        let mut hscroll_offset = self.hscroll_offset as i32;
+        hscroll_offset += offset;
+        hscroll_offset = max(0, hscroll_offset);
+        self.hscroll_offset = hscroll_offset as usize;
+    }
+
 }
 
 //==============================================================================
