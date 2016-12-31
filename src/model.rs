@@ -269,11 +269,18 @@ impl Model {
             self.print_char(curses, SPINNERS[index as usize], COLOR_SPINNER, true);
         }
 
+        // display matched/total number
         curses.cprint(format!(" {}/{}", self.items.len(), self.total_item).as_ref(), COLOR_INFO, false);
 
+        // selected number
         if self.multi_selection && self.selected.len() > 0 {
             curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
         }
+
+        // item cursor
+        let line_num_str = format!(" {} ", self.item_cursor+self.line_cursor);
+        curses.mv(if self.reverse {1} else {self.height}, self.width - (line_num_str.len() as i32));
+        curses.cprint(&line_num_str, COLOR_INFO, true);
     }
 
     fn print_item(&self, curses: &Curses, matched_item: &MatchedItem) {
