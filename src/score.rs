@@ -16,6 +16,14 @@ const PENALTY_LEADING: i64 = -6; // penalty applied for every letter before the 
 const PENALTY_MAX_LEADING: i64 = -18; // maxing penalty for leading letters
 const PENALTY_UNMATCHED: i64 = -2;
 
+use std::io::Write;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 // judge how many scores the current index should get
 fn fuzzy_score(string: &[char], index: usize, pattern: &[char], pattern_idx: usize) -> i64 {
     let mut score = 0;
@@ -116,8 +124,7 @@ pub fn fuzzy_match(choice: &[char],
     Some((score, picked))
 }
 
-#[allow(dead_code)]
-pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)>{
+pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(i64, i64)>{
     match *pattern {
         Some(ref pat) => {
             let ret = pat.find(choice);
@@ -128,10 +135,33 @@ pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usiz
             let (start, end) = ret.unwrap();
             let first = (&choice[0..start]).chars().count();
             let last = first + (&choice[start..end]).chars().count();
-            Some((first, last))
+            Some((first as i64, last as i64))
         }
         None => None,
     }
+}
+
+// Pattern may appear in sevearl places, return the first and last occurrence
+pub fn exact_match(choice: &str, pattern: &str) -> Option<((usize, usize), (usize, usize))>{
+    // search from the start
+    let start_pos = choice.find(pattern);
+    if start_pos.is_none() {return None};
+
+    let pattern_len = pattern.chars().count();
+
+    let first_occur = start_pos.map(|s| {
+        let start = if s == 0 { 0 } else { (&choice[0..s]).chars().count() };
+        (start, start + pattern_len)
+    }).unwrap();
+
+    let last_pos = choice.rfind(pattern);
+    if last_pos.is_none() {return None};
+    let last_occur = last_pos.map(|s| {
+        let start = if s == 0 { 0 } else { (&choice[0..s]).chars().count() };
+        (start, start + pattern_len)
+    }).unwrap();
+
+    Some((first_occur, last_occur))
 }
 
 #[cfg(test)]

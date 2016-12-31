@@ -58,9 +58,11 @@ fn real_main() -> i32 {
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete skim", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
     opts.optflag("", "ansi", "parse ANSI color codes for input strings");
+    opts.optflag("", "exact", "start skim in exact mode");
     opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
     opts.optflag("i", "interactive", "Use skim as an interactive interface");
     opts.optopt("q", "query", "specify the initial query", "\"\"");
+    opts.optflag("", "regex", "use regex instead of fuzzy match");
     opts.optopt("d", "delimiter", "specify the delimiter(in REGEX) for fields", "\\t");
     opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
     opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");

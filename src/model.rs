@@ -342,6 +342,49 @@ impl Model {
 
             }
 
+            Some(MatchedRange::Range(start, end)) => {
+                // pass
+                let item = &matched_item.item;
+                let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
+                                                     (self.width-3) as usize,
+                                                     self.hscroll_offset,
+                                                     start,
+                                                     end);
+                let mut ansi_states = item.get_ansi_states().iter().peekable();
+
+                // skip ansi states
+                let mut last_attr = 0;
+                while let Some(&&(index, attr)) = ansi_states.peek() {
+                    if idx > index {
+                        last_attr = attr;
+                        let _ = ansi_states.next();
+                    } else {
+                        break;
+                    }
+                }
+                curses.attr_on(last_attr);
+
+                for &ch in text.iter() {
+                    if idx >= start && idx < end {
+                        self.print_char(curses, ch, COLOR_MATCHED, is_current);
+                    } else {
+                        match ansi_states.peek() {
+                            Some(&&(index, attr)) if idx == index => {
+                                // print ansi color codes.
+                                curses.attr_off(last_attr);
+                                curses.attr_on(attr);
+                                last_attr = attr;
+                                let _ = ansi_states.next();
+                            }
+                            Some(_) | None => {}
+                        }
+                        self.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                    }
+                    idx += 1;
+                }
+                curses.attr_off(last_attr);
+            }
+
             _ => {
                 curses.printw(&(matched_item.item.get_text()));
             }
