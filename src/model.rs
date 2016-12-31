@@ -3,7 +3,6 @@ use event::{Event, EventArg};
 use item::{Item, MatchedItem, MatchedRange};
 use std::thread;
 use std::time::{Instant, Duration};
-use std::io::{Write, stdout, Stdout};
 use std::fmt;
 use std::cmp::{max, min};
 use orderedvec::OrderedVec;
@@ -15,6 +14,8 @@ use curses::*;
 use curses;
 
 use std::process::exit;
+
+use std::io::Write;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {

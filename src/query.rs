@@ -98,8 +98,8 @@ impl Query {
 
     fn get_after(&self) -> String {
         match self.mode {
-            QueryMode::CMD   => self.cmd_after.iter().cloned().collect(),
-            QueryMode::QUERY => self.query_after.iter().cloned().collect(),
+            QueryMode::CMD   => self.cmd_after.iter().cloned().rev().collect(),
+            QueryMode::QUERY => self.query_after.iter().cloned().rev().collect(),
         }
     }
 
@@ -148,7 +148,13 @@ impl Query {
 
     pub fn act_backward_delete_char(&mut self) {
         let (before, _) = self.get_ref();
-        before.pop();
+        let _ = before.pop();
+    }
+
+    // delete char foraward
+    pub fn act_delete_char(&mut self) {
+        let (_, after) = self.get_ref();
+        let _ = after.pop();
     }
 
     pub fn act_backward_char(&mut self) {
@@ -163,6 +169,95 @@ impl Query {
         after.pop().map(|ch| {
             before.push(ch);
         });
+    }
+
+    pub fn act_backward_kill_word(&mut self) {
+        let (before, after) = self.get_ref();
+
+        // skip whitespace
+        while before.len() > 0 && before[before.len()-1].is_whitespace() {
+            before.pop();
+        }
+
+        // kill word until whitespace
+        while before.len() > 0 && !before[before.len()-1].is_whitespace() {
+            before.pop();
+        }
+    }
+
+    pub fn act_kill_word(&mut self) {
+        let (before, after) = self.get_ref();
+
+        // kill word until whitespace
+        while after.len() > 0 && !after[after.len()-1].is_whitespace() {
+            after.pop();
+        }
+        // skip whitespace
+        while after.len() > 0 && after[after.len()-1].is_whitespace() {
+            after.pop();
+        }
+    }
+
+    pub fn act_backward_word(&mut self) {
+        let (before, after) = self.get_ref();
+        // skip whitespace
+        while before.len() > 0 && before[before.len()-1].is_whitespace() {
+            before.pop().map(|ch| {
+                after.push(ch);
+            });
+        }
+
+        // backword char until whitespace
+        while before.len() > 0 && !before[before.len()-1].is_whitespace() {
+            before.pop().map(|ch| {
+                after.push(ch);
+            });
+        }
+    }
+
+    pub fn act_forward_word(&mut self) {
+        let (before, after) = self.get_ref();
+        // backword char until whitespace
+        while after.len() > 0 && !after[after.len()-1].is_whitespace() {
+            after.pop().map(|ch| {
+                before.push(ch);
+            });
+        }
+
+        // skip whitespace
+        while after.len() > 0 && after[after.len()-1].is_whitespace() {
+            after.pop().map(|ch| {
+                before.push(ch);
+            });
+        }
+    }
+
+    pub fn act_beginning_of_line(&mut self) {
+        let (before, after) = self.get_ref();
+        while before.len() > 0 {
+            before.pop().map(|ch| {
+                after.push(ch);
+            });
+        }
+    }
+
+    pub fn act_end_of_line(&mut self) {
+        let (before, after) = self.get_ref();
+        while after.len() > 0 {
+            after.pop().map(|ch| {
+                before.push(ch);
+            });
+        }
+    }
+
+    pub fn act_kill_line(&mut self) {
+        let (_, after) = self.get_ref();
+        after.clear();
+    }
+
+    pub fn act_line_discard(&mut self) {
+        let (before, _) = self.get_ref();
+        before.clear();
     }
 }
 

@@ -40,6 +40,14 @@ use std::env;
 use orderedvec::OrderedVec;
 use item::{Item, MatchedItem};
 
+use std::io::Write;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 fn main() {
     let exit_code = real_main();
     std::process::exit(exit_code);
@@ -448,8 +456,6 @@ fn print_usage(program: &str, opts: Options) {
 
 use std::sync::mpsc::{sync_channel, channel, Sender, Receiver};
 use std::io;
-use model::ClosureType;
-
 
 fn real_main() -> i32 {
 
@@ -525,6 +531,8 @@ fn real_main() -> i32 {
     let (tx_input, rx_input) = channel();
     let tx_input_clone = tx_input.clone();
     let mut input = input::Input::new(tx_input_clone);
+    input.parse_keymap(options.opt_str("b"));
+    input.parse_expect_keys(options.opt_str("e"));
     thread::spawn(move || {
         input.run();
     });
@@ -557,6 +565,7 @@ fn real_main() -> i32 {
     };
 
     // listen user input
+    let mut exit_code = 0;
     while let Ok((ev, arg)) = rx_input.recv() {
         match ev {
             EvActAddChar =>  {
@@ -570,6 +579,11 @@ fn real_main() -> i32 {
                 on_query_change(&query);
             }
 
+            EvActDeleteCharEOF | EvActDeleteChar => {
+                query.act_delete_char();
+                on_query_change(&query);
+            }
+
             EvActBackwardChar => {
                 query.act_backward_char();
                 let _ = tx_input.send((EvActRedraw, Box::new(true)));
@@ -578,6 +592,46 @@ fn real_main() -> i32 {
             EvActForwardChar => {
                 query.act_forward_char();
                 let _ = tx_input.send((EvActRedraw, Box::new(true)));
+            }
+
+            EvActBackwardKillWord | EvActUnixWordRubout => {
+                query.act_backward_kill_word();
+                on_query_change(&query);
+            }
+
+            EvActBackwardWord => {
+                query.act_backward_word();
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+            }
+
+            EvActForwardWord => {
+                query.act_forward_word();
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+            }
+
+            EvActBeginningOfLine => {
+                query.act_beginning_of_line();
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+            }
+
+            EvActEndOfLine => {
+                query.act_end_of_line();
+                let _ = tx_input.send((EvActRedraw, Box::new(true)));
+            }
+
+            EvActKillLine => {
+                query.act_kill_line();
+                on_query_change(&query);
+            }
+
+            EvActUnixLineDiscard => {
+                query.act_line_discard();
+                on_query_change(&query);
+            }
+
+            EvActKillWord => {
+                query.act_kill_word();
+                on_query_change(&query);
             }
 
             EvActRotateMode => {
@@ -594,9 +648,15 @@ fn real_main() -> i32 {
                 break;
             }
 
-            EvActRedraw => {
+            EvActClearScreen | EvActRedraw => {
                 let _ = tx_model.send((EvModelRedraw, Box::new(query.get_print_func())));
             }
+
+            EvActAbort => {
+                exit_code = 130;
+                break;
+            }
+
 
             EvActUp | EvActDown
                 | EvActToggle | EvActToggleDown | EvActToggleUp => {
@@ -608,5 +668,5 @@ fn real_main() -> i32 {
         }
     }
 
-    0
+    exit_code
 }

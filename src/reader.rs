@@ -120,7 +120,7 @@ impl Reader {
                 Event::EvReaderRestart => {
                     // close existing command or file if exists
                     let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
-                    if (cmd == last_command && query == last_query) { continue; }
+                    if cmd == last_command && query == last_query { continue; }
 
                     // tell sender to restart
                     tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
