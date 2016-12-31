@@ -149,12 +149,12 @@ fn real_main() -> i32 {
         loop {
             let timeout = rx_view.recv_timeout(Duration::from_millis(150));
             if timeout.is_ok() {
-                // some urgent refresh is needed
-                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
-
                 // to prevent from bounds, remove sequent urgent refresh
                 thread::sleep(Duration::from_millis(50));
                 while let Ok(_) = rx_view.try_recv() {}
+
+                // some urgent refresh is needed
+                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
             } else {
                 let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
             }
