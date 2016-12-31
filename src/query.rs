@@ -1,6 +1,7 @@
 use std::io::{Write, stdout, Stdout};
 use model::ClosureType;
 use getopts;
+use curses::*;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -17,6 +18,8 @@ pub struct Query {
     mode: QueryMode,
     cmd: String,
     replstr: String,
+    query_prompt: String,
+    cmd_prompt: String,
 }
 
 impl Query {
@@ -29,6 +32,8 @@ impl Query {
             mode: QueryMode::QUERY,
             cmd: String::new(),
             replstr: "{}".to_string(),
+            query_prompt: "q> ".to_string(),
+            cmd_prompt: "c> ".to_string(),
         }
     }
 
@@ -78,6 +83,14 @@ impl Query {
         if options.opt_present("i") {
             self.mode = QueryMode::CMD;
         }
+
+        if let Some(query_prompt) = options.opt_str("prompt") {
+            self.query_prompt = query_prompt;
+        }
+
+        if let Some(cmd_prompt) = options.opt_str("cmd-prompt") {
+            self.cmd_prompt = cmd_prompt;
+        }
     }
 
     pub fn get_query(&self) -> String {
@@ -107,16 +120,21 @@ impl Query {
         let before = self.get_before();
         let after = self.get_after();
         let mode = self.mode;
+        let cmd_prompt = self.cmd_prompt.clone();
+        let query_prompt = self.query_prompt.clone();
 
         Box::new(move |curses| {
             let (h, w) = curses.get_maxyx();
 
             match mode {
-                QueryMode::CMD   => curses.printw("C"),
-                QueryMode::QUERY => curses.printw("Q"),
+                QueryMode::CMD   => {
+                    curses.cprint(&cmd_prompt, COLOR_PROMPT, false);
+                }
+                QueryMode::QUERY => {
+                    curses.cprint(&query_prompt, COLOR_PROMPT, false);
+                }
             }
 
-            curses.printw("> ");
             curses.printw(&before);
             let (y, x) = curses.getyx();
             curses.printw(&after);

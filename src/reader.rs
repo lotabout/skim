@@ -122,32 +122,38 @@ impl Reader {
                     let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
                     if cmd == last_command && query == last_query { continue; }
 
-                    // tell sender to restart
-                    tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
-
                     // restart command with new `command`
                     if cmd != last_command {
                         // stop existing command
                         tx_reader.take().map(|tx| {tx.send(true)});
                         thread_reader.take().map(|thrd| {thrd.join()});
 
-                        // start new command
+                        // create needed data for thread
                         let (tx, rx_reader) = channel();
                         tx_reader = Some(tx);
                         let cmd_clone = cmd.clone();
                         let option_clone = self.option.clone();
                         let tx_sender_clone = tx_sender.clone();
+                        let query_clone = query.clone();
+
+                        // start the new command
                         thread::spawn(move || {
                             let debug_timer = Instant::now();
 
                             tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
+                            tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
+
                             reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
+
                             tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
 
                             let time = debug_timer.elapsed();
                             let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
                             //println_stderr!("reader spend time: {}ms", mills);
                         });
+                    } else {
+                        // tell sender to restart
+                        tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
                     }
 
                     last_command = cmd;

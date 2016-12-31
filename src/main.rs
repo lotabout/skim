@@ -467,6 +467,7 @@ fn real_main() -> i32 {
     opts.optflag("m", "multi", "Enable Multiple Selection");
     opts.optflag("", "no-multi", "Disable Multiple Selection");
     opts.optopt("p", "prompt", "prompt string", "'> '");
+    opts.optopt("", "cmd-prompt", "prompt string", "'> '");
     opts.optopt("e", "expect", "comma seperated keys that can be used to complete skim", "KEYS");
     opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
     opts.optflag("", "ansi", "parse ANSI color codes for input strings");
@@ -493,8 +494,12 @@ fn real_main() -> i32 {
 
     //------------------------------------------------------------------------------
     // query
+    let default_command = match env::var("SKIM_DEFAULT_COMMAND") {
+        Ok(val) => val,
+        Err(_) => "find .".to_string(),
+    };
     let mut query = query::Query::builder()
-        .cmd("find ~/tmp")
+        .cmd(&default_command)
         .build();
     query.parse_options(&options);
 

@@ -244,7 +244,7 @@ impl Model {
             curses.cprint(label, COLOR_CURSOR, true);
 
             let item = self.items.get(i).unwrap().clone();
-            self.print_item(curses, &item);
+            self.print_item(curses, &item, l == self.line_cursor);
         }
 
         // print status line
@@ -283,9 +283,8 @@ impl Model {
         curses.cprint(&line_num_str, COLOR_INFO, true);
     }
 
-    fn print_item(&self, curses: &Curses, matched_item: &MatchedItem) {
+    fn print_item(&self, curses: &Curses, matched_item: &MatchedItem, is_current: bool) {
         let index = matched_item.item.get_full_index();
-        let is_current = matched_item.item.get_index() == self.item_cursor + self.line_cursor;
 
         if self.selected.contains_key(&index) {
             curses.cprint(">", COLOR_SELECTED, true);
