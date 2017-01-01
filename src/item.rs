@@ -7,6 +7,7 @@ use ansi::parse_ansi;
 use regex::Regex;
 use reader::FieldRange;
 use std::borrow::Cow;
+use std::ascii::AsciiExt;
 
 use std::io::Write;
 macro_rules! println_stderr(
@@ -94,7 +95,7 @@ impl<'a> Item {
             ansi_enabled: ansi_enabled,
         };
 
-        let lower_chars: Vec<char> = ret.get_text().to_lowercase().chars().collect();
+        let lower_chars: Vec<char> = ret.get_text().to_ascii_lowercase().chars().collect();
         let matching_ranges = if matching_fields.len() > 0 {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
