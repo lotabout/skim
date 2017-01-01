@@ -67,6 +67,7 @@ fn real_main() -> i32 {
     opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
     opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
+    opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
     opts.optflag("", "version", "print out the current version of skim");
 
     let mut args = Vec::new();

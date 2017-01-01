@@ -44,6 +44,7 @@ pub struct Model {
     reader_stopped: bool,
     sender_stopped: bool,
     timer: Instant,
+    theme: ColorTheme,
 }
 
 impl Model {
@@ -67,6 +68,7 @@ impl Model {
             reader_stopped: false,
             sender_stopped: false,
             timer: Instant::now(),
+            theme: ColorTheme::new(),
         }
     }
 
@@ -78,14 +80,17 @@ impl Model {
         if options.opt_present("no-multi") {
             self.multi_selection = false;
         }
+
+        if let Some(color) = options.opt_str("color") {
+            self.theme = ColorTheme::from_options(&color);
+        }
     }
 
     pub fn run(&mut self) {
         // generate a new instance of curses for printing
 
         let curses = Curses::new();
-        let theme = ColorTheme::new();
-        curses::init(Some(&theme), false, false);
+        curses::init(Some(&self.theme), false, false);
 
         // main loop
         loop {
