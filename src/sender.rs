@@ -77,8 +77,9 @@ impl CachedSender {
             if am_i_runing {
                 // there are more items to be sent
                 if index < self.items.len() {
-                    let _ = self.tx_item.send((Event::EvMatcherNewItem, Box::new(self.items[index].clone())));
-                    index += 1;
+                    if let Ok(_) = self.tx_item.try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone()))) {
+                        index += 1;
+                    }
                 } else if reader_stopped {
                     let _ = self.tx_item.send((Event::EvSenderStopped, Box::new(true)));
                     am_i_runing = false;
