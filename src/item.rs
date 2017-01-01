@@ -8,6 +8,7 @@ use regex::Regex;
 use reader::FieldRange;
 use std::borrow::Cow;
 use std::ascii::AsciiExt;
+use std::sync::Arc;
 
 use std::io::Write;
 macro_rules! println_stderr(
@@ -250,13 +251,13 @@ pub enum MatchedRange {
 
 #[derive(Clone, Debug)]
 pub struct MatchedItem {
-    pub item: Item,
+    pub item: Arc<Item>,
     pub rank: Rank,
     pub matched_range: Option<MatchedRange>,  // range of chars that metched the pattern
 }
 
 impl MatchedItem {
-    pub fn builder(item: Item) -> Self {
+    pub fn builder(item: Arc<Item>) -> Self {
         MatchedItem {
             item: item,
             rank: [0, 0, 0, 0],

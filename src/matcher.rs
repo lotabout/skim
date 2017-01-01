@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
 use item::{Item, MatchedItem, MatchedRange};
@@ -65,7 +66,7 @@ impl Matcher {
             match ev {
                 Event::EvMatcherNewItem => {
                     total_num += 1;
-                    let item = *arg.downcast::<Item>().unwrap();
+                    let item: Arc<Item> = *arg.downcast().unwrap();
 
                     matcher_engine.as_ref().map(|mat| {
                         let matched_item = mat.match_item(item);
@@ -159,7 +160,7 @@ impl<'a> MatchingEngine<'a> {
         self
     }
 
-    pub fn match_item(&self, item: Item) -> Option<MatchedItem> {
+    pub fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
         match self.algorithm {
             Algorithm::Fuzzy => self.match_item_fuzzy(item),
             Algorithm::Regex => self.match_item_regex(item),
@@ -219,7 +220,7 @@ impl<'a> MatchingEngine<'a> {
         }).unwrap_or([0; 4])
     }
 
-    fn match_item_regex(&self, item: Item) -> Option<MatchedItem> {
+    fn match_item_regex(&self, item: Arc<Item>) -> Option<MatchedItem> {
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
             if self.query == "" {
@@ -250,7 +251,7 @@ impl<'a> MatchingEngine<'a> {
              .build())
     }
 
-    fn match_item_fuzzy(&self, item: Item) -> Option<MatchedItem> {
+    fn match_item_fuzzy(&self, item: Arc<Item>) -> Option<MatchedItem> {
         // iterate over all matching fields:
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
@@ -280,7 +281,7 @@ impl<'a> MatchingEngine<'a> {
              .build())
     }
 
-    fn match_item_exact(&self, item:Item, filter: ExactFilter) -> Option<MatchedItem>{
+    fn match_item_exact(&self, item: Arc<Item>, filter: ExactFilter) -> Option<MatchedItem>{
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
             if self.query == "" {

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender};
 use item::Item;
 use event::{Event, EventArg};
@@ -14,7 +15,7 @@ macro_rules! println_stderr(
 
 // sender is a cache of reader
 pub struct CachedSender {
-    items: Vec<Item>, // cache
+    items: Vec<Arc<Item>>, // cache
     rx_sender: Receiver<(Event, EventArg)>,
     tx_item: SyncSender<(Event, EventArg)>,
 }
@@ -65,7 +66,7 @@ impl CachedSender {
                     }
 
                     Event::EvReaderNewItem => {
-                        self.items.push(*arg.downcast::<Item>().unwrap());
+                        self.items.push(Arc::new(*arg.downcast::<Item>().unwrap()));
                     }
 
                     _ => {}
