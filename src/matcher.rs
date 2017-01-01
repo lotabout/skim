@@ -16,13 +16,13 @@ macro_rules! println_stderr(
 
 #[derive(Clone, Copy)]
 enum Algorithm {
-    FUZZY,
-    REGEX,
-    PREFIX_EXACT,
-    SUFFIX_EXACT,
-    EXACT,
-    INVERSE_EXACT,
-    INVERSE_SUFFIX_EXACT,
+    Fuzzy,
+    Regex,
+    PrefixExact,
+    SuffixExact,
+    Exact,
+    InverseExact,
+    InverseSuffixExact,
 }
 
 pub struct Matcher {
@@ -120,26 +120,24 @@ impl<'a> MatchingEngine<'a> {
     pub fn builder(query: &str, is_exact: bool) -> Self {
         let (algo, query) = if query.starts_with('\'') {
             if is_exact {
-                (Algorithm::FUZZY, &query[1..])
+                (Algorithm::Fuzzy, &query[1..])
             } else {
-                (Algorithm::EXACT, &query[1..])
+                (Algorithm::Exact, &query[1..])
             }
         } else if query.starts_with('^') {
-            (Algorithm::PREFIX_EXACT, &query[1..])
+            (Algorithm::PrefixExact, &query[1..])
         } else if query.starts_with('!') {
             if query.ends_with('$') {
-                (Algorithm::INVERSE_SUFFIX_EXACT, &query[1..(query.len()-1)])
+                (Algorithm::InverseSuffixExact, &query[1..(query.len()-1)])
             } else {
-                (Algorithm::INVERSE_EXACT, &query[1..])
+                (Algorithm::InverseExact, &query[1..])
             }
         } else if query.ends_with('$') {
-            (Algorithm::SUFFIX_EXACT, &query[..(query.len()-1)])
+            (Algorithm::SuffixExact, &query[..(query.len()-1)])
+        } else if is_exact {
+            (Algorithm::Exact, query)
         } else {
-            if is_exact {
-                (Algorithm::EXACT, query)
-            } else {
-                (Algorithm::FUZZY, query)
-            }
+            (Algorithm::Fuzzy, query)
         };
 
         MatchingEngine {
@@ -163,19 +161,19 @@ impl<'a> MatchingEngine<'a> {
 
     pub fn match_item(&self, item: Item) -> Option<MatchedItem> {
         match self.algorithm {
-            Algorithm::FUZZY => self.match_item_fuzzy(item),
-            Algorithm::REGEX => self.match_item_regex(item),
-            Algorithm::EXACT => {
+            Algorithm::Fuzzy => self.match_item_fuzzy(item),
+            Algorithm::Regex => self.match_item_regex(item),
+            Algorithm::Exact => {
                 self.match_item_exact(item, Box::new(|_, matched_result| {
                     matched_result.is_some()
                 }))
             }
-            Algorithm::INVERSE_EXACT => {
+            Algorithm::InverseExact => {
                 self.match_item_exact(item, Box::new(|_, matched_result| {
                     matched_result.is_none()
                 }))
             }
-            Algorithm::PREFIX_EXACT => {
+            Algorithm::PrefixExact => {
                 self.match_item_exact(item, Box::new(|_, matched_result| {
                     match *matched_result {
                         Some(((start_pos, _), _)) => start_pos == 0,
@@ -183,16 +181,16 @@ impl<'a> MatchingEngine<'a> {
                     }
                 }))
             }
-            Algorithm::SUFFIX_EXACT => {
-                self.match_item_exact(item, Box::new(|ref item, matched_result| {
+            Algorithm::SuffixExact => {
+                self.match_item_exact(item, Box::new(|item, matched_result| {
                     match *matched_result {
                         Some((_, (_, last_pos))) => last_pos == item.get_lower_chars().len(),
                         None => false
                     }
                 }))
             }
-            Algorithm::INVERSE_SUFFIX_EXACT => {
-                self.match_item_exact(item, Box::new(|ref item, matched_result| {
+            Algorithm::InverseSuffixExact => {
+                self.match_item_exact(item, Box::new(|item, matched_result| {
                     match *matched_result {
                         Some((_, (_, last_pos))) => last_pos != item.get_lower_chars().len(),
                         None => true
@@ -229,7 +227,7 @@ impl<'a> MatchingEngine<'a> {
                 break;
             }
 
-            let source: String = item.get_lower_chars()[start .. end].iter().map(|&c| c).collect();
+            let source: String = item.get_lower_chars()[start .. end].iter().cloned().collect();
             matched_result = score::regex_match(&source, &self.query_regex);
 
             if matched_result == None {
@@ -291,7 +289,7 @@ impl<'a> MatchingEngine<'a> {
             }
 
             let chars: Vec<_> = item.get_text().chars().collect();
-            let source: String = chars[start .. end].iter().map(|&c| c).collect();
+            let source: String = chars[start .. end].iter().cloned().collect();
             matched_result = score::exact_match(&source, &self.query);
 
             if matched_result == None {

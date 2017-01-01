@@ -71,8 +71,7 @@ pub fn fuzzy_match(choice: &[char],
     let mut picked = vec![];
 
     let mut prev_matched_idx = -1; // to ensure that the pushed char are able to match the pattern
-    for pattern_idx in 0..pattern_lower.len() {
-        let pattern_char = pattern_lower[pattern_idx];
+    for (pattern_idx, &pattern_char) in pattern_lower.iter().enumerate() {
         let vec_cell = RefCell::new(vec![]);
         {
             let mut vec = vec_cell.borrow_mut();

@@ -276,11 +276,10 @@ impl ColorTheme {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
                 theme = match color[0] {
-                    "dark" => DARK256.clone(),
                     "molokai" => MONOKAI256.clone(),
                     "light" => LIGHT256.clone(),
                     "16"  => DEFAULT16.clone(),
-                    _ => DARK256.clone(),
+                    "dark" | _ => DARK256.clone(),
                 }
             }
 

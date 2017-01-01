@@ -198,7 +198,7 @@ fn reader(cmd: &str,
         // listen to `rx` for command to quit reader
         // kill command if it is got
         loop {
-            if let Ok(_) = rx_cmd.try_recv() {
+            if rx_cmd.try_recv().is_ok() {
                 // clean up resources
                 command.map(|mut x| {
                     let _ = x.kill();
@@ -207,7 +207,7 @@ fn reader(cmd: &str,
                 break;
             }
 
-            if let Ok(_) = rx_control.recv_timeout(Duration::from_millis(10)) {
+            if rx_control.recv_timeout(Duration::from_millis(10)).is_ok() {
                 command.map(|mut x| {
                     let _ = x.kill();
                     let _ = x.wait();

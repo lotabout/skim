@@ -1,5 +1,7 @@
 #![feature(alloc_system)]
 #![feature(io)]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 extern crate alloc_system;
 extern crate libc;
 extern crate ncurses;
@@ -150,7 +152,7 @@ fn real_main() -> i32 {
     let (tx_view, rx_view) = channel();
     thread::spawn(move || {
         loop {
-            let timeout = rx_view.recv_timeout(Duration::from_millis(150));
+            let timeout = rx_view.recv_timeout(Duration::from_millis(200));
             if timeout.is_ok() {
                 // to prevent from bounds, remove sequent urgent refresh
                 thread::sleep(Duration::from_millis(50));

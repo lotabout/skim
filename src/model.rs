@@ -264,7 +264,7 @@ impl Model {
         curses.cprint(format!(" {}/{}", self.items.len(), self.total_item).as_ref(), COLOR_INFO, false);
 
         // selected number
-        if self.multi_selection && self.selected.len() > 0 {
+        if self.multi_selection && !self.selected.is_empty() {
             curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
         }
 
@@ -285,7 +285,7 @@ impl Model {
 
         match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
-                let (matched_start_pos, matched_end_pos) = if matched_indics.len() > 0 {
+                let (matched_start_pos, matched_end_pos) = if !matched_indics.is_empty() {
                     (matched_indics[0], matched_indics[matched_indics.len()-1] + 1)
                 } else {
                     (0, 1)
@@ -321,7 +321,7 @@ impl Model {
                 }
                 curses.attr_on(last_attr);
 
-                for &ch in text.iter() {
+                for &ch in &text {
                     match matched_indics_iter.peek() {
                         Some(&&index) if idx == index => {
                             self.print_char(curses, ch, COLOR_MATCHED, is_current);
@@ -391,7 +391,7 @@ impl Model {
             }
 
             _ => {
-                curses.printw(&(matched_item.item.get_text()));
+                curses.printw(matched_item.item.get_text());
             }
         }
     }
@@ -530,7 +530,7 @@ fn right_fixed(text: &[char], max_x: usize) -> usize {
             return idx+1;
         }
     }
-    return 0;
+    0
 }
 
 // return a string and its left position in original string

@@ -170,12 +170,12 @@ impl Query {
         let (before, _) = self.get_ref();
 
         // skip whitespace
-        while before.len() > 0 && before[before.len()-1].is_whitespace() {
+        while !before.is_empty() && before[before.len()-1].is_whitespace() {
             before.pop();
         }
 
         // kill word until whitespace
-        while before.len() > 0 && !before[before.len()-1].is_whitespace() {
+        while !before.is_empty() && !before[before.len()-1].is_whitespace() {
             before.pop();
         }
     }
@@ -184,11 +184,11 @@ impl Query {
         let (_, after) = self.get_ref();
 
         // kill word until whitespace
-        while after.len() > 0 && !after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && !after[after.len()-1].is_whitespace() {
             after.pop();
         }
         // skip whitespace
-        while after.len() > 0 && after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && after[after.len()-1].is_whitespace() {
             after.pop();
         }
     }
@@ -196,14 +196,14 @@ impl Query {
     pub fn act_backward_word(&mut self) {
         let (before, after) = self.get_ref();
         // skip whitespace
-        while before.len() > 0 && before[before.len()-1].is_whitespace() {
+        while !before.is_empty() && before[before.len()-1].is_whitespace() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
         }
 
         // backword char until whitespace
-        while before.len() > 0 && !before[before.len()-1].is_whitespace() {
+        while !before.is_empty() && !before[before.len()-1].is_whitespace() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
@@ -213,14 +213,14 @@ impl Query {
     pub fn act_forward_word(&mut self) {
         let (before, after) = self.get_ref();
         // backword char until whitespace
-        while after.len() > 0 && !after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && !after[after.len()-1].is_whitespace() {
             after.pop().map(|ch| {
                 before.push(ch);
             });
         }
 
         // skip whitespace
-        while after.len() > 0 && after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && after[after.len()-1].is_whitespace() {
             after.pop().map(|ch| {
                 before.push(ch);
             });
@@ -229,7 +229,7 @@ impl Query {
 
     pub fn act_beginning_of_line(&mut self) {
         let (before, after) = self.get_ref();
-        while before.len() > 0 {
+        while !before.is_empty() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
@@ -238,7 +238,7 @@ impl Query {
 
     pub fn act_end_of_line(&mut self) {
         let (before, after) = self.get_ref();
-        while after.len() > 0 {
+        while !after.is_empty() {
             after.pop().map(|ch| {
                 before.push(ch);
             });
