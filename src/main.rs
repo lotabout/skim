@@ -280,6 +280,9 @@ fn real_main() -> i32 {
             }
 
             EvActAbort => {
+                let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
+                let _ = tx_model.send((EvActAbort, Box::new(tx)));
+                let _ = rx.recv();
                 exit_code = 130;
                 break;
             }

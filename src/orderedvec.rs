@@ -78,6 +78,10 @@ impl<T> OrderedVec<T> where T: Ord {
         let unordered = &self.unordered;
         Box::new(ordered.iter().chain(unordered.iter()))
     }
+
+    pub fn is_empty(&self) -> bool {
+        return self.len() == 0
+    }
 }
 
 #[cfg(test)]

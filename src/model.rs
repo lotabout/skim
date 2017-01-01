@@ -144,7 +144,11 @@ impl Model {
                         self.act_output();
 
                         let _ = tx_ack.send(self.selected.len());
-                        break;
+                    }
+                    Event::EvActAbort => {
+                        let tx_ack: Sender<bool> = *arg.downcast().unwrap();
+                        curses.close();
+                        let _ = tx_ack.send(true);
                     }
                     Event::EvActUp => {
                         self.act_move_line_cursor(1);
@@ -471,9 +475,11 @@ impl Model {
 
     pub fn act_output(&mut self) {
         // select the current one
-        let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
-        let index = current_item.item.get_full_index();
-        self.selected.insert(index, current_item.clone());
+        if !self.items.is_empty() {
+            let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+            let index = current_item.item.get_full_index();
+            self.selected.insert(index, current_item.clone());
+        }
 
         let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
         output.sort_by_key(|k| k.0);
