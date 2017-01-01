@@ -155,6 +155,10 @@ impl Curses {
         clear();
     }
 
+    pub fn erase(&self) {
+        erase();
+    }
+
     pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {
         let attr = self.get_color(pair, is_bold);
         attron(attr);

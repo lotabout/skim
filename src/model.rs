@@ -112,7 +112,7 @@ impl Model {
                         self.update_size(&curses);
 
                         let print_query = *arg.downcast::<ClosureType>().unwrap();
-                        curses.clear();
+                        curses.erase();
                         self.print_screen(&curses, print_query);
                         curses.refresh();
                     }
