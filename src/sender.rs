@@ -42,50 +42,39 @@ impl CachedSender {
         let mut index = 0;
 
         loop {
-            let mut item_group = Vec::new();
-
             // try to read a bunch of items first
-            for _ in 0..SENDER_BATCH_SIZE {
-                if let Ok((ev, arg)) = self.rx_sender.try_recv() {
-                    match ev {
-                        Event::EvReaderStarted => {
-                            // pass the event to matcher
-                            let _ = self.tx_item.send((ev, arg));
+            if let Ok((ev, arg)) = self.rx_sender.try_recv() {
+                match ev {
+                    Event::EvReaderStarted => {
+                        // pass the event to matcher
+                        let _ = self.tx_item.send((ev, arg));
 
-                            reader_stopped = false;
-                            self.items.clear();
-                        }
-
-                        Event::EvReaderStopped => {
-                            // send the total number that reader read.
-                            let total_num: usize = self.items.iter().map(|group| group.len()).sum();
-                            let _ = self.tx_item.send((ev, Box::new(total_num)));
-
-                            reader_stopped = true;
-                        }
-
-                        Event::EvSenderRestart => {
-                            // pass the event to matcher, it includes the query
-                            let _ = self.tx_item.send((Event::EvMatcherRestart, arg));
-
-                            am_i_runing = true;
-                            index = 0;
-                        }
-
-                        Event::EvReaderNewItem => {
-                            //self.items.push(Arc::new(*arg.downcast::<Item>().unwrap()));
-                            item_group.push(Arc::new(*arg.downcast::<Item>().unwrap()));
-                        }
-
-                        _ => {}
+                        reader_stopped = false;
+                        self.items.clear();
                     }
-                } else {
-                    break;
-                }
-            }
 
-            if !item_group.is_empty() {
-                self.items.push(item_group);
+                    Event::EvReaderStopped => {
+                        // send the total number that reader read.
+                        let total_num: usize = self.items.iter().map(|group| group.len()).sum();
+                        let _ = self.tx_item.send((ev, Box::new(total_num)));
+
+                        reader_stopped = true;
+                    }
+
+                    Event::EvSenderRestart => {
+                        // pass the event to matcher, it includes the query
+                        let _ = self.tx_item.send((Event::EvMatcherRestart, arg));
+
+                        am_i_runing = true;
+                        index = 0;
+                    }
+
+                    Event::EvReaderNewItem => {
+                        self.items.push(*arg.downcast::<ItemGroup>().unwrap());
+                    }
+
+                    _ => {}
+                }
             }
 
             if am_i_runing {

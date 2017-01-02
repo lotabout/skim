@@ -11,6 +11,7 @@ use std::thread::JoinHandle;
 use std::thread;
 use std::time::Duration;
 use std::collections::HashMap;
+use std::mem;
 
 use std::io::Write;
 use getopts;
@@ -230,6 +231,7 @@ fn reader(cmd: &str,
             });
 
     let mut index = 0;
+    let mut item_group = Vec::new();
     loop {
         // start reading
         let mut input = String::new();
@@ -243,18 +245,27 @@ fn reader(cmd: &str,
                         input.pop();
                     }
                 }
-                let _ = tx_sender.send((Event::EvReaderNewItem,
-                                        Box::new(Item::new(input,
-                                                           opt.use_ansi_color,
-                                                           &opt.transform_fields,
-                                                           &opt.matching_fields,
-                                                           &opt.delimiter,
-                                                           (run_num, index)))));
+                let item = Item::new(input,
+                                     opt.use_ansi_color,
+                                     &opt.transform_fields,
+                                     &opt.matching_fields,
+                                     &opt.delimiter,
+                                     (run_num, index));
+                item_group.push(Arc::new(item));
                 index += 1;
+
+                if index & 0xFFF == 0 {
+                    let _ = tx_sender.send((Event::EvReaderNewItem, Box::new(mem::replace(&mut item_group, Vec::new()))));
+                }
             }
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
     }
+
+    if !item_group.is_empty() {
+        let _ = tx_sender.send((Event::EvReaderNewItem, Box::new(mem::replace(&mut item_group, Vec::new()))));
+    }
+
     let _ = tx_control.send(true);
 }
 
