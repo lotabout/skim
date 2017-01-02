@@ -1,13 +1,11 @@
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
 use item::{MatchedItem, MatchedItemGroup, MatchedRange};
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use std::cmp::{max, min};
 use orderedvec::OrderedVec;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::collections::HashMap;
-use std::thread;
 
 use curses::{ColorTheme, Curses};
 use curses::*;
@@ -30,9 +28,7 @@ const REFESH_THRESHOLD: usize = 3000;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
-    items: Arc<RwLock<OrderedVec<Arc<MatchedItem>>>>, // all items
-    reset_model: Arc<AtomicBool>,
-
+    items: OrderedVec<Arc<MatchedItem>>, // all items
     selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     item_cursor: usize, // the index of matched item currently highlighted.
@@ -50,7 +46,6 @@ pub struct Model {
     matcher_stopped: bool,
     num_read: usize,
     num_processed: usize,
-    num_matched: usize,
     timer: Instant,
 }
 
@@ -58,12 +53,9 @@ impl Model {
     pub fn new(rx_cmd: Receiver<(Event, EventArg)>) -> Self {
         Model {
             rx_cmd: rx_cmd,
-            items: Arc::new(RwLock::new(OrderedVec::new())),
-            reset_model: Arc::new(AtomicBool::new(false)),
-
+            items: OrderedVec::new(),
             num_read: 0,
             num_processed: 0,
-            num_matched: 0,
             selected: HashMap::new(),
 
             item_cursor: 0,
@@ -103,30 +95,6 @@ impl Model {
         let curses = Curses::new();
         curses::init(Some(&self.theme), false, false);
 
-        let (tx_items, rx_items) = channel();
-
-        {
-            // sub thread for storing new items, so that the main thread won't be blocked.
-            let items = self.items.clone();
-            let reset_model = self.reset_model.clone();
-            thread::spawn(move || {
-                while let Ok(new_items) = rx_items.recv() {
-                    let mut items = items.write().unwrap();
-
-                    // if the model need reset, skip all subsequent commands
-                    if reset_model.load(Ordering::Relaxed) {
-                        while let Ok(_) = rx_items.try_recv() { }
-                        items.clear();
-                        reset_model.store(false, Ordering::Relaxed);
-                    }
-
-                    for item in new_items {
-                        items.push(Arc::new(item));
-                    }
-                }
-            });
-        }
-
         // main loop
         loop {
             // check for new item
@@ -134,8 +102,7 @@ impl Model {
                 match ev {
                     Event::EvModelNewItem => {
                         let items: MatchedItemGroup = *arg.downcast().unwrap();
-                        self.num_matched += items.len();
-                        tx_items.send(items);
+                        self.insert_new_items(items);
                     }
 
                     Event::EvModelRestart => {
@@ -173,6 +140,10 @@ impl Model {
 
                     Event::EvMatcherStopped => {
                         self.matcher_stopped = true;
+                        self.act_redraw_items_and_status(&curses);
+                    }
+
+                    Event::EvSenderWaiting => {
                         self.act_redraw_items_and_status(&curses);
                     }
 
@@ -273,7 +244,7 @@ impl Model {
     }
 
     fn clean_model(&mut self) {
-        self.reset_model.store(true, Ordering::Relaxed);
+        self.items.clear();
         self.item_cursor = 0;
         self.line_cursor = 0;
         self.hscroll_offset = 0;
@@ -281,7 +252,6 @@ impl Model {
         if !self.reader_stopped {
             self.num_processed = 0;
         }
-        self.num_matched = 0;
     }
 
     fn update_size(&mut self, curses: &Curses) {
@@ -291,6 +261,12 @@ impl Model {
         let (h, w) = curses.get_maxyx();
         self.height = h-2;
         self.width = w-2;
+    }
+
+    fn insert_new_items(&mut self, items: MatchedItemGroup) {
+        for item in items {
+            self.items.push(Arc::new(item));
+        }
     }
 
     fn draw_items(&mut self, curses: &Curses) {
@@ -318,10 +294,8 @@ impl Model {
         //              0                            h-1
         // screen-line: (h-l-1)   <--->   item-line: l
 
-        let mut items = self.items.write().unwrap();
-
         let lower = self.item_cursor;
-        let upper = min(self.item_cursor + h-2, items.len());
+        let upper = min(self.item_cursor + h-2, self.items.len());
 
         for i in lower..upper {
             let l = i - lower;
@@ -330,7 +304,7 @@ impl Model {
             let label = if l == self.line_cursor {">"} else {" "};
             curses.cprint(label, COLOR_CURSOR, true);
 
-            let item = items.get(i).unwrap().clone();
+            let item = self.items.get(i).unwrap().clone();
             self.draw_item(curses, &item, l == self.line_cursor);
         }
 
@@ -356,7 +330,7 @@ impl Model {
         }
 
         // display matched/total number
-        curses.cprint(format!(" {}/{}", self.num_matched, self.num_read).as_ref(), COLOR_INFO, false);
+        curses.cprint(format!(" {}/{}", self.items.len(), self.num_read).as_ref(), COLOR_INFO, false);
 
         // display the percentage of the number of processed items
         if self.num_processed < self.num_read {
@@ -529,7 +503,7 @@ impl Model {
         let diff = if self.reverse {-diff} else {diff};
         let mut line_cursor = self.line_cursor as i32;
         let mut item_cursor = self.item_cursor as i32;
-        let item_len = {self.items.read().unwrap().len() as i32};
+        let item_len = self.items.len() as i32;
 
         line_cursor += diff;
         if line_cursor >= self.height {
@@ -551,9 +525,7 @@ impl Model {
     pub fn act_toggle(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut items = self.items.write().unwrap();
-
-        let current_item = items.get(self.item_cursor + self.line_cursor).unwrap();
+        let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, current_item.clone());
@@ -563,8 +535,7 @@ impl Model {
     }
 
     pub fn act_toggle_all(&mut self) {
-        let mut items = self.items.read().unwrap();
-        for current_item in items.iter() {
+        for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
             if !self.selected.contains_key(&index) {
                 self.selected.insert(index, current_item.clone());
@@ -575,8 +546,7 @@ impl Model {
     }
 
     pub fn act_select_all(&mut self) {
-        let mut items = self.items.read().unwrap();
-        for current_item in items.iter() {
+        for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
             self.selected.insert(index, current_item.clone());
         }
@@ -588,9 +558,8 @@ impl Model {
 
     pub fn act_output(&mut self) {
         // select the current one
-        let mut items = self.items.write().unwrap();
-        if !items.is_empty() {
-            let current_item = items.get(self.item_cursor + self.line_cursor).unwrap();
+        if !self.items.is_empty() {
+            let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
             let index = current_item.item.get_full_index();
             self.selected.insert(index, current_item.clone());
         }
