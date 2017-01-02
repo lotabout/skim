@@ -151,8 +151,8 @@ impl Curses {
         clrtoeol();
     }
 
-    pub fn clear(&self) {
-        clear();
+    pub fn endwin(&self) {
+        endwin();
     }
 
     pub fn erase(&self) {

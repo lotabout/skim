@@ -256,6 +256,8 @@ impl Model {
 
     fn update_size(&mut self, curses: &Curses) {
         // update the (height, width)
+        curses.endwin();
+        curses.refresh();
         let (h, w) = curses.get_maxyx();
         self.height = h-2;
         self.width = w-2;

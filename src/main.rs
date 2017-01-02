@@ -27,6 +27,10 @@ use getopts::Options;
 use std::env;
 use std::sync::mpsc::{sync_channel, channel, Sender, Receiver};
 use event::Event::*;
+use event::{Event, EventArg};
+use std::mem;
+use std::ptr;
+use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 
 use std::io::Write;
 macro_rules! println_stderr(
@@ -95,6 +99,37 @@ fn real_main() -> i32 {
         return 0;
     }
 
+    let (tx_input, rx_input): (Sender<(Event, EventArg)>, Receiver<(Event, EventArg)>) = channel();
+    //------------------------------------------------------------------------------
+    // register terminal resize event, `pthread_sigmask` should be run before any thread.
+    let mut sigset = unsafe {mem::uninitialized()};
+    unsafe {
+        sigemptyset(&mut sigset);
+        sigaddset(&mut sigset, libc::SIGWINCH);
+        pthread_sigmask(libc::SIG_SETMASK, &sigset, ptr::null_mut());
+    }
+
+    let tx_input_clone = tx_input.clone();
+    thread::spawn(move || {
+        // listen to the resize event;
+        loop {
+            let mut sig = 0;
+            let _errno = unsafe {sigwait(&sigset, &mut sig)};
+            let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
+        }
+    });
+
+    //------------------------------------------------------------------------------
+    // input
+    let tx_input_clone = tx_input.clone();
+    let mut input = input::Input::new(tx_input_clone);
+    input.parse_keymap(options.opt_str("b"));
+    input.parse_expect_keys(options.opt_str("e"));
+    thread::spawn(move || {
+        input.run();
+    });
+
+
     //------------------------------------------------------------------------------
     // query
     let default_command = match env::var("SKIM_DEFAULT_COMMAND") {
@@ -133,17 +168,6 @@ fn real_main() -> i32 {
     model.parse_options(&options);
     thread::spawn(move || {
         model.run();
-    });
-
-    //------------------------------------------------------------------------------
-    // input
-    let (tx_input, rx_input) = channel();
-    let tx_input_clone = tx_input.clone();
-    let mut input = input::Input::new(tx_input_clone);
-    input.parse_keymap(options.opt_str("b"));
-    input.parse_expect_keys(options.opt_str("e"));
-    thread::spawn(move || {
-        input.run();
     });
 
     //------------------------------------------------------------------------------
