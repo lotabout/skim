@@ -40,6 +40,8 @@ macro_rules! println_stderr(
     } }
 );
 
+const REFRESH_DURATION: u64 = 200;
+
 fn main() {
     let exit_code = real_main();
     std::process::exit(exit_code);
@@ -155,11 +157,11 @@ fn real_main() -> i32 {
     // matcher
     let (tx_model, rx_model) = channel();
     let tx_model_clone = tx_model.clone();
-    let mut matcher = matcher::Matcher::new(rx_item, tx_model_clone);
+    let mut matcher = matcher::Matcher::new(tx_model_clone);
     matcher.parse_options(&options);
 
     thread::spawn(move || {
-        matcher.run();
+        matcher.run(rx_item);
     });
 
     //------------------------------------------------------------------------------
@@ -175,7 +177,7 @@ fn real_main() -> i32 {
     let tx_model_clone = tx_model.clone();
     thread::spawn(move || {
         loop {
-            thread::sleep(Duration::from_millis(200));
+            thread::sleep(Duration::from_millis(REFRESH_DURATION));
             let _ = tx_model_clone.send((EvModelDrawInfo, Box::new(true)));
         }
     });

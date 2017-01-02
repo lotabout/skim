@@ -46,9 +46,6 @@ impl CachedSender {
             if let Ok((ev, arg)) = self.rx_sender.try_recv() {
                 match ev {
                     Event::EvReaderStarted => {
-                        // pass the event to matcher
-                        let _ = self.tx_item.send((ev, arg));
-
                         reader_stopped = false;
                         self.items.clear();
                     }
@@ -64,6 +61,11 @@ impl CachedSender {
                     Event::EvSenderRestart => {
                         // pass the event to matcher, it includes the query
                         let _ = self.tx_item.send((Event::EvMatcherRestart, arg));
+
+                        if !reader_stopped {
+                            // pass the event to matcher
+                            let _ = self.tx_item.send((Event::EvReaderStarted, Box::new(true)));
+                        }
 
                         am_i_runing = true;
                         index = 0;

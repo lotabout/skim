@@ -1,12 +1,15 @@
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use event::{Event, EventArg};
 use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
+use std::thread;
 
 use getopts;
 use score;
 use std::io::Write;
 use regex::Regex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -28,15 +31,13 @@ enum Algorithm {
 
 pub struct Matcher {
     tx_result: Sender<(Event, EventArg)>,
-    rx_item: Receiver<(Event, EventArg)>,
     rank_criterion: Vec<RankCriteria>,
     is_exact: bool,
 }
 
 impl Matcher {
-    pub fn new(rx_item: Receiver<(Event, EventArg)>, tx_result: Sender<(Event, EventArg)>) -> Self {
+    pub fn new(tx_result: Sender<(Event, EventArg)>) -> Self {
         Matcher {
-            rx_item: rx_item,
             tx_result: tx_result,
             rank_criterion: vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End],
             is_exact: false,
@@ -59,53 +60,87 @@ impl Matcher {
         }
     }
 
-    pub fn run(&self) {
+    pub fn run(&self, rx_item: Receiver<(Event, EventArg)>) {
+        let (tx_matcher, rx_matcher) = channel();
+        let matcher_restart = Arc::new(AtomicBool::new(false));
+        // start a new thread listening for EvMatcherRestart, that means the query had been
+        // changed, so that matcher shoudl discard all previous events.
+        {
+            let matcher_restart = matcher_restart.clone();
+            thread::spawn(move || {
+                while let Ok((ev, arg)) = rx_item.recv() {
+                    match ev {
+                        Event::EvMatcherRestart => {
+                            matcher_restart.store(true, Ordering::Relaxed);
+                            while matcher_restart.load(Ordering::Relaxed) {
+                                thread::sleep(Duration::from_millis(10));
+                            }
+
+                            tx_matcher.send((ev, arg));
+                        }
+                        _ => {
+                            // pass through all other events
+                            tx_matcher.send((ev, arg));
+                        }
+                    }
+                }
+            });
+        }
+
         let mut matcher_engine: Option<MatchingEngine> = None;
         let mut num_processed: usize = 0;
-        while let Ok((ev, arg)) = self.rx_item.recv() {
-            match ev {
-                Event::EvMatcherNewItem => {
-                    let items: ItemGroup = *arg.downcast().unwrap();
-                    num_processed += items.len();
+        loop {
 
-                    matcher_engine.as_ref().map(|mat| {
-                        let matched_items: MatchedItemGroup = items.into_iter()
-                            .map(|item| mat.match_item(item))
-                            .filter(Option::is_some)
-                            .map(|item| item.unwrap())
-                            .collect();
-                        let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
-                    });
+            if matcher_restart.load(Ordering::Relaxed) {
+                while let Ok(_) = rx_matcher.try_recv() {}
+                matcher_restart.store(false, Ordering::Relaxed);
+            }
 
-                    // report the number of processed items
-                    let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+            if let Ok((ev, arg)) = rx_matcher.recv_timeout(Duration::from_millis(10)) {
+                match ev {
+                    Event::EvMatcherNewItem => {
+                        let items: ItemGroup = *arg.downcast().unwrap();
+                        num_processed += items.len();
+
+                        matcher_engine.as_ref().map(|mat| {
+                            let matched_items: MatchedItemGroup = items.into_iter()
+                                .map(|item| mat.match_item(item))
+                                .filter(Option::is_some)
+                                .map(|item| item.unwrap())
+                                .collect();
+                            let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
+                        });
+
+                        // report the number of processed items
+                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+                    }
+
+                    Event::EvReaderStopped | Event::EvSenderWaiting => {
+                        let _ = self.tx_result.send((ev, arg));
+                    }
+                    Event::EvSenderStopped => {
+                        // Since matcher is single threaded, sender stopped means all items are
+                        // processed.
+                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+                        let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
+                    }
+
+                    Event::EvReaderStarted => { let _ = self.tx_result.send((ev, arg)); }
+
+                    Event::EvMatcherRestart => {
+                        num_processed = 0;
+                        let query = arg.downcast::<String>().unwrap();
+
+                        // notifiy the model that the query had been changed
+                        let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
+
+                        matcher_engine = Some(MatchingEngine::builder(&query, self.is_exact)
+                                              .rank(&self.rank_criterion)
+                                              .build());
+                    }
+
+                    _ => {}
                 }
-
-                Event::EvReaderStopped | Event::EvSenderWaiting => {
-                    let _ = self.tx_result.send((ev, arg));
-                }
-                Event::EvSenderStopped => {
-                    // Since matcher is single threaded, sender stopped means all items are
-                    // processed.
-                    let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
-                    let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
-                }
-
-                Event::EvReaderStarted => { let _ = self.tx_result.send((ev, arg)); }
-
-                Event::EvMatcherRestart => {
-                    num_processed = 0;
-                    let query = *arg.downcast::<String>().unwrap();
-
-                    // notifiy the model that the query had been changed
-                    let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
-
-                    matcher_engine = Some(MatchingEngine::builder(&query, self.is_exact)
-                                          .rank(&self.rank_criterion)
-                                          .build());
-                }
-
-                _ => {}
             }
         }
     }
