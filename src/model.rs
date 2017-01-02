@@ -24,11 +24,11 @@ pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+const REFESH_THRESHOLD: usize = 3000;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
     items: OrderedVec<Arc<MatchedItem>>, // all items
-    total_item: usize,
     selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     item_cursor: usize, // the index of matched item currently highlighted.
@@ -40,11 +40,13 @@ pub struct Model {
 
     multi_selection: bool,
     pub tabstop: usize,
+    theme: ColorTheme,
 
     reader_stopped: bool,
-    sender_stopped: bool,
+    matcher_stopped: bool,
+    num_read: usize,
+    num_processed: usize,
     timer: Instant,
-    theme: ColorTheme,
 }
 
 impl Model {
@@ -52,7 +54,8 @@ impl Model {
         Model {
             rx_cmd: rx_cmd,
             items: OrderedVec::new(),
-            total_item: 0,
+            num_read: 0,
+            num_processed: 0,
             selected: HashMap::new(),
 
             item_cursor: 0,
@@ -66,7 +69,7 @@ impl Model {
             tabstop: 8,
 
             reader_stopped: false,
-            sender_stopped: false,
+            matcher_stopped: false,
             timer: Instant::now(),
             theme: ColorTheme::new(),
         }
@@ -108,26 +111,52 @@ impl Model {
                         self.update_size(&curses);
                     }
 
-                    Event::EvModelRedraw => {
-                        self.update_size(&curses);
-
-                        let print_query = *arg.downcast::<ClosureType>().unwrap();
-                        curses.erase();
-                        self.print_screen(&curses, print_query);
+                    Event::EvModelDrawQuery => {
+                        let print_query_func = *arg.downcast::<ClosureType>().unwrap();
+                        self.draw_query(&curses, print_query_func);
+                        curses.refresh();
+                    }
+                    Event::EvModelDrawInfo => {
+                        self.draw_status(&curses);
                         curses.refresh();
                     }
 
-                    Event::EvModelNotifyTotal => {
+                    Event::EvModelNotifyProcessed => {
+                        let num_processed = *arg.downcast::<usize>().unwrap();
+                        self.num_processed = num_processed;
+
                         if ! self.reader_stopped {
-                            self.total_item = *arg.downcast::<usize>().unwrap();
+                            // if the reader is still running, the number of processed items equals
+                            // to the number of read items
+                            self.num_read = num_processed;
+
+                            // update the screen
+                            if num_processed & 0xFFF == 0 {
+                                self.act_redraw_items_and_status(&curses);
+                            }
                         }
+
                     }
 
-                    Event::EvSenderStopped => {
-                        self.sender_stopped = true;
+                    Event::EvMatcherStopped => {
+                        self.matcher_stopped = true;
+                        self.act_redraw_items_and_status(&curses);
                     }
-                    Event::EvReaderStopped => { self.reader_stopped = true; }
-                    Event::EvReaderStarted => { self.reader_stopped = false; }
+
+                    Event::EvSenderWaiting => {
+                        self.act_redraw_items_and_status(&curses);
+                    }
+
+                    Event::EvReaderStopped => {
+                        // if reader stopped, the num_read is freezed.
+                        self.reader_stopped = true;
+                        self.num_read = *arg.downcast().unwrap();
+                    }
+
+                    Event::EvReaderStarted => {
+                        self.reader_stopped = false;
+                        self.num_read = 0;
+                    }
 
                     //---------------------------------------------------------
                     // Actions
@@ -152,43 +181,60 @@ impl Model {
                     }
                     Event::EvActUp => {
                         self.act_move_line_cursor(1);
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActDown => {
                         self.act_move_line_cursor(-1);
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActToggle => {
                         self.act_toggle();
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActToggleDown => {
                         self.act_toggle();
                         self.act_move_line_cursor(-1);
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActToggleUp => {
                         self.act_toggle();
                         self.act_move_line_cursor(1);
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActToggleAll => {
                         self.act_toggle_all();
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActSelectAll => {
                         self.act_select_all();
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActDeselectAll => {
                         self.act_deselect_all();
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActPageDown => {
                         let height = 1-self.height;
                         self.act_move_line_cursor(height);
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActPageUp => {
                         let height = self.height-1;
                         self.act_move_line_cursor(height);
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActScrollLeft => {
                         self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-2)));
+                        self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActScrollRight => {
                         self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(2)));
+                        self.act_redraw_items_and_status(&curses);
+                    }
+
+                    Event::EvActRedraw => {
+                        let print_query_func = *arg.downcast::<ClosureType>().unwrap();
+                        self.act_redarw(&curses, print_query_func);
                     }
 
                     _ => {}
@@ -202,9 +248,9 @@ impl Model {
         self.item_cursor = 0;
         self.line_cursor = 0;
         self.hscroll_offset = 0;
-        self.sender_stopped = false;
+        self.matcher_stopped = false;
         if !self.reader_stopped {
-            self.total_item = 0;
+            self.num_processed = 0;
         }
     }
 
@@ -219,8 +265,24 @@ impl Model {
         self.items.push(Arc::new(item));
     }
 
-    fn print_screen(&mut self, curses: &Curses, print_query: ClosureType) {
+    fn draw_items(&mut self, curses: &Curses) {
+        // cursor should be placed on query, so store cursor before printing
+        let (y, x) = curses.getyx();
+
+        // clear all lines
         let (h, w) = curses.get_maxyx();
+        if self.reverse {
+            for l in 2..h {
+                curses.mv(l, 0);
+                curses.clrtoeol();
+            }
+        } else {
+            for l in 0..(h-2) {
+                curses.mv(l, 0);
+                curses.clrtoeol();
+            }
+        }
+
         let (h, _) = (h as usize, w as usize);
 
         // screen-line: y         <--->   item-line: (height - y - 1)
@@ -239,23 +301,22 @@ impl Model {
             curses.cprint(label, COLOR_CURSOR, true);
 
             let item = self.items.get(i).unwrap().clone();
-            self.print_item(curses, &item, l == self.line_cursor);
+            self.draw_item(curses, &item, l == self.line_cursor);
         }
 
-        // print status line
-        self.print_status_line(curses);
-
-        // print query
-        curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
-        print_query(curses);
+        // restore cursor
+        curses.mv(y, x);
     }
 
-    fn print_status_line(&self, curses: &Curses) {
+    fn draw_status(&self, curses: &Curses) {
+        // cursor should be placed on query, so store cursor before printing
+        let (y, x) = curses.getyx();
+
         curses.mv(if self.reverse {1} else {self.height} , 0);
         curses.clrtoeol();
 
         // display spinner
-        if self.reader_stopped && self.sender_stopped {
+        if self.reader_stopped {
             self.print_char(curses, ' ', COLOR_NORMAL, false);
         } else {
             let time = self.timer.elapsed();
@@ -265,7 +326,12 @@ impl Model {
         }
 
         // display matched/total number
-        curses.cprint(format!(" {}/{}", self.items.len(), self.total_item).as_ref(), COLOR_INFO, false);
+        curses.cprint(format!(" {}/{}", self.items.len(), self.num_read).as_ref(), COLOR_INFO, false);
+
+        // display the percentage of the number of processed items
+        if self.num_processed < self.num_read {
+            curses.cprint(format!(" ({}%) ", self.num_processed*100 / self.num_read).as_ref(), COLOR_INFO, false)
+        }
 
         // selected number
         if self.multi_selection && !self.selected.is_empty() {
@@ -276,9 +342,22 @@ impl Model {
         let line_num_str = format!(" {} ", self.item_cursor+self.line_cursor);
         curses.mv(if self.reverse {1} else {self.height}, self.width - (line_num_str.len() as i32));
         curses.cprint(&line_num_str, COLOR_INFO, true);
+
+        // restore cursor
+        curses.mv(y, x);
     }
 
-    fn print_item(&self, curses: &Curses, matched_item: &MatchedItem, is_current: bool) {
+    fn draw_query(&self, curses: &Curses, print_query_func: ClosureType) {
+        let (h, w) = curses.get_maxyx();
+        let (h, _) = (h as usize, w as usize);
+
+        // print query
+        curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
+        curses.clrtoeol();
+        print_query_func(curses);
+    }
+
+    fn draw_item(&self, curses: &Curses, matched_item: &MatchedItem, is_current: bool) {
         let index = matched_item.item.get_full_index();
 
         if self.selected.contains_key(&index) {
@@ -493,6 +572,21 @@ impl Model {
         hscroll_offset += offset;
         hscroll_offset = max(0, hscroll_offset);
         self.hscroll_offset = hscroll_offset as usize;
+    }
+
+    pub fn act_redarw(&mut self, curses: &Curses, print_query_func: ClosureType) {
+        self.update_size(curses);
+        curses.erase();
+        self.draw_items(curses);
+        self.draw_status(curses);
+        self.draw_query(curses, print_query_func);
+        curses.refresh();
+    }
+
+    fn act_redraw_items_and_status(&mut self, curses: &Curses) {
+        self.draw_items(curses);
+        self.draw_status(curses);
+        curses.refresh();
     }
 
 }

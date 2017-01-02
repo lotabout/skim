@@ -13,6 +13,8 @@ macro_rules! println_stderr(
     } }
 );
 
+const SENDER_BATCH_SIZE: usize = 9997;
+
 // sender is a cache of reader
 pub struct CachedSender {
     items: Vec<Arc<Item>>, // cache
@@ -40,49 +42,56 @@ impl CachedSender {
         let mut index = 0;
 
         loop {
-            if let Ok((ev, arg)) = self.rx_sender.try_recv() {
-                match ev {
-                    Event::EvReaderStarted => {
-                        // pass the event to matcher
-                        let _ = self.tx_item.send((ev, arg));
+            // try to read a bunch of items first
+            for _ in 0..SENDER_BATCH_SIZE {
+                if let Ok((ev, arg)) = self.rx_sender.try_recv() {
+                    match ev {
+                        Event::EvReaderStarted => {
+                            // pass the event to matcher
+                            let _ = self.tx_item.send((ev, arg));
 
-                        reader_stopped = false;
-                        self.items.clear();
+                            reader_stopped = false;
+                            self.items.clear();
+                        }
+
+                        Event::EvReaderStopped => {
+                            // send the total number that reader read.
+                            let _ = self.tx_item.send((ev, Box::new(self.items.len())));
+
+                            reader_stopped = true;
+                        }
+
+                        Event::EvSenderRestart => {
+                            // pass the event to matcher, it includes the query
+                            let _ = self.tx_item.send((Event::EvMatcherRestart, arg));
+
+                            am_i_runing = true;
+                            index = 0;
+                        }
+
+                        Event::EvReaderNewItem => {
+                            self.items.push(Arc::new(*arg.downcast::<Item>().unwrap()));
+                        }
+
+                        _ => {}
                     }
-
-                    Event::EvReaderStopped => {
-                        // pass the event to matcher
-                        let _ = self.tx_item.send((ev, arg));
-
-                        reader_stopped = true;
-                    }
-
-                    Event::EvSenderRestart => {
-                        // pass the event to matcher, it includes the query
-                        let _ = self.tx_item.send((Event::EvMatcherRestart, arg));
-
-                        am_i_runing = true;
-                        index = 0;
-                    }
-
-                    Event::EvReaderNewItem => {
-                        self.items.push(Arc::new(*arg.downcast::<Item>().unwrap()));
-                    }
-
-                    _ => {}
+                } else {
+                    break;
                 }
             }
 
-            // send some data if running
             if am_i_runing {
-                // there are more items to be sent
-                if index < self.items.len() {
-                    if let Ok(_) = self.tx_item.try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone()))) {
-                        index += 1;
+                // try to send a bunch of items:
+                for _ in 0..SENDER_BATCH_SIZE {
+                    if index < self.items.len() {
+                        if let Ok(_) = self.tx_item.try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone()))) {
+                            index += 1;
+                        }
+                    } else if reader_stopped {
+                        let _ = self.tx_item.send((Event::EvSenderStopped, Box::new(true)));
+                        am_i_runing = false;
+                        break;
                     }
-                } else if reader_stopped {
-                    let _ = self.tx_item.send((Event::EvSenderStopped, Box::new(true)));
-                    am_i_runing = false;
                 }
             } else {
                 thread::sleep(Duration::from_millis(3));

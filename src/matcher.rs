@@ -61,11 +61,11 @@ impl Matcher {
 
     pub fn run(&self) {
         let mut matcher_engine: Option<MatchingEngine> = None;
-        let mut total_num: usize = 0;
+        let mut num_processed: usize = 0;
         while let Ok((ev, arg)) = self.rx_item.recv() {
             match ev {
                 Event::EvMatcherNewItem => {
-                    total_num += 1;
+                    num_processed += 1;
                     let item: Arc<Item> = *arg.downcast().unwrap();
 
                     matcher_engine.as_ref().map(|mat| {
@@ -75,20 +75,26 @@ impl Matcher {
                         }
                     });
 
-                    // report total number
-                    if total_num % 11 == 0 {
-                        let _ = self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
+                    if num_processed & 0xFFF == 0 {
+                        // report the number of processed items
+                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                     }
                 }
 
-                Event::EvSenderStopped | Event::EvReaderStopped => {
-                    let _ = self.tx_result.send((Event::EvModelNotifyTotal, Box::new(total_num)));
+                Event::EvReaderStopped | Event::EvSenderWaiting => {
                     let _ = self.tx_result.send((ev, arg));
                 }
+                Event::EvSenderStopped => {
+                    // Since matcher is single threaded, sender stopped means all items are
+                    // processed.
+                    let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+                    let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
+                }
+
                 Event::EvReaderStarted => { let _ = self.tx_result.send((ev, arg)); }
 
                 Event::EvMatcherRestart => {
-                    total_num = 0;
+                    num_processed = 0;
                     let query = *arg.downcast::<String>().unwrap();
 
                     // notifiy the model that the query had been changed

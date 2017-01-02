@@ -11,9 +11,12 @@ pub enum Event {
 
     EvMatcherNewItem,
     EvMatcherRestart,
+    EvMatcherStopped,
 
+    EvModelDrawQuery,
+    EvModelDrawInfo,
     EvModelNewItem,
-    EvModelNotifyTotal,
+    EvModelNotifyProcessed,
     EvModelRedraw,
     EvModelRestart,
 
@@ -24,6 +27,7 @@ pub enum Event {
 
     EvSenderRestart,
     EvSenderStopped,
+    EvSenderWaiting,
 
     EvActAddChar,
 

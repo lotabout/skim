@@ -148,21 +148,11 @@ fn real_main() -> i32 {
 
     //------------------------------------------------------------------------------
     // start a timer for notifying refresh
-    let tx_input_clone = tx_input.clone();
-    let (tx_view, rx_view) = channel();
+    let tx_model_clone = tx_model.clone();
     thread::spawn(move || {
         loop {
-            let timeout = rx_view.recv_timeout(Duration::from_millis(200));
-            if timeout.is_ok() {
-                // to prevent from bounds, remove sequent urgent refresh
-                thread::sleep(Duration::from_millis(50));
-                while let Ok(_) = rx_view.try_recv() {}
-
-                // some urgent refresh is needed
-                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
-            } else {
-                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
-            }
+            thread::sleep(Duration::from_millis(200));
+            let _ = tx_model_clone.send((EvModelDrawInfo, Box::new(true)));
         }
     });
 
@@ -172,14 +162,16 @@ fn real_main() -> i32 {
     // light up the fire
     let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
 
+    let redraw_query = |query: &query::Query| {
+        let _ = tx_model.send((EvModelDrawQuery, Box::new(query.get_print_func())));
+    };
+
     let on_query_change = |query: &query::Query| {
         // restart the reader with new parameter
         let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
         // send redraw event
-        let _ = tx_view.send(true);
+        redraw_query(query);
     };
-
-    let redraw_screen = || { let _ = tx_view.send(true); };
 
     //------------------------------------------------------------------------------
     // main loop, listen for user input
@@ -189,6 +181,8 @@ fn real_main() -> i32 {
     // rx_input:  receive keystroke events
 
     let mut exit_code = 1;
+
+    let _ = tx_input.send((EvActRedraw, Box::new(true))); // trigger draw
     while let Ok((ev, arg)) = rx_input.recv() {
         match ev {
             EvActAddChar =>  {
@@ -209,12 +203,12 @@ fn real_main() -> i32 {
 
             EvActBackwardChar => {
                 query.act_backward_char();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActForwardChar => {
                 query.act_forward_char();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActBackwardKillWord | EvActUnixWordRubout => {
@@ -224,22 +218,22 @@ fn real_main() -> i32 {
 
             EvActBackwardWord => {
                 query.act_backward_word();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActForwardWord => {
                 query.act_forward_word();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActBeginningOfLine => {
                 query.act_beginning_of_line();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActEndOfLine => {
                 query.act_end_of_line();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActKillLine => {
@@ -259,7 +253,7 @@ fn real_main() -> i32 {
 
             EvActRotateMode => {
                 query.act_query_rotate_mode();
-                redraw_screen();
+                redraw_query(&query);
             }
 
             EvActAccept => {
@@ -276,7 +270,7 @@ fn real_main() -> i32 {
             }
 
             EvActClearScreen | EvActRedraw => {
-                let _ = tx_model.send((EvModelRedraw, Box::new(query.get_print_func())));
+                let _ = tx_model.send((EvActRedraw, Box::new(query.get_print_func())));
             }
 
             EvActAbort => {
@@ -293,7 +287,6 @@ fn real_main() -> i32 {
                 | EvActPageDown | EvActPageUp
                 | EvActScrollLeft | EvActScrollRight => {
                 let _ = tx_model.send((ev, arg));
-                redraw_screen();
             }
 
             _ => {}
