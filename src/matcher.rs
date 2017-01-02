@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
-use item::{Item, MatchedItem, MatchedRange};
+use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 
 use getopts;
 use score;
@@ -65,20 +65,20 @@ impl Matcher {
         while let Ok((ev, arg)) = self.rx_item.recv() {
             match ev {
                 Event::EvMatcherNewItem => {
-                    num_processed += 1;
-                    let item: Arc<Item> = *arg.downcast().unwrap();
+                    let items: ItemGroup = *arg.downcast().unwrap();
+                    num_processed += items.len();
 
                     matcher_engine.as_ref().map(|mat| {
-                        let matched_item = mat.match_item(item);
-                        if matched_item != None {
-                            let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_item.unwrap())));
-                        }
+                        let matched_items: MatchedItemGroup = items.into_iter()
+                            .map(|item| mat.match_item(item))
+                            .filter(Option::is_some)
+                            .map(|item| item.unwrap())
+                            .collect();
+                        let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
                     });
 
-                    if num_processed & 0xFFF == 0 {
-                        // report the number of processed items
-                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
-                    }
+                    // report the number of processed items
+                    let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                 }
 
                 Event::EvReaderStopped | Event::EvSenderWaiting => {

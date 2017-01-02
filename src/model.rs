@@ -1,6 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
-use item::{MatchedItem, MatchedRange};
+use item::{MatchedItem, MatchedItemGroup, MatchedRange};
 use std::time::Instant;
 use std::cmp::{max, min};
 use orderedvec::OrderedVec;
@@ -101,8 +101,8 @@ impl Model {
             if let Ok((ev, arg)) = self.rx_cmd.recv() {
                 match ev {
                     Event::EvModelNewItem => {
-                        let item = *arg.downcast::<MatchedItem>().unwrap();
-                        self.new_item(item);
+                        let items: MatchedItemGroup = *arg.downcast().unwrap();
+                        self.insert_new_items(items);
                     }
 
                     Event::EvModelRestart => {
@@ -263,8 +263,10 @@ impl Model {
         self.width = w-2;
     }
 
-    fn new_item(&mut self, item: MatchedItem) {
-        self.items.push(Arc::new(item));
+    fn insert_new_items(&mut self, items: MatchedItemGroup) {
+        for item in items {
+            self.items.push(Arc::new(item));
+        }
     }
 
     fn draw_items(&mut self, curses: &Curses) {

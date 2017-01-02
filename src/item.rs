@@ -237,7 +237,9 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
     }
 }
 
-
+// A bunch of items
+pub type ItemGroup = Vec<Arc<Item>>;
+pub type MatchedItemGroup = Vec<MatchedItem>;
 
 pub type Rank = [i64; 4]; // score, index, start, end
 

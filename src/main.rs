@@ -144,7 +144,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // reader
     let (tx_reader, rx_reader) = channel();
-    let (tx_item, rx_item) = sync_channel(10240);
+    let (tx_item, rx_item) = sync_channel(1024);
     let mut reader = reader::Reader::new(rx_reader, tx_item);
     reader.parse_options(&options);
     thread::spawn(move || {
