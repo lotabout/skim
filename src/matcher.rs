@@ -29,10 +29,17 @@ enum Algorithm {
     InverseSuffixExact,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum MatcherMode {
+    Regex,
+    Exact,
+    FUZZY,
+}
+
 pub struct Matcher {
     tx_result: Sender<(Event, EventArg)>,
     rank_criterion: Vec<RankCriteria>,
-    is_exact: bool,
+    mode: MatcherMode,
 }
 
 impl Matcher {
@@ -40,7 +47,7 @@ impl Matcher {
         Matcher {
             tx_result: tx_result,
             rank_criterion: vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End],
-            is_exact: false,
+            mode: MatcherMode::FUZZY,
         }
     }
 
@@ -56,8 +63,13 @@ impl Matcher {
         }
 
         if options.opt_present("exact") {
-            self.is_exact = true;
+            self.mode = MatcherMode::Exact;
         }
+
+        if options.opt_present("regex") {
+            self.mode = MatcherMode::Regex;
+        }
+
     }
 
     pub fn run(&self, rx_item: Receiver<(Event, EventArg)>) {
@@ -134,7 +146,7 @@ impl Matcher {
                         // notifiy the model that the query had been changed
                         let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
 
-                        matcher_engine = Some(MatchingEngine::builder(&query, self.is_exact)
+                        matcher_engine = Some(MatchingEngine::builder(&query, self.mode)
                                               .rank(&self.rank_criterion)
                                               .build());
                     }
@@ -160,9 +172,11 @@ struct MatchingEngine<'a> {
 }
 
 impl<'a> MatchingEngine<'a> {
-    pub fn builder(query: &str, is_exact: bool) -> Self {
-        let (algo, query) = if query.starts_with('\'') {
-            if is_exact {
+    pub fn builder(query: &str, mode: MatcherMode) -> Self {
+        let (algo, query) = if mode == MatcherMode::Regex {
+            (Algorithm::Regex, query)
+        } else if query.starts_with('\'') {
+            if mode == MatcherMode::Exact {
                 (Algorithm::Fuzzy, &query[1..])
             } else {
                 (Algorithm::Exact, &query[1..])
@@ -177,7 +191,7 @@ impl<'a> MatchingEngine<'a> {
             }
         } else if query.ends_with('$') {
             (Algorithm::SuffixExact, &query[..(query.len()-1)])
-        } else if is_exact {
+        } else if mode == MatcherMode::Exact {
             (Algorithm::Exact, query)
         } else {
             (Algorithm::Fuzzy, query)
@@ -271,25 +285,25 @@ impl<'a> MatchingEngine<'a> {
             }
 
             let source: String = item.get_lower_chars()[start .. end].iter().cloned().collect();
-            matched_result = score::regex_match(&source, &self.query_regex);
+            matched_result = score::regex_match(&source, &self.query_regex)
+                .map(|(s, e)| (s+start, e+start));
 
-            if matched_result == None {
-                continue;
+            if matched_result.is_some() {
+                break;
             }
         }
 
-        if matched_result == None {
+        if matched_result.is_none() {
             return None;
         }
 
         let (begin, end) = matched_result.unwrap();
-
-        let score = end - begin;
-        let rank = self.build_rank(-score, item.get_index() as i64, begin, end);
+        let score = (end - begin) as i64;
+        let rank = self.build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
 
         Some(MatchedItem::builder(item)
              .rank(rank)
-             .matched_range(MatchedRange::Range(begin as usize, end as usize))
+             .matched_range(MatchedRange::Range(begin, end))
              .build())
     }
 

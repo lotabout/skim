@@ -123,7 +123,7 @@ pub fn fuzzy_match(choice: &[char],
     Some((score, picked))
 }
 
-pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(i64, i64)>{
+pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)>{
     match *pattern {
         Some(ref pat) => {
             let ret = pat.find(choice);
@@ -134,7 +134,7 @@ pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(i64, i64)>{
             let (start, end) = ret.unwrap();
             let first = (&choice[0..start]).chars().count();
             let last = first + (&choice[start..end]).chars().count();
-            Some((first as i64, last as i64))
+            Some((first, last))
         }
         None => None,
     }
