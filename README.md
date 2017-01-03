@@ -118,6 +118,7 @@ Some common used keybindings.
 ## Search Syntax
 
 `skim` borrowed `fzf`'s syntax for matching items
+
 | Token    | Match type                 | Description                       |
 |----------|----------------------------|-----------------------------------|
 | `text`   | fuzzy-match                | items that match `text`           |
@@ -195,6 +196,49 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 There are 4 information about a match: `score, index, begin, end`, you can
 specify how the records are sort by `sk --tiebreak score,index,-begin` or any
 other you want.
+
+## Color Scheme
+
+It is a hight chance that you are a better artist than me. Luckily you won't
+be stuck in the default colors, `skim` support customization of color scheme.
+
+```
+--color=[BASE_SCHEME][,COLOR:ANSI]
+```
+
+The configuration of colors starts with the name of the base color scheme and
+followed by custom color mappings. For example:
+
+
+```
+sk --color=current_bg:24
+sk --color=light,fg:232,bg:255,current_bg:116,info:27
+```
+
+You can choose the `BASE SCHEME` among the followings(default: dark on
+256-color terminal, otherwise 16):
+
+
+| dark  | Color scheme for dark 256-color terminal  |
+| light | Color scheme for light 256-color terminal |
+| 16    | Color scheme for 16-color terminal        |
+| bw    | No colors                                 |
+
+While the customisable `COLOR`s are
+
+| fg               | Text                                             |
+| bg               | Background                                       |
+| matched          | Text color of matched items                      |
+| matched_bg       | Background color of matched items                |
+| current          | Text color (current line)                        |
+| current_bg       | Background color (current line)                  |
+| current_match    | Text color of matched items (current line)       |
+| current_match_bg | Background color of matched items (current line) |
+| spinner          | Streaming input indicator                        |
+| info             | Info area                                        |
+| prompt           | Prompt                                           |
+| cursor           | Cursor                                           |
+| selected         | Text color of "selected" indicator               |
 
 ## Misc
 
