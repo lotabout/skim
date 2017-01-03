@@ -1,29 +1,20 @@
 // All the events that will be used
 
-use std::any::Any;
-
-pub type EventArg = Box<Any + 'static + Send>;
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Event {
+    EvReaderNewItem,
+    EvReaderResetQuery,
+    EvReaderSync,
+    EvMatcherNewItem,
+    EvMatcherResetQuery,
+    EvMatcherUpdateProcess,
+    EvMatcherEnd,
+    EvMatcherSync,
+    EvModelAck,
+    EvQueryChange,
     EvInputKey,
     EvInputInvalid,
-
-    EvMatcherNewItem,
-    EvMatcherRestart,
-
-    EvModelNewItem,
-    EvModelNotifyTotal,
-    EvModelRedraw,
-    EvModelRestart,
-
-    EvReaderNewItem,
-    EvReaderStarted,
-    EvReaderStopped,
-    EvReaderRestart,
-
-    EvSenderRestart,
-    EvSenderStopped,
+    EvResize,
 
     EvActAddChar,
 
@@ -51,8 +42,6 @@ pub enum Event {
     EvActPageDown,
     EvActPageUp,
     EvActPreviousHistory,
-    EvActRedraw,
-    EvActRotateMode,
     EvActScrollLeft,
     EvActScrollRight,
     EvActSelectAll,
