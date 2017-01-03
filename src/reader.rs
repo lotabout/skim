@@ -136,14 +136,14 @@ impl Reader {
                         let query_clone = query.clone();
 
                         // start the new command
-                        thread::spawn(move || {
+                        thread_reader = Some(thread::spawn(move || {
                             let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
                             let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
 
                             reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
 
                             let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
-                        });
+                        }));
                     } else {
                         // tell sender to restart
                         let _ = tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
