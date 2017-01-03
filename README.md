@@ -7,8 +7,7 @@ skim! It is a general fuzzy finder that saves you time.
 
 It is blazingly fast as it reads the data source asynchronously.
 
-// TODO: update demo
-![skim demo](https://cloud.githubusercontent.com/assets/1527040/16977618/cc75fd3c-4e89-11e6-9b4a-133f3a3ed616.gif)
+![skim demo](https://cloud.githubusercontent.com/assets/1527040/21603846/09138f6e-d1db-11e6-9466-711cc5b1ead8.gif)
 
 skim provides a single executable: `sk`, basically anywhere you want to use
 `grep` try `sk` instead.
@@ -101,8 +100,7 @@ search contents in a project directory:
 sk --ansi -i -c 'ag --color "{}"'
 ```
 
-// TODO: update demo
-![interactive mode demo](https://cloud.githubusercontent.com/assets/1527040/16977634/e03c9484-4e89-11e6-8255-69394964cb90.gif)
+![interactive mode demo](https://cloud.githubusercontent.com/assets/1527040/21603930/655d859a-d1db-11e6-9fec-c25099d30a12.gif)
 
 ## Key Bindings
 
