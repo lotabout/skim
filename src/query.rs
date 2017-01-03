@@ -32,7 +32,7 @@ impl Query {
             base_cmd: String::new(),
             replstr: "{}".to_string(),
             query_prompt: "q> ".to_string(),
-            cmd_prompt: "c> ".to_string(),
+            cmd_prompt: "> ".to_string(),
         }
     }
 

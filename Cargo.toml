@@ -1,6 +1,6 @@
 [package]
 name = "skim"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Mark Wallace <lotabout@gmail.com>"]
 
 [[bin]]
@@ -19,4 +19,4 @@ clippy = {version = "*", optional = true}
 default = []
 
 [profile.release]
-debug = true
+debug = false

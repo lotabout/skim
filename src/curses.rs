@@ -110,9 +110,8 @@ impl Curses {
         setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
         let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
         let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
-        //let screen = newterm(None, stderr, stdin);
-        //set_term(screen);
-        let screen = initscr();
+        let screen = newterm(None, stderr, stdin);
+        set_term(screen);
         raw();
         noecho();
 
