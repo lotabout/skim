@@ -72,6 +72,7 @@ Usage: sk [options]
     --ansi               parse ANSI color codes for input strings
     --color [BASE][,COLOR:ANSI]
                          change color theme
+    --reverse            Reverse orientation
 
   Scripting
     -q, --query \"\"       specify the initial query
@@ -118,6 +119,7 @@ fn real_main() -> i32 {
     opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
+    opts.optflag("", "reverse", "reverse orientation");
     opts.optflag("", "version", "print out the current version of skim");
 
     let mut args = Vec::new();

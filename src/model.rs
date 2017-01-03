@@ -83,6 +83,10 @@ impl Model {
             self.multi_selection = false;
         }
 
+        if options.opt_present("reverse") {
+            self.reverse = true;
+        }
+
         if let Some(color) = options.opt_str("color") {
             self.theme = ColorTheme::from_options(&color);
         }
