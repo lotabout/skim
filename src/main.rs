@@ -7,6 +7,7 @@ extern crate libc;
 extern crate ncurses;
 extern crate getopts;
 extern crate regex;
+extern crate shlex;
 #[macro_use] extern crate lazy_static;
 mod item;
 mod reader;
@@ -78,6 +79,9 @@ Usage: sk [options]
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
+    SKIM_DEFAULT_OPTIONS Default options (e.g. '--ansi --regex')
+                         You should not include other environment variables
+                         (e.g. '-c \"$HOME/bin/ag\"')
 ";
 
 fn main() {
@@ -118,12 +122,10 @@ fn real_main() -> i32 {
 
     let mut args = Vec::new();
 
-    let default_options = match env::var("SKIM_DEFAULT_OPTIONS") {
-        Ok(val) => val,
-        Err(_) => "".to_string(),
-    };
-
-    args.push(default_options);
+    args.extend(env::var("SKIM_DEFAULT_OPTIONS")
+                .ok()
+                .and_then(|val| shlex::split(&val))
+                .unwrap_or(Vec::new()));
 
     for arg in env::args().skip(1) {
         args.push(arg);

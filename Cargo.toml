@@ -14,6 +14,7 @@ num_cpus = "0.2"
 regex = "0.1"
 lazy_static = "0.2.1"
 clippy = {version = "*", optional = true}
+shlex = "0.1.1"
 
 [features]
 default = []
