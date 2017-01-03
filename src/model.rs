@@ -24,7 +24,6 @@ pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
-const REFESH_THRESHOLD: usize = 3000;
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
@@ -140,10 +139,6 @@ impl Model {
 
                     Event::EvMatcherStopped => {
                         self.matcher_stopped = true;
-                        self.act_redraw_items_and_status(&curses);
-                    }
-
-                    Event::EvSenderWaiting => {
                         self.act_redraw_items_and_status(&curses);
                     }
 

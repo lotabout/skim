@@ -88,11 +88,11 @@ impl Matcher {
                                 thread::sleep(Duration::from_millis(10));
                             }
 
-                            tx_matcher.send((ev, arg));
+                            let _ = tx_matcher.send((ev, arg));
                         }
                         _ => {
                             // pass through all other events
-                            tx_matcher.send((ev, arg));
+                            let _ = tx_matcher.send((ev, arg));
                         }
                     }
                 }
@@ -127,7 +127,7 @@ impl Matcher {
                         let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                     }
 
-                    Event::EvReaderStopped | Event::EvSenderWaiting => {
+                    Event::EvReaderStopped => {
                         let _ = self.tx_result.send((ev, arg));
                     }
                     Event::EvSenderStopped => {

@@ -1,6 +1,5 @@
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender};
-use item::{Item, ItemGroup};
+use item::ItemGroup;
 use event::{Event, EventArg};
 use std::thread;
 use std::time::Duration;
@@ -12,8 +11,6 @@ macro_rules! println_stderr(
         r.expect("failed printing to stderr");
     } }
 );
-
-const SENDER_BATCH_SIZE: usize = 9997;
 
 // sender is a cache of reader
 pub struct CachedSender {
@@ -43,11 +40,13 @@ impl CachedSender {
 
         loop {
             // try to read a bunch of items first
-            if let Ok((ev, arg)) = self.rx_sender.try_recv() {
+            if let Ok((ev, arg)) = self.rx_sender.recv_timeout(Duration::from_millis(10)) {
                 match ev {
                     Event::EvReaderStarted => {
                         reader_stopped = false;
                         self.items.clear();
+                        index = 0;
+                        am_i_runing = true;
                     }
 
                     Event::EvReaderStopped => {
