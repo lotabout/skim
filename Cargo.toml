@@ -13,3 +13,6 @@ getopts = "0.2"
 num_cpus = "0.2"
 regex = "0.1"
 lazy_static = "0.2.1"
+
+[profile.release]
+debug = true

@@ -6,6 +6,14 @@ use std::sync::RwLock;
 use std::collections::HashMap;
 use libc::{STDIN_FILENO, STDERR_FILENO, fdopen};
 
+use std::io::Write;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
 pub static COLOR_MATCHED:       i16 = 2;
@@ -20,9 +28,7 @@ static COLOR_USER:              i16 = 10;
 
 lazy_static! {
     static ref COLOR_MAP: RwLock<HashMap<i16, attr_t>> = RwLock::new(HashMap::new());
-    static ref CURRENT_FG: RwLock<i16> = RwLock::new(7);
     static ref FG: RwLock<i16> = RwLock::new(7);
-    static ref CURRENT_BG: RwLock<i16> = RwLock::new(0);
     static ref BG: RwLock<i16> = RwLock::new(0);
     static ref USE_COLOR: RwLock<bool> = RwLock::new(true);
 }
@@ -46,8 +52,6 @@ pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
 }
 
 fn init_pairs(base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
-    let mut current_fg = CURRENT_FG.write().unwrap();
-    let mut current_bg = CURRENT_BG.write().unwrap();
     let mut fg = FG.write().unwrap();
     let mut bg = BG.write().unwrap();
 
@@ -64,22 +68,20 @@ fn init_pairs(base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
     }
 
     if !theme.use_default {
-        assume_default_colors(shadow(base.fg, theme.fg) as i32, *bg as i32);
+        assume_default_colors(shadow(base.fg, theme.fg) as i32, shadow(base.bg, theme.bg) as i32);
     }
 
     start_color();
 
-    *current_fg = shadow(base.current, theme.current);
-    *current_bg = shadow(base.dark_bg, theme.dark_bg);;
-    init_pair(COLOR_PROMPT, shadow(base.prompt, theme.prompt), *bg);
-    init_pair(COLOR_MATCHED, shadow(base.matched, theme.matched), *bg);
-    init_pair(COLOR_CURRENT, shadow(base.current, theme.current), *current_bg);
-    init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), *current_bg);
-    init_pair(COLOR_SPINNER, shadow(base.spinner, theme.spinner), *bg);
-    init_pair(COLOR_INFO, shadow(base.info, theme.info), *bg);
-    init_pair(COLOR_CURSOR, shadow(base.cursor, theme.cursor), *current_bg);
-    init_pair(COLOR_SELECTED, shadow(base.selected, theme.selected), *current_bg);
-    init_pair(COLOR_HEADER, shadow(base.header, theme.header), *bg);
+    init_pair(COLOR_PROMPT,        shadow(base.prompt,        theme.prompt),        *bg);
+    init_pair(COLOR_MATCHED,       shadow(base.matched,       theme.matched),       shadow(base.matched_bg, theme.matched_bg));
+    init_pair(COLOR_CURRENT,       shadow(base.current,       theme.current),       shadow(base.current_bg, theme.current_bg));
+    init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), shadow(base.current_match_bg, theme.current_match_bg));
+    init_pair(COLOR_SPINNER,       shadow(base.spinner,       theme.spinner),       *bg);
+    init_pair(COLOR_INFO,          shadow(base.info,          theme.info),          *bg);
+    init_pair(COLOR_CURSOR,        shadow(base.cursor,        theme.cursor),        shadow(base.current_bg, theme.current_bg));
+    init_pair(COLOR_SELECTED,      shadow(base.selected,      theme.selected),      shadow(base.current_bg, theme.current_bg));
+    init_pair(COLOR_HEADER,        shadow(base.header,        theme.header),        shadow(base.bg, theme.bg));
 }
 
 
@@ -108,8 +110,9 @@ impl Curses {
         setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
         let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
         let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
-        let screen = newterm(None, stderr, stdin);
-        set_term(screen);
+        //let screen = newterm(None, stderr, stdin);
+        //set_term(screen);
+        let screen = initscr();
         raw();
         noecho();
 
@@ -137,12 +140,23 @@ impl Curses {
         (max_y, max_x)
     }
 
+    pub fn getyx(&self) -> (i32, i32) {
+        let mut y = 0;
+        let mut x = 0;
+        getyx(stdscr(), &mut y, &mut x);
+        (y, x)
+    }
+
     pub fn clrtoeol(&self) {
         clrtoeol();
     }
 
     pub fn clear(&self) {
         clear();
+    }
+
+    pub fn erase(&self) {
+        erase();
     }
 
     pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {
@@ -159,6 +173,10 @@ impl Curses {
         attroff(attr);
     }
 
+    pub fn printw(&self, text: &str) {
+        printw(text);
+    }
+
     pub fn close(&self) {
         endwin();
         delscreen(self.screen);
@@ -170,6 +188,10 @@ impl Curses {
 
     pub fn attr_off(&self, attr: attr_t) {
         attroff(attr);
+    }
+
+    pub fn refresh(&self) {
+        refresh();
     }
 }
 
@@ -207,17 +229,21 @@ fn attr_mono(pair: i16, is_bold: bool) -> attr_t {
 const COLOR_DEFAULT: i16 = -1;
 const COLOR_UNDEFINED: i16 = -2;
 
+#[derive(Clone, Debug)]
 pub struct ColorTheme {
     use_default: bool,
-    fg: i16,
-    bg: i16,
-    dark_bg: i16,
-    prompt: i16,
+
+    fg: i16, // text fg
+    bg: i16, // text bg
     matched: i16,
+    matched_bg: i16,
     current: i16,
+    current_bg: i16,
     current_match: i16,
+    current_match_bg: i16,
     spinner: i16,
     info: i16,
+    prompt: i16,
     cursor: i16,
     selected: i16,
     header: i16,
@@ -227,68 +253,127 @@ impl ColorTheme {
     pub fn new() -> Self {
         ColorTheme {
             use_default:  true,
-            fg:            COLOR_UNDEFINED,
-            bg:            COLOR_UNDEFINED,
-            dark_bg:       COLOR_UNDEFINED,
-            prompt:        COLOR_UNDEFINED,
-            matched:       COLOR_UNDEFINED,
-            current:       COLOR_UNDEFINED,
-            current_match: COLOR_UNDEFINED,
-            spinner:       COLOR_UNDEFINED,
-            info:          COLOR_UNDEFINED,
-            cursor:        COLOR_UNDEFINED,
-            selected:      COLOR_UNDEFINED,
-            header:        COLOR_UNDEFINED,
-
+            fg:               COLOR_UNDEFINED,
+            bg:               COLOR_UNDEFINED,
+            matched:          COLOR_UNDEFINED,
+            matched_bg:       COLOR_UNDEFINED,
+            current:          COLOR_UNDEFINED,
+            current_bg:       COLOR_UNDEFINED,
+            current_match:    COLOR_UNDEFINED,
+            current_match_bg: COLOR_UNDEFINED,
+            spinner:          COLOR_UNDEFINED,
+            info:             COLOR_UNDEFINED,
+            prompt:           COLOR_UNDEFINED,
+            cursor:           COLOR_UNDEFINED,
+            selected:         COLOR_UNDEFINED,
+            header:           COLOR_UNDEFINED,
         }
+    }
+
+    pub fn from_options(color: &str) -> Self {
+        let mut theme = ColorTheme::new();
+        for pair in color.split(',') {
+            let color: Vec<&str> = pair.split(':').collect();
+            if color.len() < 2 {
+                theme = match color[0] {
+                    "dark" => DARK256.clone(),
+                    "molokai" => MONOKAI256.clone(),
+                    "light" => LIGHT256.clone(),
+                    "16"  => DEFAULT16.clone(),
+                    _ => DARK256.clone(),
+                }
+            }
+
+            match color[0] {
+                "fg"               => theme.fg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "bg"               => theme.bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "matched"          => theme.matched = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "matched_bg"       => theme.matched_bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "current"          => theme.current = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "current_bg"       => theme.current_bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "current_match"    => theme.current_match = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "current_match_bg" => theme.current_match_bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "spinner"          => theme.spinner = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "info"             => theme.info = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "prompt"           => theme.prompt = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "cursor"           => theme.cursor = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "selected"         => theme.selected = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "header"           => theme.header = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                _ => {}
+            }
+        }
+        theme
     }
 }
 
 const DEFAULT16: ColorTheme = ColorTheme {
     use_default:   true,
-    fg:            15,
-    bg:            0,
-    dark_bg:       COLOR_BLACK,
-    prompt:        COLOR_BLUE,
-    matched:       COLOR_GREEN,
-    current:       COLOR_YELLOW,
-    current_match: COLOR_GREEN,
-    spinner:       COLOR_GREEN,
-    info:          COLOR_WHITE,
-    cursor:        COLOR_RED,
-    selected:      COLOR_MAGENTA,
-    header:        COLOR_CYAN,
+    fg:               15,
+    bg:               0,
+    matched:          COLOR_GREEN,
+    matched_bg:       COLOR_BLACK,
+    current:          COLOR_YELLOW,
+    current_bg:       COLOR_BLACK,
+    current_match:    COLOR_GREEN,
+    current_match_bg: COLOR_BLACK,
+    spinner:          COLOR_GREEN,
+    info:             COLOR_WHITE,
+    prompt:           COLOR_BLUE,
+    cursor:           COLOR_RED,
+    selected:         COLOR_MAGENTA,
+    header:           COLOR_CYAN,
 };
 
 const DARK256: ColorTheme = ColorTheme {
     use_default:   true,
-    fg:            15,
-    bg:            0,
-    dark_bg:       236,
-    prompt:        110,
-    matched:       108,
-    current:       254,
-    current_match: 151,
-    spinner:       148,
-    info:          144,
-    cursor:        161,
-    selected:      168,
-    header:        109,
+    fg:               15,
+    bg:               0,
+    matched:          108,
+    matched_bg:       0,
+    current:          254,
+    current_bg:       236,
+    current_match:    151,
+    current_match_bg: 236,
+    spinner:          148,
+    info:             144,
+    prompt:           110,
+    cursor:           161,
+    selected:         168,
+    header:           109,
 };
 
-// Not used for now, will later.
-//const LIGHT256: ColorTheme = ColorTheme {
-    //use_default:   true,
-    //fg:            15,
-    //bg:            0,
-    //dark_bg:       251,
-    //prompt:        25,
-    //matched:       66,
-    //current:       237,
-    //current_match: 23,
-    //spinner:       65,
-    //info:          101,
-    //cursor:        161,
-    //selected:      168,
-    //header:        31,
-//};
+const MONOKAI256: ColorTheme = ColorTheme {
+    use_default:   true,
+    fg:               252,
+    bg:               234,
+    matched:          234,
+    matched_bg:       186,
+    current:          254,
+    current_bg:       236,
+    current_match:    234,
+    current_match_bg: 186,
+    spinner:          148,
+    info:             144,
+    prompt:           110,
+    cursor:           161,
+    selected:         168,
+    header:           109,
+};
+
+const LIGHT256: ColorTheme = ColorTheme {
+    use_default:   true,
+    fg:               15,
+    bg:               0,
+    matched:          0,
+    matched_bg:       220,
+    current:          237,
+    current_bg:       251,
+    current_match:    66,
+    current_match_bg: 251,
+    spinner:          65,
+    info:             101,
+    prompt:           25,
+    cursor:           161,
+    selected:         168,
+    header:           31,
+};

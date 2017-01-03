@@ -1,72 +1,53 @@
-/// Reader will read the entries from stdin or command output
-/// And send the entries to controller, the controller will save it into model.
-
 extern crate libc;
 
-use std::process::{Command, Stdio, Child};
-use std::sync::{Arc, RwLock};
-use std::io::{stdin, BufRead, BufReader};
+use std::sync::mpsc::{Receiver, Sender, SyncSender, channel};
 use std::error::Error;
-use util::eventbox::EventBox;
-use event::Event;
 use item::Item;
+use std::sync::{Arc, RwLock};
+use std::process::{Command, Stdio, Child};
+use std::io::{stdin, BufRead, BufReader};
+use event::{Event, EventArg};
+use std::thread::JoinHandle;
+use std::thread;
+use std::time::Duration;
+use std::collections::HashMap;
+
+use std::io::Write;
 use getopts;
 use regex::Regex;
+use sender::CachedSender;
 
-const READER_EVENT_DURATION: u64 = 30;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
 
-pub struct Reader {
-    cmd: String, // command to invoke
-    eb: Arc<EventBox<Event>>,         // eventbox
-    pub eb_req: Arc<EventBox<Event>>,
-    items: Arc<RwLock<Vec<Item>>>, // all items
-    use_ansi_color: bool,
-    default_arg: String,
-    transform_fields: Vec<FieldRange>,
-    matching_fields: Vec<FieldRange>,
-    delimiter: Regex,
-    replace_str: String,
+struct ReaderOption {
+    pub use_ansi_color: bool,
+    pub default_arg: String,
+    pub transform_fields: Vec<FieldRange>,
+    pub matching_fields: Vec<FieldRange>,
+    pub delimiter: Regex,
+    pub replace_str: String,
 }
 
-impl Reader {
-
-    pub fn new(cmd: String, eb: Arc<EventBox<Event>>, items: Arc<RwLock<Vec<Item>>>) -> Self {
-        Reader{cmd: cmd,
-               eb: eb,
-               eb_req: Arc::new(EventBox::new()),
-               items: items,
-               use_ansi_color: false,
-               default_arg: String::new(),
-               transform_fields: Vec::new(),
-               matching_fields: Vec::new(),
-               delimiter: Regex::new(r".*?\t").unwrap(),
-               replace_str: "{}".to_string(),
+impl ReaderOption {
+    pub fn new() -> Self {
+        ReaderOption {
+            use_ansi_color: false,
+            default_arg: String::new(),
+            transform_fields: Vec::new(),
+            matching_fields: Vec::new(),
+            delimiter: Regex::new(r".*?\t").unwrap(),
+            replace_str: "{}".to_string(),
         }
-    }
-
-    // invoke find comand.
-    fn get_command_output(&self, arg: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Error>> {
-        let mut command = try!(Command::new("sh")
-                           .arg("-c")
-                           .arg(self.cmd.replace(&self.replace_str, arg))
-                           .stdout(Stdio::piped())
-                           .stderr(Stdio::null())
-                           .spawn());
-        let stdout = try!(command.stdout.take().ok_or("command output: unwrap failed".to_owned()));
-        Ok((Some(command), Box::new(BufReader::new(stdout))))
     }
 
     pub fn parse_options(&mut self, options: &getopts::Matches) {
         if options.opt_present("ansi") {
             self.use_ansi_color = true;
-        }
-
-        if let Some(cmd) = options.opt_str("c") {
-            self.cmd = cmd.clone();
-        }
-
-        if let Some(query) = options.opt_str("q") {
-            self.default_arg = query.to_string();
         }
 
         if let Some(delimiter) = options.opt_str("d") {
@@ -93,73 +74,189 @@ impl Reader {
                 .map(|range| range.unwrap())
                 .collect();
         }
-
-        if let Some(replace_str) = options.opt_str("I") {
-            self.replace_str = replace_str.clone();
-        }
-    }
-
-    pub fn run(&mut self) {
-        // check if the input is TTY
-        let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
-        let mut arg = self.default_arg.clone();
-
-        loop {
-            let (command, read): (Option<Child>, Box<BufRead>) = if istty {
-                self.get_command_output(&arg).expect("command not found")
-            } else {
-                (None, Box::new(BufReader::new(stdin())))
-            };
-
-            self.read_items(read);
-            command.map(|mut x| {
-                let _ = x.kill();
-                let _ = x.wait();
-            });
-
-            for (e, val) in self.eb_req.wait() {
-                if e == Event::EvReaderResetQuery {
-                    let mut items = self.items.write().unwrap();
-                    items.clear();
-                    arg = *val.downcast::<String>().unwrap();
-                    self.eb.set(Event::EvReaderSync, Box::new(true));
-                    let _ = self.eb_req.wait_for(Event::EvModelAck);
-                }
-            }
-        }
-    }
-
-    fn read_items(&self, mut source: Box<BufRead>) {
-        loop {
-            let mut input = String::new();
-            match source.read_line(&mut input) {
-                Ok(n) => {
-                    if n == 0 { break; }
-
-                    if input.ends_with('\n') {
-                        input.pop();
-                        if input.ends_with('\r') {
-                            input.pop();
-                        }
-                    }
-                    let mut items = self.items.write().unwrap();
-                    items.push(Item::new(input,
-                                         self.use_ansi_color,
-                                         &self.transform_fields,
-                                         &self.matching_fields,
-                                         &self.delimiter));
-                }
-                Err(_err) => {} // String not UTF8 or other error, skip.
-            }
-            self.eb.set_throttle(Event::EvReaderNewItem, Box::new(true), READER_EVENT_DURATION);
-            if self.eb_req.peek(Event::EvReaderResetQuery) {
-                break;
-            }
-        }
-        self.eb.set_throttle(Event::EvReaderNewItem, Box::new(false), READER_EVENT_DURATION);
     }
 }
 
+pub struct Reader {
+    rx_cmd: Receiver<(Event, EventArg)>,
+    tx_item: SyncSender<(Event, EventArg)>,
+    option: Arc<RwLock<ReaderOption>>,
+}
+
+impl Reader {
+    pub fn new(rx_cmd: Receiver<(Event, EventArg)>, tx_item: SyncSender<(Event, EventArg)>) -> Self {
+        Reader {
+            rx_cmd: rx_cmd,
+            tx_item: tx_item,
+            option: Arc::new(RwLock::new(ReaderOption::new()))
+        }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        let mut option = self.option.write().unwrap();
+        option.parse_options(options);
+    }
+
+    pub fn run(&mut self) {
+        // event loop
+        let mut thread_reader: Option<JoinHandle<()>> = None;
+        let mut tx_reader: Option<Sender<bool>> = None;
+
+        let mut last_command = "".to_string();
+        let mut last_query = "".to_string();
+
+        // start sender
+        let (tx_sender, rx_sender) = channel();
+        let tx_item = self.tx_item.clone();
+        let mut sender = CachedSender::new(rx_sender, tx_item);
+        thread::spawn(move || {
+            sender.run();
+        });
+
+        while let Ok((ev, arg)) = self.rx_cmd.recv() {
+            match ev {
+                Event::EvReaderRestart => {
+                    // close existing command or file if exists
+                    let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
+                    if cmd == last_command && query == last_query { continue; }
+
+                    // restart command with new `command`
+                    if cmd != last_command {
+                        // stop existing command
+                        tx_reader.take().map(|tx| {tx.send(true)});
+                        thread_reader.take().map(|thrd| {thrd.join()});
+
+                        // create needed data for thread
+                        let (tx, rx_reader) = channel();
+                        tx_reader = Some(tx);
+                        let cmd_clone = cmd.clone();
+                        let option_clone = self.option.clone();
+                        let tx_sender_clone = tx_sender.clone();
+                        let query_clone = query.clone();
+
+                        // start the new command
+                        thread::spawn(move || {
+                            let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
+                            let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
+
+                            reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
+
+                            let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
+                        });
+                    } else {
+                        // tell sender to restart
+                        let _ = tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
+                    }
+
+                    last_command = cmd;
+                    last_query = query;
+                }
+                _ => {
+                    // do nothing
+                }
+            }
+        }
+    }
+}
+
+fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Error>> {
+    let mut command = try!(Command::new("sh")
+                       .arg("-c")
+                       .arg(cmd)
+                       .stdout(Stdio::piped())
+                       .stderr(Stdio::null())
+                       .spawn());
+    let stdout = try!(command.stdout.take().ok_or("command output: unwrap failed".to_owned()));
+    Ok((Some(command), Box::new(BufReader::new(stdout))))
+}
+
+// Consider that you invoke a command with different arguments several times
+// If you select some items each time, how will skim remeber it?
+// => Well, we'll give each invokation a number, i.e. RUN_NUM
+// What if you invoke the same command and same arguments twice?
+// => We use NUM_MAP to specify the same run number.
+lazy_static! {
+    static ref RUN_NUM: RwLock<usize> = RwLock::new(0);
+    static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
+}
+
+fn reader(cmd: &str,
+          rx_cmd: Receiver<bool>,
+          tx_sender: &Sender<(Event, EventArg)>,
+          option: Arc<RwLock<ReaderOption>>) {
+    let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
+
+    let (command, mut source): (Option<Child>, Box<BufRead>) = if istty {
+        get_command_output(cmd).expect("command not found")
+    } else {
+        (None, Box::new(BufReader::new(stdin())))
+    };
+
+    let (tx_control, rx_control) = channel();
+
+    thread::spawn(move || {
+        // listen to `rx` for command to quit reader
+        // kill command if it is got
+        loop {
+            if let Ok(_) = rx_cmd.try_recv() {
+                // clean up resources
+                command.map(|mut x| {
+                    let _ = x.kill();
+                    let _ = x.wait();
+                });
+                break;
+            }
+
+            if let Ok(_) = rx_control.recv_timeout(Duration::from_millis(10)) {
+                command.map(|mut x| {
+                    let _ = x.kill();
+                    let _ = x.wait();
+                });
+                break;
+            }
+        }
+    });
+
+    let opt = option.read().unwrap();
+
+    // set the proper run number
+    let run_num = {*RUN_NUM.read().unwrap()};
+    let run_num = *NUM_MAP.write()
+            .unwrap()
+            .entry(cmd.to_string())
+            .or_insert_with(|| {
+                *(RUN_NUM.write().unwrap()) = run_num + 1;
+                run_num + 1
+            });
+
+    let mut index = 0;
+    loop {
+        // start reading
+        let mut input = String::new();
+        match source.read_line(&mut input) {
+            Ok(n) => {
+                if n == 0 { break; }
+
+                if input.ends_with('\n') {
+                    input.pop();
+                    if input.ends_with('\r') {
+                        input.pop();
+                    }
+                }
+                let _ = tx_sender.send((Event::EvReaderNewItem,
+                                        Box::new(Item::new(input,
+                                                           opt.use_ansi_color,
+                                                           &opt.transform_fields,
+                                                           &opt.matching_fields,
+                                                           &opt.delimiter,
+                                                           (run_num, index)))));
+                index += 1;
+            }
+            Err(_err) => {} // String not UTF8 or other error, skip.
+        }
+    }
+    let _ = tx_control.send(true);
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum FieldRange {
