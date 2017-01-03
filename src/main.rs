@@ -1,8 +1,6 @@
-#![feature(alloc_system)]
 #![feature(io)]
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
-extern crate alloc_system;
 extern crate libc;
 extern crate ncurses;
 extern crate getopts;
@@ -32,6 +30,7 @@ use event::{Event, EventArg};
 use std::mem;
 use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
+use curses::Curses;
 
 use std::io::Write;
 macro_rules! println_stderr(
@@ -170,6 +169,8 @@ fn real_main() -> i32 {
         }
     });
 
+    let curses = Curses::new();
+
     //------------------------------------------------------------------------------
     // input
     let tx_input_clone = tx_input.clone();
@@ -179,7 +180,6 @@ fn real_main() -> i32 {
     thread::spawn(move || {
         input.run();
     });
-
 
     //------------------------------------------------------------------------------
     // query
@@ -193,6 +193,16 @@ fn real_main() -> i32 {
     query.parse_options(&options);
 
     //------------------------------------------------------------------------------
+    // model
+    let (tx_model, rx_model) = channel();
+    let mut model = model::Model::new(rx_model);
+    model.parse_options(&options);
+    model.init();
+    thread::spawn(move || {
+        model.run(curses);
+    });
+
+    //------------------------------------------------------------------------------
     // reader
     let (tx_reader, rx_reader) = channel();
     let (tx_item, rx_item) = sync_channel(128);
@@ -204,21 +214,12 @@ fn real_main() -> i32 {
 
     //------------------------------------------------------------------------------
     // matcher
-    let (tx_model, rx_model) = channel();
     let tx_model_clone = tx_model.clone();
     let mut matcher = matcher::Matcher::new(tx_model_clone);
     matcher.parse_options(&options);
 
     thread::spawn(move || {
         matcher.run(rx_item);
-    });
-
-    //------------------------------------------------------------------------------
-    // model
-    let mut model = model::Model::new(rx_model);
-    model.parse_options(&options);
-    thread::spawn(move || {
-        model.run();
     });
 
     //------------------------------------------------------------------------------

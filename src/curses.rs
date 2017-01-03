@@ -104,6 +104,8 @@ pub struct Curses {
     screen: SCREEN,
 }
 
+unsafe impl Send for Curses {}
+
 impl Curses {
     pub fn new() -> Self {
         let local_conf = LcCategory::all;
@@ -112,6 +114,7 @@ impl Curses {
         let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
         let screen = newterm(None, stderr, stdin);
         set_term(screen);
+        //let screen = initscr();
         raw();
         noecho();
 

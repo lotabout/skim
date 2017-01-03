@@ -92,11 +92,13 @@ impl Model {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn init(&mut self) {
+        curses::init(Some(&self.theme), false, false);
+    }
+
+    pub fn run(&mut self, curses: Curses) {
         // generate a new instance of curses for printing
 
-        let curses = Curses::new();
-        curses::init(Some(&self.theme), false, false);
 
         // main loop
         loop {
