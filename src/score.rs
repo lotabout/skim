@@ -9,8 +9,8 @@ use regex::Regex;
 
 const BONUS_UPPER_MATCH: i64 = 10;
 const BONUS_ADJACENCY: i64 = 10;
-const BONUS_SEPARATOR: i64 = 20;
-const BONUS_CAMEL: i64 = 20;
+const BONUS_SEPARATOR: i64 = 8;
+const BONUS_CAMEL: i64 = 8;
 const PENALTY_CASE_UNMATCHED: i64 = -1;
 const PENALTY_LEADING: i64 = -6; // penalty applied for every letter before the first match
 const PENALTY_MAX_LEADING: i64 = -18; // maxing penalty for leading letters
