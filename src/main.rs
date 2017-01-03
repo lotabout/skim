@@ -42,14 +42,52 @@ macro_rules! println_stderr(
 
 const REFRESH_DURATION: u64 = 200;
 
+const USAGE : &'static str = "
+Usage: sk [options]
+
+  Options
+    -h, --help           print this help menu
+    --version            print out the current version of skim
+
+  Search
+    -t, --tiebreak [score,index,begin,end,-score,...]
+                         comma seperated criteria
+    -n, --nth 1,2..5     specify the fields to be matched
+    --with-nth 1,2..5    specify the fields to be transformed
+    -d, --delimiter \\t  specify the delimiter(in REGEX) for fields
+    --exact              start skim in exact mode
+    --regex              use regex instead of fuzzy match
+
+  Interface
+    -b, --bind KEYBINDS  comma seperated keybindings, in KEY:ACTION
+                         such as 'ctrl-j:accept,ctrl-k:kill-line'
+    -m, --multi          Enable Multiple Selection
+    --no-multi           Disable Multiple Selection
+    -p, --prompt '> '    prompt string for query mode
+    --cmd-prompt '> '    prompt string for command mode
+    -c, --cmd ag         command to invoke dynamically
+    -I replstr           replace `replstr` with the selected item
+    -i, --interactive    Start skim in interactive(command) mode
+    --ansi               parse ANSI color codes for input strings
+    --color [BASE][,COLOR:ANSI]
+                         change color theme
+
+  Scripting
+    -q, --query \"\"       specify the initial query
+    -e, --expect KEYS    comma seperated keys that can be used to complete skim
+
+  Environment variables
+    SKIM_DEFAULT_COMMAND Default command to use when input is tty
+";
+
 fn main() {
     let exit_code = real_main();
     std::process::exit(exit_code);
 }
 
-fn print_usage(program: &str, opts: Options) {
-    let brief = format!("Usage: {} [options]", program);
-    print!("{}", opts.usage(&brief));
+fn print_usage() {
+    print!("{}", USAGE);
+
 }
 
 fn real_main() -> i32 {
@@ -80,10 +118,17 @@ fn real_main() -> i32 {
 
     let mut args = Vec::new();
 
-    let program = env::args().nth(0).unwrap_or("sk".to_string());
+    let default_options = match env::var("SKIM_DEFAULT_OPTIONS") {
+        Ok(val) => val,
+        Err(_) => "".to_string(),
+    };
+
+    args.push(default_options);
+
     for arg in env::args().skip(1) {
         args.push(arg);
     }
+
     let options = match opts.parse(args) {
         Ok(m) => { m }
         Err(f) => { panic!(f.to_string()) }
@@ -91,13 +136,13 @@ fn real_main() -> i32 {
 
     // print help message
     if options.opt_present("h") {
-        print_usage(&program, opts);
+        print_usage();
         return 0;
     }
 
     // print version
     if options.opt_present("version") {
-        println!("0.1.2");
+        println!("0.2.0");
         return 0;
     }
 
