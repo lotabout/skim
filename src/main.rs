@@ -139,7 +139,7 @@ fn real_main() -> i32 {
         Err(_) => "find .".to_string(),
     };
     let mut query = query::Query::builder()
-        .cmd(&default_command)
+        .base_cmd(&default_command)
         .build();
     query.parse_options(&options);
 

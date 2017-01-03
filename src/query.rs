@@ -15,7 +15,7 @@ pub struct Query {
     query_after: Vec<char>,
 
     mode: QueryMode,
-    cmd: String,
+    base_cmd: String,
     replstr: String,
     query_prompt: String,
     cmd_prompt: String,
@@ -29,16 +29,25 @@ impl Query {
             query_before: Vec::new(),
             query_after: Vec::new(),
             mode: QueryMode::QUERY,
-            cmd: String::new(),
+            base_cmd: String::new(),
             replstr: "{}".to_string(),
             query_prompt: "q> ".to_string(),
             cmd_prompt: "c> ".to_string(),
         }
     }
 
-    // builder
+    pub fn base_cmd(mut self, base_cmd: &str) -> Self {
+        self.base_cmd = base_cmd.to_owned();
+        self
+    }
+
+    pub fn query(mut self, query: &str) -> Self {
+        self.query_before = query.chars().collect();
+        self
+    }
+
     pub fn cmd(mut self, cmd: &str) -> Self {
-        self.cmd = cmd.to_owned();
+        self.cmd_before = cmd.chars().collect();
         self
     }
 
@@ -47,8 +56,8 @@ impl Query {
     }
 
     pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if let Some(cmd) = options.opt_str("c") {
-            self.cmd = cmd.clone();
+        if let Some(base_cmd) = options.opt_str("c") {
+            self.base_cmd = base_cmd.clone();
         }
 
         if let Some(query) = options.opt_str("q") {
@@ -78,7 +87,7 @@ impl Query {
 
     pub fn get_cmd(&self) -> String {
         let arg: String = self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect();
-        self.cmd.replace(&self.replstr, &arg)
+        self.base_cmd.replace(&self.replstr, &arg)
     }
 
     fn get_before(&self) -> String {
@@ -258,12 +267,46 @@ impl Query {
 
 #[cfg(test)]
 mod test {
+    use super::Query;
+
     #[test]
     fn test_new_query() {
-        let query1 = super::Query::new(None);
+        let query1 = Query::builder().query("").build();
         assert_eq!(query1.get_query(), "");
 
-        let query2 = super::Query::new(Some("abc"));
+        let query2 = Query::builder().query("abc").build();
         assert_eq!(query2.get_query(), "abc");
+    }
+
+    #[test]
+    fn test_add_char() {
+        let mut query1 = Query::builder().query("").build();
+        query1.act_add_char('a');
+        assert_eq!(query1.get_query(), "a");
+        query1.act_add_char('b');
+        assert_eq!(query1.get_query(), "ab");
+        query1.act_add_char('中');
+        assert_eq!(query1.get_query(), "ab中");
+    }
+
+    #[test]
+    fn test_backward_delete_char() {
+        let mut query = Query::builder().query("AB中c").build();
+        assert_eq!(query.get_query(), "AB中c");
+
+        query.act_backward_delete_char();
+        assert_eq!(query.get_query(), "AB中");
+
+        query.act_backward_delete_char();
+        assert_eq!(query.get_query(), "AB");
+
+        query.act_backward_delete_char();
+        assert_eq!(query.get_query(), "A");
+
+        query.act_backward_delete_char();
+        assert_eq!(query.get_query(), "");
+
+        query.act_backward_delete_char();
+        assert_eq!(query.get_query(), "");
     }
 }
