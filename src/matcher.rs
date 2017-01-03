@@ -147,7 +147,8 @@ impl Matcher {
 
 }
 
-type ExactFilter = Box<Fn(&Item, &Option<((usize, usize), (usize, usize))>) -> bool>;
+// <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
+type ExactFilter = Box<Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
 
 struct MatchingEngine<'a> {
     query: String,
@@ -206,36 +207,36 @@ impl<'a> MatchingEngine<'a> {
             Algorithm::Fuzzy => self.match_item_fuzzy(item),
             Algorithm::Regex => self.match_item_regex(item),
             Algorithm::Exact => {
-                self.match_item_exact(item, Box::new(|_, matched_result| {
-                    matched_result.is_some()
+                self.match_item_exact(item, Box::new(|matched_result, _| {
+                    matched_result.map(|(first, _)| first)
                 }))
             }
             Algorithm::InverseExact => {
-                self.match_item_exact(item, Box::new(|_, matched_result| {
-                    matched_result.is_none()
+                self.match_item_exact(item, Box::new(|matched_result, _| {
+                    if matched_result.is_none() {Some((0, 0))} else {None}
                 }))
             }
             Algorithm::PrefixExact => {
-                self.match_item_exact(item, Box::new(|_, matched_result| {
+                self.match_item_exact(item, Box::new(|matched_result, _| {
                     match *matched_result {
-                        Some(((start_pos, _), _)) => start_pos == 0,
-                        None => false
+                        Some(((s, e), _)) if s == 0 => Some((s, e)),
+                        _ => None,
                     }
                 }))
             }
             Algorithm::SuffixExact => {
-                self.match_item_exact(item, Box::new(|item, matched_result| {
+                self.match_item_exact(item, Box::new(|matched_result, len| {
                     match *matched_result {
-                        Some((_, (_, last_pos))) => last_pos == item.get_lower_chars().len(),
-                        None => false
+                        Some((_, (s, e))) if e == len => Some((s, e)),
+                        _ => None,
                     }
                 }))
             }
             Algorithm::InverseSuffixExact => {
-                self.match_item_exact(item, Box::new(|item, matched_result| {
+                self.match_item_exact(item, Box::new(|matched_result, len| {
                     match *matched_result {
-                        Some((_, (_, last_pos))) => last_pos != item.get_lower_chars().len(),
-                        None => true
+                        Some((_, (_, e))) if e != len => None,
+                        _ => Some((0, 0))
                     }
                 }))
             }
@@ -298,10 +299,17 @@ impl<'a> MatchingEngine<'a> {
         for &(start, end) in item.get_matching_ranges() {
             let source = &item.get_lower_chars()[start .. end];
 
-            matched_result = score::fuzzy_match(source, &self.query_chars, &self.query_lower_chars);
+            matched_result = score::fuzzy_match(source, &self.query_chars, &self.query_lower_chars)
+                .map(|(s, vec)| {
+                    if start != 0 {
+                        (s, vec.iter().map(|x| x + start).collect())
+                    } else {
+                        (s, vec)
+                    }
+                });
 
-            if matched_result == None {
-                continue;
+            if matched_result.is_some() {
+                break;
             }
         }
 
@@ -324,6 +332,8 @@ impl<'a> MatchingEngine<'a> {
 
     fn match_item_exact(&self, item: Arc<Item>, filter: ExactFilter) -> Option<MatchedItem>{
         let mut matched_result = None;
+        let mut range_start = 0;
+        let mut range_end = 0;
         for &(start, end) in item.get_matching_ranges() {
             if self.query == "" {
                 matched_result = Some(((0, 0), (0, 0)));
@@ -334,18 +344,17 @@ impl<'a> MatchingEngine<'a> {
             let source: String = chars[start .. end].iter().cloned().collect();
             matched_result = score::exact_match(&source, &self.query);
 
-            if matched_result == None {
-                continue;
+            if matched_result.is_some() {
+                range_start = start;
+                range_end = end;
+                break;
             }
         }
 
-        if !filter(&item, &matched_result){
-            return None;
-        }
+        let result_range = filter(&matched_result, range_end - range_start);
+        if result_range.is_none() {return None;}
 
-        let (first, _) = matched_result.unwrap_or(((0,0), (0,0)));
-
-        let (begin, end) = first;
+        let (begin, end) = result_range.map(|(s, e)| (s + range_start, e + range_start)).unwrap();
         let score = (end - begin) as i64;
         let rank = self.build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
 
