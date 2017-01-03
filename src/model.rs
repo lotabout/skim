@@ -1,247 +1,385 @@
-/// Model represents the global states needed in FZF.
-/// It will also define how the states will be shown on the terminal
-
-
-use std::sync::{Arc, RwLock, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use item::{Item, MatchedItem, MatchedRange};
-use ncurses::*;
-use std::cmp::{min, max};
-use std::collections::HashSet;
+use std::sync::mpsc::{Receiver, Sender};
+use event::{Event, EventArg};
+use item::{MatchedItem, MatchedItemGroup, MatchedRange};
+use std::time::Instant;
+use std::cmp::{max, min};
 use orderedvec::OrderedVec;
+use std::sync::Arc;
+use std::collections::HashMap;
+
+use curses::{ColorTheme, Curses};
 use curses::*;
-use query::Query;
-use util::eventbox::EventBox;
-use event::Event;
-use std::time::{Instant, Duration};
-use std::thread;
+use curses;
 use getopts;
 
-// The whole screen is:
-//
-//                  +---------------------------------------|
-//                  | | |                                   | 5
-//                  | | |               ^                   | 4
-//   current cursor |>| |               |                   | 3
-//                  | | |      lines    |                   | 2 cursor
-//         selected | |>|--------------------------------   | 1
-//                  | | |                                   | 0
-//                  +---------------------------------------+
-//          spinner |/| | (matched/total) (per%) [selected] |
-//                  +---------------------------------------+
-//                  | prompt>  query string                 |
-//                  +---------------------------------------+
-//
+use std::io::Write;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
+pub type ClosureType = Box<Fn(&Curses) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
-const REFRESH_DURATION: u64 = 100;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 
-
 pub struct Model {
-    eb: Arc<EventBox<Event>>,
-    pub query: Query,
-
-    pub items: Arc<RwLock<Vec<Item>>>, // all items
-    selected_indics: HashSet<usize>,
-    pub matched_items: Arc<RwLock<OrderedVec<MatchedItem>>>,
-    num_total: usize,
-    percentage: u64,
-
-    pub multi_selection: bool,
-    pub prompt: String,
-    pub reading: bool,
+    rx_cmd: Receiver<(Event, EventArg)>,
+    items: OrderedVec<Arc<MatchedItem>>, // all items
+    selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
+    reverse: bool,
+    height: i32,
+    width: i32,
 
-    max_y: i32,
-    max_x: i32,
-    width: usize,
-    height: usize,
-
-    refresh_block: Arc<Mutex<u64>>,
-    update_finished: Arc<AtomicBool>,
-
+    multi_selection: bool,
     pub tabstop: usize,
-    pub is_interactive: bool,
-    curses: Curses,
+    theme: ColorTheme,
+
+    reader_stopped: bool,
+    matcher_stopped: bool,
+    num_read: usize,
+    num_processed: usize,
     timer: Instant,
-    accept_key: Option<String>,
 }
 
 impl Model {
-    pub fn new(eb: Arc<EventBox<Event>>, curses: Curses) -> Self {
-        let (max_y, max_x) = curses.get_maxyx();
-        let timer = Instant::now();
-
+    pub fn new(rx_cmd: Receiver<(Event, EventArg)>) -> Self {
         Model {
-            eb: eb,
-            query: Query::new(),
-            items: Arc::new(RwLock::new(Vec::new())),
-            selected_indics: HashSet::new(),
-            matched_items: Arc::new(RwLock::new(OrderedVec::new())),
-            num_total: 0,
-            percentage: 100,
-            multi_selection: false,
-            prompt: "> ".to_string(),
-            reading: false,
+            rx_cmd: rx_cmd,
+            items: OrderedVec::new(),
+            num_read: 0,
+            num_processed: 0,
+            selected: HashMap::new(),
+
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
-            max_y: max_y,
-            max_x: max_x,
-            width: (max_x - 2) as usize,
-            height: (max_y - 2) as usize,
-            refresh_block: Arc::new(Mutex::new(0)),
-            update_finished: Arc::new(AtomicBool::new(true)),
+            reverse: false,
+            height: 0,
+            width: 0,
+
+            multi_selection: false,
             tabstop: 8,
-            curses: curses,
-            timer: timer,
-            accept_key: None,
-            is_interactive: false,
+
+            reader_stopped: false,
+            matcher_stopped: false,
+            timer: Instant::now(),
+            theme: ColorTheme::new(),
         }
     }
 
     pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if options.opt_present("i") {
-            self.is_interactive = true;
-        }
         if options.opt_present("m") {
             self.multi_selection = true;
         }
+
         if options.opt_present("no-multi") {
             self.multi_selection = false;
         }
-        if let Some(prompt) = options.opt_str("p") {
-            self.prompt = prompt.clone();
+
+        if options.opt_present("reverse") {
+            self.reverse = true;
         }
-        if let Some(query) = options.opt_str("q") {
-            self.query = Query::new_with_query(&query);
-        }
-    }
 
-    pub fn clear_items(&self) {
-        self.items.write().unwrap().clear();
-        self.matched_items.write().unwrap().clear();
-    }
-
-    pub fn output(&self) {
-        if let Some(ref key) = self.accept_key  { println!("{}", key); }
-
-        let mut selected = self.selected_indics.iter().collect::<Vec<&usize>>();
-        selected.sort();
-        let mut items = self.items.write().unwrap();
-        for index in selected {
-            println!("{}", items[*index].get_output_text());
+        if let Some(color) = options.opt_str("color") {
+            self.theme = ColorTheme::from_options(&color);
         }
     }
 
-    pub fn update_num_total(&mut self, num_new_items: usize) {
-        self.num_total = num_new_items + self.items.read().unwrap().len();
+    pub fn run(&mut self) {
+        // generate a new instance of curses for printing
+
+        let curses = Curses::new();
+        curses::init(Some(&self.theme), false, false);
+
+        // main loop
+        loop {
+            // check for new item
+            if let Ok((ev, arg)) = self.rx_cmd.recv() {
+                match ev {
+                    Event::EvModelNewItem => {
+                        let items: MatchedItemGroup = *arg.downcast().unwrap();
+                        self.insert_new_items(items);
+                    }
+
+                    Event::EvModelRestart => {
+                        // clean the model
+                        self.clean_model();
+                        self.update_size(&curses);
+                    }
+
+                    Event::EvModelDrawQuery => {
+                        let print_query_func = *arg.downcast::<ClosureType>().unwrap();
+                        self.draw_query(&curses, print_query_func);
+                        curses.refresh();
+                    }
+                    Event::EvModelDrawInfo => {
+                        self.draw_status(&curses);
+                        curses.refresh();
+                    }
+
+                    Event::EvModelNotifyProcessed => {
+                        let num_processed = *arg.downcast::<usize>().unwrap();
+                        self.num_processed = num_processed;
+
+                        if ! self.reader_stopped {
+                            // if the reader is still running, the number of processed items equals
+                            // to the number of read items
+                            self.num_read = num_processed;
+
+                            // update the screen
+                            if num_processed & 0xFFF == 0 {
+                                self.act_redraw_items_and_status(&curses);
+                            }
+                        }
+
+                    }
+
+                    Event::EvMatcherStopped => {
+                        self.matcher_stopped = true;
+                        self.act_redraw_items_and_status(&curses);
+                    }
+
+                    Event::EvReaderStopped => {
+                        // if reader stopped, the num_read is freezed.
+                        self.reader_stopped = true;
+                        self.num_read = *arg.downcast().unwrap();
+                    }
+
+                    Event::EvReaderStarted => {
+                        self.reader_stopped = false;
+                        self.num_read = 0;
+                    }
+
+                    //---------------------------------------------------------
+                    // Actions
+
+                    Event::EvActAccept => {
+                        curses.close();
+
+                        // output the expect key
+                        let (accept_key, tx_ack): (Option<String>, Sender<usize>) = *arg.downcast().unwrap();
+                        accept_key.map(|key| {
+                            println!("{}", key);
+                        });
+
+                        self.act_output();
+
+                        let _ = tx_ack.send(self.selected.len());
+                    }
+                    Event::EvActAbort => {
+                        let tx_ack: Sender<bool> = *arg.downcast().unwrap();
+                        curses.close();
+                        let _ = tx_ack.send(true);
+                    }
+                    Event::EvActUp => {
+                        self.act_move_line_cursor(1);
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActDown => {
+                        self.act_move_line_cursor(-1);
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActToggle => {
+                        self.act_toggle();
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActToggleDown => {
+                        self.act_toggle();
+                        self.act_move_line_cursor(-1);
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActToggleUp => {
+                        self.act_toggle();
+                        self.act_move_line_cursor(1);
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActToggleAll => {
+                        self.act_toggle_all();
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActSelectAll => {
+                        self.act_select_all();
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActDeselectAll => {
+                        self.act_deselect_all();
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActPageDown => {
+                        let height = 1-self.height;
+                        self.act_move_line_cursor(height);
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActPageUp => {
+                        let height = self.height-1;
+                        self.act_move_line_cursor(height);
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActScrollLeft => {
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-2)));
+                        self.act_redraw_items_and_status(&curses);
+                    }
+                    Event::EvActScrollRight => {
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(2)));
+                        self.act_redraw_items_and_status(&curses);
+                    }
+
+                    Event::EvActRedraw => {
+                        let print_query_func = *arg.downcast::<ClosureType>().unwrap();
+                        self.act_redarw(&curses, print_query_func);
+                    }
+
+                    _ => {}
+                }
+            }
+        }
     }
 
-    pub fn update_percentage(&mut self, percentage: u64) {
-        self.percentage = percentage;
+    fn clean_model(&mut self) {
+        self.items.clear();
+        self.item_cursor = 0;
+        self.line_cursor = 0;
+        self.hscroll_offset = 0;
+        self.matcher_stopped = false;
+        if !self.reader_stopped {
+            self.num_processed = 0;
+        }
     }
 
-    pub fn update_matched_items(&mut self, items: Arc<RwLock<OrderedVec<MatchedItem>>>) {
-        self.matched_items = items;
-
-        // update cursor
-        let item_len = self.matched_items.read().unwrap().len();
-        self.item_cursor = min(self.item_cursor, if item_len > 0 {item_len-1} else {0});
-        self.line_cursor = min(self.line_cursor, self.item_cursor);
+    fn update_size(&mut self, curses: &Curses) {
+        // update the (height, width)
+        curses.endwin();
+        curses.refresh();
+        let (h, w) = curses.get_maxyx();
+        self.height = h-2;
+        self.width = w-2;
     }
 
-    pub fn print_query(&self) {
-        self.update_finished.store(false, Ordering::Relaxed);
-        // > query
-        self.curses.mv(self.max_y-1, 0);
-        self.curses.clrtoeol();
-        self.curses.cprint(&self.prompt, COLOR_PROMPT, false);
-        self.curses.cprint(&self.query.get_query(), COLOR_NORMAL, true);
-        self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
-        self.update_finished.store(true, Ordering::Relaxed);
+    fn insert_new_items(&mut self, items: MatchedItemGroup) {
+        for item in items {
+            self.items.push(Arc::new(item));
+        }
     }
 
-    pub fn print_info(&self) {
-        self.update_finished.store(false, Ordering::Relaxed);
+    fn draw_items(&mut self, curses: &Curses) {
+        // cursor should be placed on query, so store cursor before printing
+        let (y, x) = curses.getyx();
 
-        self.curses.mv(self.max_y-2, 0);
-        self.curses.clrtoeol();
-
-        if self.reading {
-            let time = self.timer.elapsed();
-            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-            self.print_char(SPINNERS[index as usize], COLOR_SPINNER, true);
+        // clear all lines
+        let (h, w) = curses.get_maxyx();
+        if self.reverse {
+            for l in 2..h {
+                curses.mv(l, 0);
+                curses.clrtoeol();
+            }
         } else {
-            self.print_char(' ', COLOR_NORMAL, false);
-        }
-
-        let num_matched = self.matched_items.read().unwrap().len();
-
-        self.curses.cprint(format!(" {}/{}", num_matched, self.num_total).as_ref(), COLOR_INFO, false);
-
-        if self.multi_selection && self.selected_indics.len() > 0 {
-            self.curses.cprint(format!(" [{}]", self.selected_indics.len()).as_ref(), COLOR_INFO, true);
-        }
-
-        if self.percentage < 100 {
-            self.curses.cprint(format!(" ({}%)", self.percentage).as_ref(), COLOR_INFO, false);
-        }
-
-        self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
-        self.update_finished.store(true, Ordering::Relaxed);
-    }
-
-    pub fn print_items(&self) {
-        self.update_finished.store(false, Ordering::Relaxed);
-
-        let mut matched_items = self.matched_items.write().unwrap();
-        let item_start_pos = self.item_cursor - self.line_cursor;
-
-        for i in 0..self.height {
-            self.curses.mv((self.height - i - 1) as i32, 0);
-            self.curses.clrtoeol();
-
-            if let Some(matched) = matched_items.get(item_start_pos + i) {
-                let is_current_line = i == self.line_cursor;
-                let label = if is_current_line {">"} else {" "};
-                self.curses.cprint(label, COLOR_CURSOR, true);
-                self.print_item(matched, is_current_line);
-            } else {
+            for l in 0..(h-2) {
+                curses.mv(l, 0);
+                curses.clrtoeol();
             }
         }
 
-        self.curses.mv(self.max_y-1, (self.query.pos+self.prompt.len()) as i32);
-        self.update_finished.store(true, Ordering::Relaxed);
-    }
+        let (h, _) = (h as usize, w as usize);
 
-    fn print_item(&self, matched: &MatchedItem, is_current: bool) {
-        let items = self.items.read().unwrap();
-        let ref item = items[matched.index];
+        // screen-line: y         <--->   item-line: (height - y - 1)
+        //              h-1                          h-(h-1)-1 = 0
+        //              0                            h-1
+        // screen-line: (h-l-1)   <--->   item-line: l
 
-        let is_selected = self.selected_indics.contains(&matched.index);
+        let lower = self.item_cursor;
+        let upper = min(self.item_cursor + h-2, self.items.len());
 
-        if is_selected {
-            self.curses.cprint(">", COLOR_SELECTED, true);
-        } else {
-            self.curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
+        for i in lower..upper {
+            let l = i - lower;
+            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as i32, 0);
+            // print the cursor label
+            let label = if l == self.line_cursor {">"} else {" "};
+            curses.cprint(label, COLOR_CURSOR, true);
+
+            let item = self.items.get(i).unwrap().clone();
+            self.draw_item(curses, &item, l == self.line_cursor);
         }
 
-        match matched.matched_range {
+        // restore cursor
+        curses.mv(y, x);
+    }
+
+    fn draw_status(&self, curses: &Curses) {
+        // cursor should be placed on query, so store cursor before printing
+        let (y, x) = curses.getyx();
+
+        curses.mv(if self.reverse {1} else {self.height} , 0);
+        curses.clrtoeol();
+
+        // display spinner
+        if self.reader_stopped {
+            self.print_char(curses, ' ', COLOR_NORMAL, false);
+        } else {
+            let time = self.timer.elapsed();
+            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
+            self.print_char(curses, SPINNERS[index as usize], COLOR_SPINNER, true);
+        }
+
+        // display matched/total number
+        curses.cprint(format!(" {}/{}", self.items.len(), self.num_read).as_ref(), COLOR_INFO, false);
+
+        // display the percentage of the number of processed items
+        if self.num_processed < self.num_read {
+            curses.cprint(format!(" ({}%) ", self.num_processed*100 / self.num_read).as_ref(), COLOR_INFO, false)
+        }
+
+        // selected number
+        if self.multi_selection && !self.selected.is_empty() {
+            curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
+        }
+
+        // item cursor
+        let line_num_str = format!(" {} ", self.item_cursor+self.line_cursor);
+        curses.mv(if self.reverse {1} else {self.height}, self.width - (line_num_str.len() as i32));
+        curses.cprint(&line_num_str, COLOR_INFO, true);
+
+        // restore cursor
+        curses.mv(y, x);
+    }
+
+    fn draw_query(&self, curses: &Curses, print_query_func: ClosureType) {
+        let (h, w) = curses.get_maxyx();
+        let (h, _) = (h as usize, w as usize);
+
+        // print query
+        curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
+        curses.clrtoeol();
+        print_query_func(curses);
+    }
+
+    fn draw_item(&self, curses: &Curses, matched_item: &MatchedItem, is_current: bool) {
+        let index = matched_item.item.get_full_index();
+
+        if self.selected.contains_key(&index) {
+            curses.cprint(">", COLOR_SELECTED, true);
+        } else {
+            curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
+        }
+
+        match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
-                let (matched_start_pos, matched_end_pos) = if matched_indics.len() > 0 {
+                let (matched_start_pos, matched_end_pos) = if !matched_indics.is_empty() {
                     (matched_indics[0], matched_indics[matched_indics.len()-1] + 1)
                 } else {
                     (0, 1)
                 };
 
+                let item = &matched_item.item;
                 let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
-                                                     (self.max_x-3) as usize,
+                                                     (self.width-3) as usize,
                                                      self.hscroll_offset,
                                                      matched_start_pos,
                                                      matched_end_pos);
@@ -267,36 +405,39 @@ impl Model {
                         break;
                     }
                 }
-                self.curses.attr_on(last_attr);
+                curses.attr_on(last_attr);
 
-                for &ch in text.iter() {
+                for &ch in &text {
                     match matched_indics_iter.peek() {
                         Some(&&index) if idx == index => {
-                            self.print_char(ch, COLOR_MATCHED, is_current);
+                            self.print_char(curses, ch, COLOR_MATCHED, is_current);
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
                             match ansi_states.peek() {
                                 Some(&&(index, attr)) if idx == index => {
                                     // print ansi color codes.
-                                    self.curses.attr_off(last_attr);
-                                    self.curses.attr_on(attr);
+                                    curses.attr_off(last_attr);
+                                    curses.attr_on(attr);
                                     last_attr = attr;
                                     let _ = ansi_states.next();
                                 }
                                 Some(_) | None => {}
                             }
-                            self.print_char(ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                            self.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                         }
                     }
                     idx += 1;
                 }
-                self.curses.attr_off(last_attr);
+                curses.attr_off(last_attr);
+
             }
+
             Some(MatchedRange::Range(start, end)) => {
                 // pass
+                let item = &matched_item.item;
                 let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
-                                                     (self.max_x-3) as usize,
+                                                     (self.width-3) as usize,
                                                      self.hscroll_offset,
                                                      start,
                                                      end);
@@ -312,239 +453,145 @@ impl Model {
                         break;
                     }
                 }
-                self.curses.attr_on(last_attr);
+                curses.attr_on(last_attr);
 
                 for &ch in text.iter() {
                     if idx >= start && idx < end {
-                        self.print_char(ch, COLOR_MATCHED, is_current);
+                        self.print_char(curses, ch, COLOR_MATCHED, is_current);
                     } else {
                         match ansi_states.peek() {
                             Some(&&(index, attr)) if idx == index => {
                                 // print ansi color codes.
-                                self.curses.attr_off(last_attr);
-                                self.curses.attr_on(attr);
+                                curses.attr_off(last_attr);
+                                curses.attr_on(attr);
                                 last_attr = attr;
                                 let _ = ansi_states.next();
                             }
                             Some(_) | None => {}
                         }
-                        self.print_char(ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                        self.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                     }
                     idx += 1;
                 }
-                self.curses.attr_off(last_attr);
+                curses.attr_off(last_attr);
             }
-            None => {
-                // pass
+
+            _ => {
+                curses.printw(matched_item.item.get_text());
             }
         }
     }
 
-    fn print_char(&self, ch: char, color: i16, is_bold: bool) {
+    fn print_char(&self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
         if ch != '\t' {
-            self.curses.caddch(ch, color, is_bold);
+            curses.caddch(ch, color, is_bold);
         } else {
             // handle tabstop
-            let mut y = 0;
-            let mut x = 0;
-            getyx(stdscr, &mut y, &mut x);
+            let (_, x) = curses.getyx();
             let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
             for _ in 0..rest {
-                self.curses.caddch(' ', color, is_bold);
+                curses.caddch(' ', color, is_bold);
             }
         }
     }
 
-    pub fn refresh(&self) {
-        if self.update_finished.load(Ordering::Relaxed) {
-            refresh();
-        }
-    }
-
-    pub fn refresh_throttle(&self) {
-        refresh_throttle(self.refresh_block.clone(), self.update_finished.clone());
-    }
-
-    pub fn display(&self) {
-        self.print_items();
-        self.print_info();
-        self.print_query();
-    }
-
-    // the terminal resizes, so we need to recalculate the margins.
-    pub fn resize(&mut self) {
-        self.curses.clear();
-        endwin();
-        self.refresh();
-        let (max_y, max_x) = self.curses.get_maxyx();
-        self.max_y  = max_y;
-        self.max_x  = max_x;
-        self.width  = (max_x - 2) as usize;
-        self.height = (max_y - 2) as usize;
-    }
-
-    pub fn close(&mut self) {
-        self.curses.close();
-    }
-
-    //============================================================================
+    //--------------------------------------------------------------------------
     // Actions
 
-    // return the number selected.
-    pub fn act_accept(&mut self, accept_key: Option<String>) -> usize {
-        self.accept_key = accept_key;
+    pub fn act_move_line_cursor(&mut self, diff: i32) {
+        let diff = if self.reverse {-diff} else {diff};
+        let mut line_cursor = self.line_cursor as i32;
+        let mut item_cursor = self.item_cursor as i32;
+        let item_len = self.items.len() as i32;
 
-        let mut matched_items = self.matched_items.write().unwrap();
-        if let Some(matched) = matched_items.get(self.item_cursor) {
-            let item_index = matched.index;
-            self.selected_indics.insert(item_index);
+        line_cursor += diff;
+        if line_cursor >= self.height {
+            item_cursor += line_cursor - self.height + 1;
+            item_cursor = max(0, min(item_cursor, item_len - self.height));
+            line_cursor = min(self.height-1, item_len - item_cursor);
+        } else if line_cursor < 0 {
+            item_cursor += line_cursor;
+            item_cursor = max(item_cursor, 0);
+            line_cursor = 0;
+        } else {
+            line_cursor = min(line_cursor, item_len-1 - item_cursor);
         }
-        self.selected_indics.len()
-    }
 
-    pub fn act_add_char(&mut self, ch: char) {
-        let changed = self.query.add_char(ch);
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_backward_char(&mut self) {
-        self.query.backward_char();
-    }
-
-    pub fn act_backward_delete_char(&mut self) {
-        let changed = self.query.backward_delete_char();
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_backward_kill_word(&mut self) {
-        let changed = self.query.backward_kill_word();
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_backward_word(&mut self) {
-        let _ = self.query.backward_word();
-    }
-
-    pub fn act_beginning_of_line(&mut self) {
-        let _ = self.query.beginning_of_line();
-    }
-
-    pub fn act_delete_char(&mut self) {
-        let changed = self.query.delete_char();
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_deselect_all(&mut self) {
-        self.selected_indics.clear();
-    }
-
-    pub fn act_end_of_line(&mut self) {
-        self.query.end_of_line();
-    }
-
-    pub fn act_forward_char(&mut self) {
-        self.query.forward_char();
-    }
-
-    pub fn act_forward_word(&mut self) {
-        self.query.forward_word();
-    }
-
-    pub fn act_kill_line(&mut self) {
-        let changed = self.query.kill_line();
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_kill_word(&mut self) {
-        let changed = self.query.kill_word();
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_line_discard(&mut self) {
-        let changed = self.query.line_discard();
-        if changed {
-            self.eb.set(Event::EvQueryChange, Box::new(self.query.get_query()));
-        }
-    }
-
-    pub fn act_select_all(&mut self) {
-        if !self.multi_selection {return;}
-
-        let matched_items = self.matched_items.read().unwrap();
-        for item in matched_items.iter() {
-            self.selected_indics.insert(item.index);
-        }
-    }
-
-    pub fn act_toggle_all(&mut self) {
-        if !self.multi_selection {return;}
-
-        let matched_items = self.matched_items.read().unwrap();
-        for item in matched_items.iter() {
-            if !self.selected_indics.contains(&item.index) {
-                self.selected_indics.insert(item.index);
-            } else {
-                self.selected_indics.remove(&item.index);
-            }
-        }
+        self.item_cursor = item_cursor as usize;
+        self.line_cursor = line_cursor as usize;
     }
 
     pub fn act_toggle(&mut self) {
         if !self.multi_selection {return;}
 
-        let mut matched_items = self.matched_items.write().unwrap();
-        if let Some(matched) = matched_items.get(self.item_cursor) {
-            let item_index = matched.index;
-            if self.selected_indics.contains(&item_index) {
-                self.selected_indics.remove(&item_index);
+        let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+        let index = current_item.item.get_full_index();
+        if !self.selected.contains_key(&index) {
+            self.selected.insert(index, current_item.clone());
+        } else {
+            self.selected.remove(&index);
+        }
+    }
+
+    pub fn act_toggle_all(&mut self) {
+        for current_item in self.items.iter() {
+            let index = current_item.item.get_full_index();
+            if !self.selected.contains_key(&index) {
+                self.selected.insert(index, current_item.clone());
             } else {
-                self.selected_indics.insert(item_index);
+                self.selected.remove(&index);
             }
         }
     }
 
-    pub fn act_move_line_cursor(&mut self, diff: i32) {
-        let total_item = self.matched_items.read().unwrap().len() as i32;
-
-        let y = self.line_cursor as i32 + diff;
-        self.line_cursor = if diff > 0 {
-            let tmp = min(min(y, (self.height as i32) -1), total_item-1);
-            if tmp < 0 {0} else {tmp as usize}
-        } else {
-            max(0, y) as usize
-        };
-
-
-        let item_y = self.item_cursor as i32 + diff;
-        self.item_cursor = if diff > 0 {
-            let tmp = min(item_y, total_item-1);
-            if tmp < 0 {0} else {tmp as usize}
-        } else {
-            max(0, item_y) as usize
+    pub fn act_select_all(&mut self) {
+        for current_item in self.items.iter() {
+            let index = current_item.item.get_full_index();
+            self.selected.insert(index, current_item.clone());
         }
     }
 
-    pub fn act_move_page(&mut self, pages: i32) {
-        let lines = (self.height as i32) * pages;
-        self.act_move_line_cursor(lines);
+    pub fn act_deselect_all(&mut self) {
+        self.selected.clear();
     }
 
-    pub fn act_vertical_scroll(&mut self, cols: i32) {
-        let new_offset = self.hscroll_offset as i32 + cols;
-        self.hscroll_offset = max(0, new_offset) as usize;
+    pub fn act_output(&mut self) {
+        // select the current one
+        if !self.items.is_empty() {
+            let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+            let index = current_item.item.get_full_index();
+            self.selected.insert(index, current_item.clone());
+        }
+
+        let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
+        output.sort_by_key(|k| k.0);
+        for (_, item) in output {
+            println!("{}", item.item.get_output_text());
+        }
     }
+
+    pub fn act_scroll(&mut self, offset: i32) {
+        let mut hscroll_offset = self.hscroll_offset as i32;
+        hscroll_offset += offset;
+        hscroll_offset = max(0, hscroll_offset);
+        self.hscroll_offset = hscroll_offset as usize;
+    }
+
+    pub fn act_redarw(&mut self, curses: &Curses, print_query_func: ClosureType) {
+        self.update_size(curses);
+        curses.erase();
+        self.draw_items(curses);
+        self.draw_status(curses);
+        self.draw_query(curses, print_query_func);
+        curses.refresh();
+    }
+
+    fn act_redraw_items_and_status(&mut self, curses: &Curses) {
+        self.draw_items(curses);
+        self.draw_status(curses);
+        curses.refresh();
+    }
+
 }
 
 //==============================================================================
@@ -586,7 +633,7 @@ fn right_fixed(text: &[char], max_x: usize) -> usize {
             return idx+1;
         }
     }
-    return 0;
+    0
 }
 
 // return a string and its left position in original string
@@ -616,7 +663,6 @@ fn reshape_string(text: &[char],
     } else if w1 <= w3 && w1 + w2 <= container_width-2 {
         // left-fixed
         let right_pos = text_start_pos + left_fixed(&text[text_start_pos..], container_width-2);
-        println!("right_pos = {}", right_pos);
         (text_start_pos, right_pos)
     } else {
         // left-right
@@ -639,36 +685,6 @@ fn reshape_string(text: &[char],
     }
 
     (ret, if left_pos > text_start_pos {left_pos-2} else {left_pos})
-}
-
-pub fn refresh_throttle(refresh_block: Arc<Mutex<u64>>, update_finished: Arc<AtomicBool>) {
-    {
-        let mut num_blocks = refresh_block.lock().unwrap();
-
-        *num_blocks += 1;
-        if *num_blocks > 1 {
-            return;
-        }
-    }
-
-    if update_finished.load(Ordering::Relaxed) {
-        refresh();
-    }
-
-    let refresh_block = refresh_block.clone();
-    let update_finished = update_finished.clone();
-    thread::spawn(move || {
-        thread::sleep(Duration::from_millis(REFRESH_DURATION));
-        let num = {
-            let mut num_blocks = refresh_block.lock().unwrap();
-            let num = *num_blocks;
-            *num_blocks = 0;
-            num
-        };
-        if num > 1 {
-            refresh_throttle(refresh_block, update_finished);
-        }
-    });
 }
 
 #[cfg(test)]
@@ -726,7 +742,4 @@ mod test {
                    ("2345..".to_string().chars().collect::<Vec<char>>(), 2));
 
     }
-
-
-
 }

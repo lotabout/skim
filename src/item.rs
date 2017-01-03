@@ -6,24 +6,59 @@ use ncurses::*;
 use ansi::parse_ansi;
 use regex::Regex;
 use reader::FieldRange;
-use std::mem;
+use std::borrow::Cow;
+use std::ascii::AsciiExt;
+use std::sync::Arc;
 
+use std::io::Write;
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
+// An item will store everything that one line input will need to be operated and displayed.
+//
+// What's special about an item?
+// The simplest version of an item is a line of string, but things are getting more complex:
+// - The conversion of lower/upper case is slow in rust, because it involds unicode.
+// - We may need to interpret the ANSI codes in the text.
+// - The text can be transformed and limited while searching.
+
+// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
+// more than one line.
+
+#[derive(Debug)]
 pub struct Item {
+    // (num of run, number of index)
+    index: (usize, usize),
+
+    // The text that will be ouptut when user press `enter`
     output_text: String,
-    pub text: String,
-    text_lower_chars: Vec<char>, // lower case version of text.
+
+    // The text that will shown into the screen. Can be transformed.
+    text: String,
+
+    // cache of the lower case version of text. To improve speed
+    text_lower_chars: Vec<char>,
+
+    // the ansi state (color) of the text
     ansi_states: Vec<(usize, attr_t)>,
-    using_transform_fields: bool,
     matching_ranges: Vec<(usize, usize)>,
+
+    // For the transformed ANSI case, the output will need another transform.
+    using_transform_fields: bool,
     ansi_enabled: bool,
 }
 
-impl Item {
+impl<'a> Item {
     pub fn new(orig_text: String,
                ansi_enabled: bool,
                trans_fields: &[FieldRange],
                matching_fields: &[FieldRange],
-               delimiter: &Regex) -> Self {
+               delimiter: &Regex,
+               index: (usize, usize)) -> Self {
         let using_transform_fields = trans_fields.len() > 0;
 
         //        transformed | ANSI             | output
@@ -51,6 +86,7 @@ impl Item {
         };
 
         let mut ret = Item {
+            index: index,
             output_text: orig_text,
             text: text,
             text_lower_chars: Vec::new(),
@@ -60,12 +96,13 @@ impl Item {
             ansi_enabled: ansi_enabled,
         };
 
-        let lower_chars = ret.get_text().to_lowercase().chars().collect();
+        let lower_chars: Vec<char> = ret.get_text().to_ascii_lowercase().chars().collect();
         let matching_ranges = if matching_fields.len() > 0 {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
-            Vec::new()
+            vec![(0, lower_chars.len())]
         };
+
         ret.text_lower_chars = lower_chars;
         ret.matching_ranges = matching_ranges;
         ret
@@ -79,15 +116,14 @@ impl Item {
         }
     }
 
-    pub fn get_output_text(&mut self) -> &str {
+    pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
             let (text, _) = parse_ansi(&self.output_text);
-            let _ = mem::replace(&mut self.output_text, text);
-            &self.output_text
+            Cow::Owned(text)
         } else if !self.using_transform_fields && self.ansi_enabled {
-            &self.text
+            Cow::Borrowed(&self.text)
         } else {
-            &self.output_text
+            Cow::Borrowed(&self.output_text)
         }
     }
 
@@ -99,13 +135,31 @@ impl Item {
         &self.ansi_states
     }
 
-    pub fn in_matching_range(&self, begin: usize, end: usize) -> bool {
-        for &(start, stop) in self.matching_ranges.iter() {
-            if begin >= start && end <= stop {
-                return true;
-            }
+    pub fn get_index(&self) -> usize {
+        self.index.1
+    }
+
+    pub fn get_full_index(&self) -> (usize, usize) {
+        self.index
+    }
+
+    pub fn get_matching_ranges(&self) -> &[(usize, usize)] {
+        &self.matching_ranges
+    }
+}
+
+impl Clone for Item {
+    fn clone(&self) -> Item {
+        Item {
+            index: self.index,
+            output_text: self.output_text.clone(),
+            text: self.text.clone(),
+            text_lower_chars: self.text_lower_chars.clone(),
+            ansi_states: self.ansi_states.clone(),
+            using_transform_fields: self.using_transform_fields,
+            matching_ranges: self.matching_ranges.clone(),
+            ansi_enabled: self.ansi_enabled,
         }
-        self.matching_ranges.is_empty()
     }
 }
 
@@ -183,39 +237,48 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
     }
 }
 
-
+// A bunch of items
+pub type ItemGroup = Vec<Arc<Item>>;
+pub type MatchedItemGroup = Vec<MatchedItem>;
 
 pub type Rank = [i64; 4]; // score, index, start, end
 
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
+#[allow(dead_code)]
 pub enum MatchedRange {
     Range(usize, usize),
     Chars(Vec<usize>),
 }
 
-#[derive(Eq, Clone)]
+#[derive(Clone, Debug)]
 pub struct MatchedItem {
-    pub index: usize,                       // index of current item in items
+    pub item: Arc<Item>,
     pub rank: Rank,
     pub matched_range: Option<MatchedRange>,  // range of chars that metched the pattern
 }
 
 impl MatchedItem {
-    pub fn new(index: usize) -> Self {
+    pub fn builder(item: Arc<Item>) -> Self {
         MatchedItem {
-            index: index,
+            item: item,
             rank: [0, 0, 0, 0],
             matched_range: None,
         }
     }
 
-    pub fn set_matched_range(&mut self, range: MatchedRange) {
+    pub fn matched_range(mut self, range: MatchedRange) -> Self{
         self.matched_range = Some(range);
+        self
     }
 
-    pub fn set_rank(&mut self, rank: Rank) {
+    pub fn rank(mut self, rank: Rank) -> Self {
         self.rank = rank;
+        self
+    }
+
+    pub fn build(self) -> Self {
+        self
     }
 }
 
@@ -237,6 +300,8 @@ impl PartialEq for MatchedItem {
         self.rank == other.rank
     }
 }
+
+impl Eq for MatchedItem {}
 
 #[cfg(test)]
 mod test {

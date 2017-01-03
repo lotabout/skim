@@ -1,70 +1,53 @@
-/// Given a list of entries `items` and the query string, filter out the
-/// matched entries using fuzzy search algorithm.
-
-
-extern crate num_cpus;
-
-use std::sync::{Arc, RwLock, Mutex};
-
-use std::sync::mpsc::channel;
-use std::collections::HashMap;
-use event::Event;
-use item::{Item, MatchedItem, MatchedRange};
-use util::eventbox::EventBox;
-use score;
-use orderedvec::OrderedVec;
-use std::cmp::min;
+use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender, channel};
+use event::{Event, EventArg};
+use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use std::thread;
-use std::time::Instant;
-use getopts;
-use regex::Regex;
 
-const MATCHER_CHUNK_SIZE: usize = 100;
-const PROCESS_START_UPDATE_DURATION: u32 = 200; // milliseconds
-const PROCESS_UPDATE_DURATION: u64 = 100; // milliseconds
-const RESULT_UPDATE_DURATION: u64 = 300; // milliseconds
+use getopts;
+use score;
+use std::io::Write;
+use regex::Regex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+macro_rules! println_stderr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
 
 #[derive(Clone, Copy)]
 enum Algorithm {
+    Fuzzy,
+    Regex,
+    PrefixExact,
+    SuffixExact,
+    Exact,
+    InverseExact,
+    InverseSuffixExact,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum MatcherMode {
+    Regex,
+    Exact,
     FUZZY,
-    REGEX,
 }
 
 pub struct Matcher {
-    pub eb_req: Arc<EventBox<Event>>,       // event box that recieve requests
-    eb_notify: Arc<EventBox<Event>>,    // event box that send out notification
-    items: Arc<RwLock<Vec<Item>>>,
-    new_items: Arc<RwLock<Vec<Item>>>,
-    query: Query,
-    cache: HashMap<String, MatcherCache>,
-    partitions: usize,
-    rank_criterion: Arc<Vec<RankCriteria>>,
-    is_interactive: bool,
-    algorithm: Algorithm,
+    tx_result: Sender<(Event, EventArg)>,
+    rank_criterion: Vec<RankCriteria>,
+    mode: MatcherMode,
 }
 
-impl<'a> Matcher {
-    pub fn new(items: Arc<RwLock<Vec<Item>>>,
-               new_items: Arc<RwLock<Vec<Item>>>,
-               eb_notify: Arc<EventBox<Event>>) -> Self {
-
-        let mut cache = HashMap::new();
-        cache.entry("".to_string()).or_insert_with(MatcherCache::new);
-
+impl Matcher {
+    pub fn new(tx_result: Sender<(Event, EventArg)>) -> Self {
         Matcher {
-            eb_req: Arc::new(EventBox::new()),
-            eb_notify: eb_notify,
-            items: items,
-            new_items: new_items,
-            query: Query::new(""),
-            cache: cache,
-            partitions: num_cpus::get(),
-            rank_criterion: Arc::new(vec![RankCriteria::Score,
-                                          RankCriteria::Index,
-                                          RankCriteria::Begin,
-                                          RankCriteria::End]),
-            is_interactive: false,
-            algorithm: Algorithm::FUZZY,
+            tx_result: tx_result,
+            rank_criterion: vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End],
+            mode: MatcherMode::FUZZY,
         }
     }
 
@@ -76,286 +59,327 @@ impl<'a> Matcher {
                     vec.push(c);
                 }
             }
-            self.rank_criterion = Arc::new(vec);
+            self.rank_criterion = vec;
         }
 
-        if options.opt_present("i") {
-            self.is_interactive = true;
+        if options.opt_present("exact") {
+            self.mode = MatcherMode::Exact;
         }
 
         if options.opt_present("regex") {
-            self.algorithm = Algorithm::REGEX;
+            self.mode = MatcherMode::Regex;
         }
 
-        if let Some(query) = options.opt_str("q") {
-            self.query = Query::new(&query);
-            self.cache.entry(query.to_string()).or_insert_with(MatcherCache::new);
-        }
     }
 
-    pub fn process(&mut self) {
-        let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
+    pub fn run(&self, rx_item: Receiver<(Event, EventArg)>) {
+        let (tx_matcher, rx_matcher) = channel();
+        let matcher_restart = Arc::new(AtomicBool::new(false));
+        // start a new thread listening for EvMatcherRestart, that means the query had been
+        // changed, so that matcher shoudl discard all previous events.
+        {
+            let matcher_restart = matcher_restart.clone();
+            thread::spawn(move || {
+                while let Ok((ev, arg)) = rx_item.recv() {
+                    match ev {
+                        Event::EvMatcherRestart => {
+                            matcher_restart.store(true, Ordering::Relaxed);
+                            while matcher_restart.load(Ordering::Relaxed) {
+                                thread::sleep(Duration::from_millis(10));
+                            }
 
-        let query = Arc::new(self.query.clone());
-        let (tx, rx) = channel();
-        let mut guards = vec![];
-
-        let start_pos = Arc::new(Mutex::new(cache.item_pos));
-
-        for _ in 0..self.partitions {
-            let items = self.items.clone();
-            let start_pos = start_pos.clone();
-            let query = query.clone();
-            let tx = tx.clone();
-            let eb_req = self.eb_req.clone();
-            let criterion = self.rank_criterion.clone();
-            let algorithm = self.algorithm;
-
-            let guard = thread::spawn(move || {
-                let items = items.read().unwrap();
-                loop {
-                    let (start, end) = { // to release the start_pos lock as soon as possible
-                        let mut start_idx = start_pos.lock().unwrap();
-                        if *start_idx >= items.len() {
-                            break;
+                            let _ = tx_matcher.send((ev, arg));
                         }
-
-                        let start = *start_idx;
-                        let end = min(start + MATCHER_CHUNK_SIZE, items.len());
-                        *start_idx = end;
-                        (start, end)
-                    };
-
-                    for i in start..end {
-                        let ref item = items[i];
-                        if let Some(matched) = match_item(i, item, &query, &criterion, algorithm) {
-                            let _ = tx.send(Some(matched));
+                        _ => {
+                            // pass through all other events
+                            let _ = tx_matcher.send((ev, arg));
                         }
-                    }
-
-                    if eb_req.peek(Event::EvMatcherResetQuery) {
-                        break;
                     }
                 }
-                let _ = tx.send(None); // to notify match process end
             });
-            guards.push(guard);
-        };
-
-        let items_len = self.items.read().unwrap().len();
-        let mut matched_items = cache.matched_items.write().unwrap();
-        let timer = Instant::now();
-        while let Ok(result) = rx.recv() {
-            if let Some(matched) = result {
-                matched_items.push(matched);
-            }
-
-            let start_idx = {*start_pos.lock().unwrap()};
-
-            // update process
-            let time = timer.elapsed();
-            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-            if mills > PROCESS_START_UPDATE_DURATION {
-                self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess, Box::new(((start_idx+1) *100/(items_len+1)) as u64), PROCESS_UPDATE_DURATION);
-            }
-
-            if start_idx >= items_len {
-                break;
-            }
-
-            if self.eb_req.peek(Event::EvMatcherResetQuery) {
-                break;
-            }
         }
 
-        // wait for all threads to exit
-        for guard in guards {
-            let _ = guard.join();
-        }
-
-        // consume remaining results.
-        while let Ok(result) = rx.try_recv() {
-            if let Some(matched) = result {
-                matched_items.push(matched);
-            }
-        }
-        cache.item_pos = *start_pos.lock().unwrap();
-        self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
-    }
-
-    pub fn process_interactive(&mut self) {
-        let ref mut cache = self.cache.get_mut(&self.query.get()).unwrap();
-        let mut matched_items = cache.matched_items.write().unwrap();
-        let items_len = self.items.read().unwrap().len();
-        let timer = Instant::now();
-        let start_pos = cache.item_pos;
-        let mut last_pos = start_pos;
-
-        for index in start_pos..items_len {
-            let mut matched = MatchedItem::new(index);
-            matched.set_matched_range(MatchedRange::Range(0, 0));
-            matched.set_rank(build_rank(&self.rank_criterion, index as i64, index as i64, 0, 0));
-
-            matched_items.push(matched);
-
-            if self.eb_req.peek(Event::EvMatcherResetQuery) {
-                break;
-            }
-
-            last_pos = index+1;
-
-            // update process
-            let time = timer.elapsed();
-            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
-            if mills > PROCESS_START_UPDATE_DURATION {
-                self.eb_notify.set_throttle(Event::EvMatcherUpdateProcess, Box::new(((index+1) *100/(items_len+1)) as u64), PROCESS_UPDATE_DURATION);
-            }
-        }
-        cache.item_pos = last_pos;
-        self.eb_notify.set(Event::EvMatcherUpdateProcess, Box::new(100 as u64));
-    }
-
-    fn reset_query(&mut self, query: &str) {
-        self.query = Query::new(query);
-        if self.is_interactive {
-            self.new_items.write().unwrap().clear();
-            self.cache.remove(&query.to_string());
-        }
-        self.cache.entry(query.to_string()).or_insert_with(MatcherCache::new);
-    }
-
-    pub fn run(&mut self) {
+        let mut matcher_engine: Option<MatchingEngine> = None;
+        let mut num_processed: usize = 0;
         loop {
-            for (e, val) in self.eb_req.wait() {
-                match e {
-                    Event::EvMatcherNewItem => {}
-                    Event::EvMatcherResetQuery => {
-                        self.reset_query(&val.downcast::<String>().unwrap());
-                        if self.is_interactive {
-                            self.eb_notify.set(Event::EvMatcherSync, Box::new(true));
-                            let _ = self.eb_req.wait_for(Event::EvModelAck);
-                        }
+
+            if matcher_restart.load(Ordering::Relaxed) {
+                while let Ok(_) = rx_matcher.try_recv() {}
+                matcher_restart.store(false, Ordering::Relaxed);
+            }
+
+            if let Ok((ev, arg)) = rx_matcher.recv_timeout(Duration::from_millis(10)) {
+                match ev {
+                    Event::EvMatcherNewItem => {
+                        let items: ItemGroup = *arg.downcast().unwrap();
+                        num_processed += items.len();
+
+                        matcher_engine.as_ref().map(|mat| {
+                            let matched_items: MatchedItemGroup = items.into_iter()
+                                .map(|item| mat.match_item(item))
+                                .filter(Option::is_some)
+                                .map(|item| item.unwrap())
+                                .collect();
+                            let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
+                        });
+
+                        // report the number of processed items
+                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                     }
+
+                    Event::EvReaderStopped => {
+                        let _ = self.tx_result.send((ev, arg));
+                    }
+                    Event::EvSenderStopped => {
+                        // Since matcher is single threaded, sender stopped means all items are
+                        // processed.
+                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+                        let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
+                    }
+
+                    Event::EvReaderStarted => { let _ = self.tx_result.send((ev, arg)); }
+
+                    Event::EvMatcherRestart => {
+                        num_processed = 0;
+                        let query = arg.downcast::<String>().unwrap();
+
+                        // notifiy the model that the query had been changed
+                        let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
+
+                        matcher_engine = Some(MatchingEngine::builder(&query, self.mode)
+                                              .rank(&self.rank_criterion)
+                                              .build());
+                    }
+
                     _ => {}
                 }
             }
+        }
+    }
 
-            // insert new items
-            {
-                let mut buffer = self.new_items.write().unwrap();
-                if buffer.len() > 0 {
-                    let mut items = self.items.write().unwrap();
-                    items.append(&mut buffer);
-                }
-            }
+}
 
-            if self.is_interactive {
-                self.process_interactive();
+// <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
+type ExactFilter = Box<Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
+
+struct MatchingEngine<'a> {
+    query: String,
+    query_chars: Vec<char>,
+    query_lower_chars: Vec<char>,
+    query_regex: Option<Regex>,
+    rank_criterion: Option<&'a [RankCriteria]>,
+    algorithm: Algorithm
+}
+
+impl<'a> MatchingEngine<'a> {
+    pub fn builder(query: &str, mode: MatcherMode) -> Self {
+        let (algo, query) = if mode == MatcherMode::Regex {
+            (Algorithm::Regex, query)
+        } else if query.starts_with('\'') {
+            if mode == MatcherMode::Exact {
+                (Algorithm::Fuzzy, &query[1..])
             } else {
-                self.process();
+                (Algorithm::Exact, &query[1..])
             }
+        } else if query.starts_with('^') {
+            (Algorithm::PrefixExact, &query[1..])
+        } else if query.starts_with('!') {
+            if query.ends_with('$') {
+                (Algorithm::InverseSuffixExact, &query[1..(query.len()-1)])
+            } else {
+                (Algorithm::InverseExact, &query[1..])
+            }
+        } else if query.ends_with('$') {
+            (Algorithm::SuffixExact, &query[..(query.len()-1)])
+        } else if mode == MatcherMode::Exact {
+            (Algorithm::Exact, query)
+        } else {
+            (Algorithm::Fuzzy, query)
+        };
 
-            if !self.eb_req.peek(Event::EvMatcherResetQuery) {
-                let matched_items = self.cache.get_mut(&self.query.get()).unwrap().matched_items.clone();
-                if self.is_interactive {
-                    self.eb_notify.set_debounce(Event::EvMatcherEnd, Box::new(matched_items), RESULT_UPDATE_DURATION);
-                } else {
-                    self.eb_notify.set(Event::EvMatcherEnd, Box::new(matched_items));
+        MatchingEngine {
+            query: query.to_string(),
+            query_chars: query.chars().collect(),
+            query_lower_chars: query.to_lowercase().chars().collect(),
+            query_regex:  Regex::new(query).ok(),
+            rank_criterion: None,
+            algorithm: algo,
+        }
+    }
+
+    pub fn rank(mut self, rank: &'a [RankCriteria]) -> Self {
+        self.rank_criterion = Some(rank);
+        self
+    }
+
+    pub fn build(self) -> Self {
+        self
+    }
+
+    pub fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        match self.algorithm {
+            Algorithm::Fuzzy => self.match_item_fuzzy(item),
+            Algorithm::Regex => self.match_item_regex(item),
+            Algorithm::Exact => {
+                self.match_item_exact(item, Box::new(|matched_result, _| {
+                    matched_result.map(|(first, _)| first)
+                }))
+            }
+            Algorithm::InverseExact => {
+                self.match_item_exact(item, Box::new(|matched_result, _| {
+                    if matched_result.is_none() {Some((0, 0))} else {None}
+                }))
+            }
+            Algorithm::PrefixExact => {
+                self.match_item_exact(item, Box::new(|matched_result, _| {
+                    match *matched_result {
+                        Some(((s, e), _)) if s == 0 => Some((s, e)),
+                        _ => None,
+                    }
+                }))
+            }
+            Algorithm::SuffixExact => {
+                self.match_item_exact(item, Box::new(|matched_result, len| {
+                    match *matched_result {
+                        Some((_, (s, e))) if e == len => Some((s, e)),
+                        _ => None,
+                    }
+                }))
+            }
+            Algorithm::InverseSuffixExact => {
+                self.match_item_exact(item, Box::new(|matched_result, len| {
+                    match *matched_result {
+                        Some((_, (_, e))) if e != len => None,
+                        _ => Some((0, 0))
+                    }
+                }))
+            }
+        }
+    }
+
+    fn build_rank(&self, score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
+        self.rank_criterion.map(|criterion| {
+            let mut rank = [0; 4];
+            for (idx, criteria) in criterion.iter().enumerate().take(4) {
+                rank[idx] = match *criteria {
+                    RankCriteria::Score    => score,
+                    RankCriteria::Index    => index,
+                    RankCriteria::Begin    => begin,
+                    RankCriteria::End      => end,
+                    RankCriteria::NegScore => -score,
+                    RankCriteria::NegIndex => -index,
+                    RankCriteria::NegBegin => -begin,
+                    RankCriteria::NegEnd   => -end,
                 }
             }
+            rank
+        }).unwrap_or([0; 4])
+    }
+
+    fn match_item_regex(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        let mut matched_result = None;
+        for &(start, end) in item.get_matching_ranges() {
+            if self.query == "" {
+                matched_result = Some((0, 0));
+                break;
+            }
+
+            let source: String = item.get_lower_chars()[start .. end].iter().cloned().collect();
+            matched_result = score::regex_match(&source, &self.query_regex)
+                .map(|(s, e)| (s+start, e+start));
+
+            if matched_result.is_some() {
+                break;
+            }
         }
-    }
-}
 
-fn match_item(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria],
-              algorithm: Algorithm) -> Option<MatchedItem> {
-    match algorithm {
-        Algorithm::FUZZY => match_item_fuzzy(index, item, query, criterion),
-        Algorithm::REGEX => match_item_regex(index, item, query, criterion),
-    }
-}
-
-fn match_item_fuzzy(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
-    let matched_result = score::fuzzy_match(item.get_lower_chars(), query.get_chars(), query.get_lower_chars());
-
-    if matched_result == None {
-        return None;
-    }
-
-    let (score, matched_range) = matched_result.unwrap();
-
-    let begin = *matched_range.get(0).unwrap_or(&0) as i64;
-    let end = *matched_range.last().unwrap_or(&0) as i64;
-
-    if !query.empty() && !item.in_matching_range(begin as usize, (end+1) as usize) {
-        return None;
-    }
-
-    let rank = build_rank(criterion, -score, index as i64, begin, end);
-
-    let mut item = MatchedItem::new(index);
-    item.set_matched_range(MatchedRange::Chars(matched_range));
-    item.set_rank(rank);
-    Some(item)
-}
-
-fn match_item_regex(index: usize, item: &Item, query: &Query, criterion: &[RankCriteria]) -> Option<MatchedItem> {
-    let matched_result = if query.empty() {
-        Some((0, 0))
-    } else {
-        score::regex_match(item.get_text(), query.get_regex())
-    };
-
-    if matched_result == None {
-        return None;
-    }
-
-    let (begin, end) = matched_result.unwrap();
-
-    if !query.empty() && !item.in_matching_range(begin, end) {
-        return None;
-    }
-
-    let score = end - begin;
-    let rank = build_rank(criterion, score as i64, index as i64, begin as i64, end as i64);
-
-    let mut item = MatchedItem::new(index);
-    item.set_matched_range(MatchedRange::Range(begin, end));
-    item.set_rank(rank);
-    Some(item)
-}
-
-fn build_rank(criterion: &[RankCriteria], score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
-    let mut rank = [0; 4];
-    for (idx, criteria) in criterion.iter().enumerate().take(4) {
-        rank[idx] = match *criteria {
-            RankCriteria::Score    => score,
-            RankCriteria::Index    => index,
-            RankCriteria::Begin    => begin,
-            RankCriteria::End      => end,
-            RankCriteria::NegScore => -score,
-            RankCriteria::NegIndex => -index,
-            RankCriteria::NegBegin => -begin,
-            RankCriteria::NegEnd   => -end,
+        if matched_result.is_none() {
+            return None;
         }
+
+        let (begin, end) = matched_result.unwrap();
+        let score = (end - begin) as i64;
+        let rank = self.build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
+
+        Some(MatchedItem::builder(item)
+             .rank(rank)
+             .matched_range(MatchedRange::Range(begin, end))
+             .build())
     }
-    rank
-}
 
-struct MatcherCache {
-    pub matched_items: Arc<RwLock<OrderedVec<MatchedItem>>>,
-    pub item_pos: usize,
-}
+    fn match_item_fuzzy(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        // iterate over all matching fields:
+        let mut matched_result = None;
+        for &(start, end) in item.get_matching_ranges() {
+            let source = &item.get_lower_chars()[start .. end];
 
-impl MatcherCache {
-    pub fn new() -> Self {
-        MatcherCache {
-            item_pos: 0,
-            matched_items: Arc::new(RwLock::new(OrderedVec::new())),
+            matched_result = score::fuzzy_match(source, &self.query_chars, &self.query_lower_chars)
+                .map(|(s, vec)| {
+                    if start != 0 {
+                        (s, vec.iter().map(|x| x + start).collect())
+                    } else {
+                        (s, vec)
+                    }
+                });
+
+            if matched_result.is_some() {
+                break;
+            }
         }
+
+        if matched_result == None {
+            return None;
+        }
+
+        let (score, matched_range) = matched_result.unwrap();
+
+        let begin = *matched_range.get(0).unwrap_or(&0) as i64;
+        let end = *matched_range.last().unwrap_or(&0) as i64;
+
+        let rank = self.build_rank(-score, item.get_index() as i64, begin, end);
+
+        Some(MatchedItem::builder(item)
+             .rank(rank)
+             .matched_range(MatchedRange::Chars(matched_range))
+             .build())
+    }
+
+    fn match_item_exact(&self, item: Arc<Item>, filter: ExactFilter) -> Option<MatchedItem>{
+        let mut matched_result = None;
+        let mut range_start = 0;
+        let mut range_end = 0;
+        for &(start, end) in item.get_matching_ranges() {
+            if self.query == "" {
+                matched_result = Some(((0, 0), (0, 0)));
+                break;
+            }
+
+            let chars: Vec<_> = item.get_text().chars().collect();
+            let source: String = chars[start .. end].iter().cloned().collect();
+            matched_result = score::exact_match(&source, &self.query);
+
+            if matched_result.is_some() {
+                range_start = start;
+                range_end = end;
+                break;
+            }
+        }
+
+        let result_range = filter(&matched_result, range_end - range_start);
+        if result_range.is_none() {return None;}
+
+        let (begin, end) = result_range.map(|(s, e)| (s + range_start, e + range_start)).unwrap();
+        let score = (end - begin) as i64;
+        let rank = self.build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
+
+        Some(MatchedItem::builder(item)
+             .rank(rank)
+             .matched_range(MatchedRange::Range(begin, end))
+             .build())
     }
 }
 
+#[derive(Debug)]
 pub enum RankCriteria {
     Score,
     Index,
@@ -378,45 +402,5 @@ pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
         "-begin" => Some(RankCriteria::NegBegin),
         "-end"   => Some(RankCriteria::NegEnd),
         _ => None,
-    }
-}
-
-// cache for lowercases and others.
-#[derive(Clone)]
-struct Query {
-    query: String,
-    query_chars: Vec<char>,
-    query_lower_chars: Vec<char>,
-    regex: Option<Regex>,
-}
-
-impl Query {
-    pub fn new(query: &str) -> Self {
-        Query {
-            query: query.to_string(),
-            query_chars: query.chars().collect(),
-            query_lower_chars: query.to_lowercase().chars().collect(),
-            regex: Regex::new(query).ok(),
-        }
-    }
-
-    pub fn get(&self) -> String {
-        self.query.clone()
-    }
-
-    pub fn get_chars(&self) -> &[char] {
-        &self.query_chars
-    }
-
-    pub fn get_lower_chars(&self) -> &[char] {
-        &self.query_lower_chars
-    }
-
-    pub fn get_regex(&self) -> &Option<Regex> {
-        &self.regex
-    }
-
-    pub fn empty(&self) -> bool {
-        &self.query == ""
     }
 }

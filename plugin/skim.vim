@@ -127,6 +127,10 @@ try
     let dict.source = (empty($SHELL) ? 'sh' : $SHELL) . ' ' . s:shellesc(temps.source) . ' 2>/dev/null'
   endif
 
+  if has_key(dict, 'source') && type(dict.source) == 1 && dict.source == "none"
+      unlet dict.source
+  endif
+
   if has_key(dict, 'source')
     let source = dict.source
     let type = type(source)
