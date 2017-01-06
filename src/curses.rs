@@ -278,6 +278,7 @@ impl ColorTheme {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
                 theme = match color[0] {
+                    "molokai" => MONOKAI256.clone(),
                     "light" => LIGHT256.clone(),
                     "16"  => DEFAULT16.clone(),
                     "dark" | _ => DARK256.clone(),
@@ -325,6 +326,24 @@ const DEFAULT16: ColorTheme = ColorTheme {
 };
 
 const DARK256: ColorTheme = ColorTheme {
+    use_default:   true,
+    fg:               15,
+    bg:               0,
+    matched:          108,
+    matched_bg:       0,
+    current:          254,
+    current_bg:       236,
+    current_match:    151,
+    current_match_bg: 236,
+    spinner:          148,
+    info:             144,
+    prompt:           110,
+    cursor:           161,
+    selected:         168,
+    header:           109,
+};
+
+const MONOKAI256: ColorTheme = ColorTheme {
     use_default:   true,
     fg:               252,
     bg:               234,

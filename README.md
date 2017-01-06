@@ -224,6 +224,7 @@ You can choose the `BASE SCHEME` among the followings(default: dark on
 | dark        | Color scheme for dark 256-color terminal  |
 | light       | Color scheme for light 256-color terminal |
 | 16          | Color scheme for 16-color terminal        |
+| bw          | No colors                                 |
 
 While the customisable `COLOR`s are
 
