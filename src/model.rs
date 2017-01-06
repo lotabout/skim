@@ -225,11 +225,11 @@ impl Model {
                         self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActScrollLeft => {
-                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-2)));
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-1)));
                         self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActScrollRight => {
-                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(2)));
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(1)));
                         self.act_redraw_items_and_status(&curses);
                     }
 
@@ -373,46 +373,32 @@ impl Model {
 
         match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
-                let (matched_start_pos, matched_end_pos) = if !matched_indics.is_empty() {
+                let (match_start, match_end) = if !matched_indics.is_empty() {
                     (matched_indics[0], matched_indics[matched_indics.len()-1] + 1)
                 } else {
-                    (0, 1)
+                    (0, 0)
                 };
 
                 let item = &matched_item.item;
-                let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
-                                                     (self.width-3) as usize,
-                                                     self.hscroll_offset,
-                                                     matched_start_pos,
-                                                     matched_end_pos);
+                let text: Vec<_> = item.get_text().chars().collect();
+                let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
+
+                let mut printer = LinePrinter::builder()
+                    .tabstop(self.tabstop)
+                    .container_width(self.width as usize)
+                    .shift(shift)
+                    .text_width(full_width)
+                    .hscroll_offset(self.hscroll_offset)
+                    .build();
+
+                let mut last_attr = 0;
                 let mut matched_indics_iter = matched_indics.iter().peekable();
                 let mut ansi_states = item.get_ansi_states().iter().peekable();
 
-                // skip indics
-                while let Some(&&index) = matched_indics_iter.peek() {
-                    if idx > index {
-                        let _ = matched_indics_iter.next();
-                    } else {
-                        break;
-                    }
-                }
-
-                // skip ansi states
-                let mut last_attr = 0;
-                while let Some(&&(index, attr)) = ansi_states.peek() {
-                    if idx > index {
-                        last_attr = attr;
-                        let _ = ansi_states.next();
-                    } else {
-                        break;
-                    }
-                }
-                curses.attr_on(last_attr);
-
-                for &ch in &text {
+                for (idx, &ch) in text.iter().enumerate() {
                     match matched_indics_iter.peek() {
                         Some(&&index) if idx == index => {
-                            self.print_char(curses, ch, COLOR_MATCHED, is_current);
+                            printer.print_char(curses, ch, COLOR_MATCHED, is_current);
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
@@ -426,40 +412,34 @@ impl Model {
                                 }
                                 Some(_) | None => {}
                             }
-                            self.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                            printer.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                         }
                     }
-                    idx += 1;
                 }
                 curses.attr_off(last_attr);
-
             }
 
-            Some(MatchedRange::Range(start, end)) => {
+            Some(MatchedRange::Range(match_start, match_end)) => {
                 // pass
                 let item = &matched_item.item;
-                let (text, mut idx) = reshape_string(&item.get_text().chars().collect::<Vec<char>>(),
-                                                     (self.width-3) as usize,
-                                                     self.hscroll_offset,
-                                                     start,
-                                                     end);
+                let text: Vec<_> = item.get_text().chars().collect();
+                let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
+
+                let mut printer = LinePrinter::builder()
+                    .tabstop(self.tabstop)
+                    .container_width(self.width as usize)
+                    .shift(shift)
+                    .text_width(full_width)
+                    .hscroll_offset(self.hscroll_offset)
+                    .build();
+
+
+                let mut last_attr = 0;
                 let mut ansi_states = item.get_ansi_states().iter().peekable();
 
-                // skip ansi states
-                let mut last_attr = 0;
-                while let Some(&&(index, attr)) = ansi_states.peek() {
-                    if idx > index {
-                        last_attr = attr;
-                        let _ = ansi_states.next();
-                    } else {
-                        break;
-                    }
-                }
-                curses.attr_on(last_attr);
-
-                for &ch in text.iter() {
-                    if idx >= start && idx < end {
-                        self.print_char(curses, ch, COLOR_MATCHED, is_current);
+                for (idx, &ch) in text.iter().enumerate() {
+                    if idx >= match_start && idx < match_end {
+                        printer.print_char(curses, ch, COLOR_MATCHED, is_current);
                     } else {
                         match ansi_states.peek() {
                             Some(&&(index, attr)) if idx == index => {
@@ -471,9 +451,8 @@ impl Model {
                             }
                             Some(_) | None => {}
                         }
-                        self.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                        printer.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                     }
-                    idx += 1;
                 }
                 curses.attr_off(last_attr);
             }
@@ -596,152 +575,200 @@ impl Model {
 
 }
 
+struct LinePrinter {
+    tabstop: usize,
+    start: i32,
+    end: i32,
+    current: i32,
+
+    shift: usize,
+    text_width: usize,
+    container_width: usize,
+    hscroll_offset: usize,
+}
+
+impl LinePrinter {
+    pub fn builder() -> Self {
+        LinePrinter {
+            tabstop: 8,
+            start: 0,
+            end: 0,
+            current: -1,
+
+            shift: 0,
+            text_width: 0,
+            container_width: 0,
+            hscroll_offset: 0,
+        }
+    }
+
+    pub fn tabstop(mut self, tabstop: usize) -> Self {
+        self.tabstop = tabstop;
+        self
+    }
+
+    pub fn hscroll_offset(mut self, offset: usize) -> Self {
+        self.hscroll_offset = offset;
+        self
+    }
+
+    pub fn text_width(mut self, width: usize) -> Self {
+        self.text_width = width;
+        self
+    }
+
+    pub fn container_width(mut self, width: usize) -> Self {
+        self.container_width = width;
+        self
+    }
+
+    pub fn shift(mut self, shift: usize) -> Self {
+        self.shift = shift;
+        self
+    }
+
+    pub fn build(mut self) -> Self {
+        self.start = (self.shift + self.hscroll_offset) as i32;
+        self.end = self.start + self.container_width as i32;
+        self
+    }
+
+
+    fn print_char_raw(&mut self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
+        // the hidden chracter
+        let w = rune_width(ch);
+
+        self.current += w as i32;
+
+        if self.current < self.start {
+            // pass if it is hidden
+        } else if self.current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
+            // print left ".."
+            for _ in 0..min(w as i32, self.current - self.start + 1) {
+                curses.caddch('.', color, is_bold);
+            }
+        } else if self.current >= self.end {
+            // overflow the line
+        } else if self.end - self.current <= 2 && (self.text_width as i32 >= self.end) {
+            // print right ".."
+            for _ in 0..min(w as i32, self.end - self.current) {
+                curses.caddch('.', color, is_bold);
+            }
+        } else {
+            curses.caddch(ch, color, is_bold);
+        }
+    }
+
+    pub fn print_char(&mut self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
+        if ch != '\t' {
+            self.print_char_raw(curses, ch, color, is_bold);
+        } else {
+            // handle tabstop
+            let rest = if self.current < 0 {
+                self.tabstop
+            } else {
+                self.tabstop - (self.current as usize) % self.tabstop
+            };
+            for _ in 0..rest {
+                self.print_char_raw(curses, ' ', color, is_bold);
+            }
+        }
+    }
+}
+
 //==============================================================================
 // helper functions
 
-// wide character will take two unit
-fn display_width(text: &[char]) -> usize {
-    text.iter()
-        .map(|c| {if c.len_utf8() > 1 {2} else {1}})
-        .fold(0, |acc, n| acc + n)
+// a very naive solution
+// actually only east asian characters occupies 2 characters
+fn rune_width(ch: char) -> usize {
+    if ch.len_utf8() > 1 {
+        2
+    } else {
+        1
+    }
 }
 
-
-// calculate from left to right, stop when the max_x exceeds
-fn left_fixed(text: &[char], max_x: usize) -> usize {
-    if max_x == 0 {
-        return 1;
-    }
-
+// return an array, arr[i] store the display width till char[i]
+fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
+    let mut ret = Vec::new();
     let mut w = 0;
-    for (idx, &c) in text.iter().enumerate() {
-        w += if c.len_utf8() > 1 {2} else {1};
-        if w > max_x {
-            return idx;
-        }
+    for &ch in text.iter() {
+        w += if ch == '\t' {
+            tabstop - (w % tabstop)
+        } else {
+            rune_width(ch)
+        };
+        ret.push(w);
     }
-    text.len()
+    ret
 }
 
-fn right_fixed(text: &[char], max_x: usize) -> usize {
-    if max_x == 0 {
-        return text.len()-1;
-    }
-
-    let mut w = 0;
-    for (idx, &c) in text.iter().enumerate().rev() {
-        w += if c.len_utf8() > 1 {2} else {1};
-        if w > max_x {
-            return idx+1;
-        }
-    }
-    0
-}
-
-// return a string and its left position in original string
-// matched_end_pos is char-wise
+// return (left_shift, full_print_width)
 fn reshape_string(text: &[char],
                   container_width: usize,
-                  text_start_pos: usize,
-                  matched_start_pos: usize,
-                  matched_end_pos: usize) -> (Vec<char>, usize) {
-    let text_start_pos = min(max(0, text.len() as i32 - 1) as usize, text_start_pos);
-    let full_width = display_width(&text[text_start_pos..]);
+                  match_start: usize,
+                  match_end: usize,
+                  tabstop: usize) -> (usize, usize) {
 
+    let acc_width = accumulate_text_width(text, tabstop);
+    let full_width = acc_width[acc_width.len()-1];
     if full_width <= container_width {
-        return (text[text_start_pos..].iter().cloned().collect(), text_start_pos);
+        return (0, full_width);
     }
 
-    let mut ret = Vec::new();
+    // w1, w2, w3 = len_before_matched, len_matched, len_after_matched
+    let w1 = if match_start == 0 {0} else {acc_width[match_start-1]};
+    let w2 = if match_end >= text.len() {full_width - w1} else {acc_width[match_end] - w1};
+    let w3 = acc_width[acc_width.len()-1] - w1 - w2;
 
-    let w1 = display_width(&text[text_start_pos..matched_start_pos]);
-    let w2 = display_width(&text[matched_start_pos..matched_end_pos]);
-    let w3 = display_width(&text[matched_end_pos..]);
-
-    let (left_pos, right_pos) = if (w1 > w3 && w2+w3 <= container_width-2) || (w3 <= 2) {
+    if (w1 > w3 && w2+w3 <= container_width) || (w3 <= 2) {
         // right-fixed
-        let left_pos = text_start_pos + right_fixed(&text[text_start_pos..], container_width-2);
-        (left_pos, text.len())
-    } else if w1 <= w3 && w1 + w2 <= container_width-2 {
+        //(right_fixed(&acc_width, container_width), full_width)
+        (full_width - container_width, full_width)
+    } else if w1 <= w3 && w1 + w2 <= container_width {
         // left-fixed
-        let right_pos = text_start_pos + left_fixed(&text[text_start_pos..], container_width-2);
-        (text_start_pos, right_pos)
+        (0, full_width)
     } else {
         // left-right
-        let right_pos = max(matched_end_pos, text_start_pos + left_fixed(&text[text_start_pos..], container_width-2));
-        let left_pos = text_start_pos + right_fixed(&text[text_start_pos..right_pos], container_width-4);
-        (left_pos, right_pos)
-    };
-
-    if left_pos > text_start_pos {
-        ret.push('.'); ret.push('.');
+        (acc_width[match_end] - container_width + 2, full_width)
     }
-
-    // so we should print [left_pos..(right_pos+1)]
-    for ch in text[left_pos..right_pos].iter() {
-        ret.push(*ch);
-    }
-
-    if right_pos < text.len() {
-        ret.push('.'); ret.push('.');
-    }
-
-    (ret, if left_pos > text_start_pos {left_pos-2} else {left_pos})
 }
 
 #[cfg(test)]
 mod test {
-    #[test]
-    fn test_display_width() {
-        assert_eq!(super::display_width(&"abcdefg".to_string().chars().collect::<Vec<char>>()), 7);
-        assert_eq!(super::display_width(&"This is 中国".to_string().chars().collect::<Vec<char>>()), 12);
+    use super::*;
+
+    fn to_chars(s: &str) -> Vec<char> {
+        s.to_string().chars().collect()
     }
 
     #[test]
-    fn test_left_fixed() {
-        assert_eq!(super::left_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 4);
-        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 2);
-        assert_eq!(super::left_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 1);
+    fn test_rune_width() {
+        assert_eq!(rune_width('a'), 1);
+        assert_eq!(rune_width('中'), 2);
     }
 
     #[test]
-    fn test_right_fixed() {
-        assert_eq!(super::right_fixed(&"a中cdef".to_string().chars().collect::<Vec<char>>(), 5), 2);
-        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 5), 0);
-        assert_eq!(super::right_fixed(&"a中".to_string().chars().collect::<Vec<char>>(), 0), 1);
+    fn test_accumulate_text_width() {
+        assert_eq!(accumulate_text_width(&to_chars(&"abcdefg"), 8), vec![1,2,3,4,5,6,7]);
+        assert_eq!(accumulate_text_width(&to_chars(&"ab中de国g"), 8), vec![1,2,4,5,6,8,9]);
+        assert_eq!(accumulate_text_width(&to_chars(&"ab\tdefg"), 8), vec![1,2,8,9,10,11,12]);
+        assert_eq!(accumulate_text_width(&to_chars(&"ab中\te国g"), 8), vec![1,2,4,8,9,11,12]);
     }
 
     #[test]
     fn test_reshape_string() {
-        // show all
-        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         12, 0, 1, 8),
-                   ("0123456789".to_string().chars().collect::<Vec<char>>(), 0));
-
-        // both ellipsis
-        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 0, 5, 6),
-                   ("..45..".to_string().chars().collect::<Vec<char>>(), 2));
-
-        // left fixed
-        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 0, 3, 4),
-                   ("0123..".to_string().chars().collect::<Vec<char>>(), 0));
-
-        // right fixed
-        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 0, 6, 7),
-                   ("..6789".to_string().chars().collect::<Vec<char>>(), 4));
-
-        // right fixed because the remaining is short
-        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 0, 1, 8),
-                   ("..6789".to_string().chars().collect::<Vec<char>>(), 4));
-
-        // text start pos
-        assert_eq!(super::reshape_string(&"0123456789".to_string().chars().collect::<Vec<char>>(),
-                                         6, 2, 3, 5),
-                   ("2345..".to_string().chars().collect::<Vec<char>>(), 2));
-
+        // no match, left fixed to 0
+        assert_eq!(reshape_string(&to_chars(&"abc"), 10, 0, 0, 8)
+                   , (0, 3));
+        assert_eq!(reshape_string(&to_chars(&"a\tbc"), 8, 0, 0, 8)
+                   , (0, 10));
+        assert_eq!(reshape_string(&to_chars(&"a\tb\tc"), 10, 0, 0, 8)
+                   , (0, 17));
+        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc"), 8, 0, 0, 8)
+                   , (0, 17));
+        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc012345"), 8, 0, 0, 8)
+                   , (0, 23));
     }
 }
