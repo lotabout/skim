@@ -495,7 +495,7 @@ impl Model {
             item_cursor = max(item_cursor, 0);
             line_cursor = 0;
         } else {
-            line_cursor = min(line_cursor, item_len-1 - item_cursor);
+            line_cursor = max(0, min(line_cursor, item_len-1 - item_cursor));
         }
 
         self.item_cursor = item_cursor as usize;
