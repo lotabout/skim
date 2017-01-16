@@ -58,21 +58,17 @@ impl ReaderOption {
 
         if let Some(transform_fields) = options.opt_str("with-nth") {
             self.transform_fields = transform_fields.split(',')
-                .map(|string| {
+                .filter_map(|string| {
                     parse_range(string)
                 })
-                .filter(|range| range.is_some())
-                .map(|range| range.unwrap())
                 .collect();
         }
 
         if let Some(matching_fields) = options.opt_str("nth") {
             self.matching_fields = matching_fields.split(',')
-                .map(|string| {
+                .filter_map(|string| {
                     parse_range(string)
                 })
-                .filter(|range| range.is_some())
-                .map(|range| range.unwrap())
                 .collect();
         }
     }
