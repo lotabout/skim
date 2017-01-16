@@ -154,6 +154,7 @@ try
   endif
 
   let lines = tmux ? s:execute_tmux(dict, command, temps) : s:execute(dict, command, temps)
+  redraw!
   call s:callback(dict, lines)
   return lines
 finally
@@ -256,7 +257,6 @@ function! s:execute(dict, command, temps) abort
     let command = escaped
   endif
   execute 'silent !'.command
-  redraw!
   return s:exit_handler(v:shell_error, command) ? s:collect(a:temps) : []
 endfunction
 
@@ -268,7 +268,6 @@ function! s:execute_tmux(dict, command, temps) abort
   endif
 
   call system(command)
-  redraw!
   return s:exit_handler(v:shell_error, command) ? s:collect(a:temps) : []
 endfunction
 
