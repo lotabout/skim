@@ -16,7 +16,6 @@ const PENALTY_LEADING: i64 = -6; // penalty applied for every letter before the 
 const PENALTY_MAX_LEADING: i64 = -18; // maxing penalty for leading letters
 const PENALTY_UNMATCHED: i64 = -2;
 
-use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);

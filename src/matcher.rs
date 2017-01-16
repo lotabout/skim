@@ -6,7 +6,6 @@ use std::thread;
 
 use getopts;
 use score;
-use std::io::Write;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;

@@ -10,7 +10,6 @@ use std::borrow::Cow;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
 
-use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);

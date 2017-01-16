@@ -7,12 +7,10 @@ use orderedvec::OrderedVec;
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use curses::{ColorTheme, Curses};
 use curses::*;
 use curses;
 use getopts;
 
-use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);

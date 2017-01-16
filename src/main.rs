@@ -32,7 +32,6 @@ use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::Curses;
 
-use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
