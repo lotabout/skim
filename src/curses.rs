@@ -4,7 +4,7 @@
 use ncurses::*;
 use std::sync::RwLock;
 use std::collections::HashMap;
-use libc::{STDIN_FILENO, STDERR_FILENO, fdopen};
+use libc::{STDIN_FILENO, STDERR_FILENO, fdopen, c_char};
 
 use std::io::Write;
 macro_rules! println_stderr(
@@ -110,8 +110,8 @@ impl Curses {
     pub fn new() -> Self {
         let local_conf = LcCategory::all;
         setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
-        let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const i8)};
-        let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const i8)};
+        let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const c_char)};
+        let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const c_char)};
         let screen = newterm(None, stderr, stdin);
         set_term(screen);
         //let screen = initscr();
