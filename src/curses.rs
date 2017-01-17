@@ -184,11 +184,11 @@ impl Curses {
     }
 
     pub fn attr_on(&self, attr: attr_t) {
-        attron(attr);
-    }
-
-    pub fn attr_off(&self, attr: attr_t) {
-        attroff(attr);
+        if attr == 0 {
+            attrset(0);
+        } else {
+            attron(attr);
+        }
     }
 
     pub fn refresh(&self) {

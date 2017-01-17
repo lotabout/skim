@@ -60,7 +60,7 @@ fn interpret_code(code: &str) -> Option<attr_t> {
 
     let code = &code[2..code.len()-1]; // ^[[1;30;40m -> 1;30;40
     if code.is_empty() {
-        return None;
+        return Some(A_NORMAL());
     }
 
     for num in code.split(';').map(|x| x.parse::<i16>()) {

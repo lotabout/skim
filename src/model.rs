@@ -11,6 +11,7 @@ use curses::*;
 use curses;
 use getopts;
 
+use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -389,32 +390,32 @@ impl Model {
                     .hscroll_offset(self.hscroll_offset)
                     .build();
 
-                let mut last_attr = 0;
                 let mut matched_indics_iter = matched_indics.iter().peekable();
                 let mut ansi_states = item.get_ansi_states().iter().peekable();
 
-                for (idx, &ch) in text.iter().enumerate() {
+                for (ch_idx, &ch) in text.iter().enumerate() {
                     match matched_indics_iter.peek() {
-                        Some(&&index) if idx == index => {
+                        Some(&&match_idx) if ch_idx == match_idx => {
                             printer.print_char(curses, ch, COLOR_MATCHED, is_current);
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
-                            match ansi_states.peek() {
-                                Some(&&(index, attr)) if idx == index => {
-                                    // print ansi color codes.
-                                    curses.attr_off(last_attr);
+                            // print ansi color codes.
+                            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
+                                if ch_idx == ansi_idx {
                                     curses.attr_on(attr);
-                                    last_attr = attr;
                                     let _ = ansi_states.next();
+                                } else if ch_idx > ansi_idx {
+                                    let _ = ansi_states.next();
+                                } else {
+                                    break;
                                 }
-                                Some(_) | None => {}
                             }
                             printer.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                         }
                     }
                 }
-                curses.attr_off(last_attr);
+                curses.attr_on(0);
             }
 
             Some(MatchedRange::Range(match_start, match_end)) => {
@@ -432,27 +433,27 @@ impl Model {
                     .build();
 
 
-                let mut last_attr = 0;
                 let mut ansi_states = item.get_ansi_states().iter().peekable();
 
-                for (idx, &ch) in text.iter().enumerate() {
-                    if idx >= match_start && idx < match_end {
+                for (ch_idx, &ch) in text.iter().enumerate() {
+                    if ch_idx >= match_start && ch_idx < match_end {
                         printer.print_char(curses, ch, COLOR_MATCHED, is_current);
                     } else {
-                        match ansi_states.peek() {
-                            Some(&&(index, attr)) if idx == index => {
-                                // print ansi color codes.
-                                curses.attr_off(last_attr);
+                        // print ansi color codes.
+                        while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
+                            if ch_idx == ansi_idx {
                                 curses.attr_on(attr);
-                                last_attr = attr;
                                 let _ = ansi_states.next();
+                            } else if ch_idx > ansi_idx {
+                                let _ = ansi_states.next();
+                            } else {
+                                break;
                             }
-                            Some(_) | None => {}
                         }
                         printer.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
                     }
                 }
-                curses.attr_off(last_attr);
+                curses.attr_on(0);
             }
 
             _ => {
