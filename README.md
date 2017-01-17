@@ -2,14 +2,14 @@
 
 > Life is short, skim!
 
-Half of our lives is spent on navigation: files, lines, commands... You need
+Half of our life is spent on navigation: files, lines, commands... You need
 skim! It is a general fuzzy finder that saves you time.
 
 It is blazingly fast as it reads the data source asynchronously.
 
 ![skim demo](https://cloud.githubusercontent.com/assets/1527040/21603846/09138f6e-d1db-11e6-9466-711cc5b1ead8.gif)
 
-skim provides a single executable: `sk`, basically anywhere you want to use
+skim provides a single executable: `sk`, basically anywhere you would want to use
 `grep` try `sk` instead.
 
 # Installation
@@ -29,24 +29,24 @@ git clone --depth 1 git@github.com:lotabout/skim.git ~/.skim
 ~/.skim/install
 ```
 
-Next: add `~/.skim/bin` into your PATH by putting the following line into your `~/.bashrc`
+Next: add `~/.skim/bin` to your PATH by putting the following line into your `~/.bashrc`
 
 ```
 export PATH="$PATH:$HOME/.skim/bin"
 ```
 
-As an alternative, you can directly [download sk
+As an alternative, you can directly [download the sk
 executable](https://github.com/lotabout/skim/releases), but extra utilities are recommended.
 
 ## OSX
 
-Use Homebrew:
+Using Homebrew:
 
 ```
 brew install sbdchd/skim/skim
 ```
 
-But the Linux way described above also works.
+But the Linux way described above will also work.
 
 ## Install as vim plugin
 Once you have cloned the repository, add the following line to your .vimrc.
@@ -63,13 +63,13 @@ Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
 
 ## Build Manually
 
-Current requires nightly rust to build. clone the repo and run:
+Current requires nightly rust to build. Clone the repo and run:
 
 ```
 cargo build --release
 ```
 
-and put the resulting `target/release/sk` executable on your PATH.
+then put the resulting `target/release/sk` executable on your PATH.
 
 # Usage
 
@@ -92,9 +92,9 @@ the ones you selected in vim.
 
 ## As Interactive Interface
 
-`skim` can invoke other commands dynamically. Normally you would like to integrate it with
+`skim` can invoke other commands dynamically. Normally you would want to integrate it with
 [ag](https://github.com/ggreer/the_silver_searcher) or [ack](https://github.com/petdance/ack2) for
-search contents in a project directory:
+searching contents in a project directory:
 
 ```
 sk --ansi -i -c 'ag --color "{}"'
@@ -106,7 +106,7 @@ sk --ansi -i -c 'ag --color "{}"'
 
 Some common used keybindings.
 
-| key               | Action                                     |
+| Key               | Action                                     |
 |------------------:|--------------------------------------------|
 | Enter             | Accept (select current one and quit)       |
 | ESC/Ctrl-G/Ctrl-Q | Abort                                      |
@@ -123,12 +123,12 @@ Some common used keybindings.
 |----------|----------------------------|-----------------------------------|
 | `text`   | fuzzy-match                | items that match `text`           |
 | `^music` | prefix-exact-match         | items that start with `music`     |
-| `.mp3$`  | suffix-exact-match         | items that ends with `.mp3`       |
+| `.mp3$`  | suffix-exact-match         | items that end with `.mp3`        |
 | `'wild`  | exact-match (quoted)       | items that include `wild`         |
 | `!fire`  | inverse-exact-match        | items that do not include `fire`  |
 | `!.mp3$` | inverse-suffix-exact-match | items that do not end with `.mp3` |
 
-In case that you want to use regular expression, `skim` provide `regex` mode:
+In case that you want to use regular expressions, `skim` provide `regex` mode:
 
 ```
 sk --regex
@@ -193,14 +193,14 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 
 ## Sort criterion
 
-There are 4 information about a match: `score, index, begin, end`, you can
-specify how the records are sort by `sk --tiebreak score,index,-begin` or any
-other you want.
+There are four sort keys for results: `score, index, begin, end`, you can
+specify how the records are sorted by `sk --tiebreak score,index,-begin` or any
+other order you want.
 
 ## Color Scheme
 
-It is a hight chance that you are a better artist than me. Luckily you won't
-be stuck in the default colors, `skim` support customization of color scheme.
+It is a high chance that you are a better artist than me. Luckily you won't
+be stuck with the default colors, `skim` supports customization of the color scheme.
 
 ```
 --color=[BASE_SCHEME][,COLOR:ANSI]
@@ -215,7 +215,7 @@ sk --color=current_bg:24
 sk --color=light,fg:232,bg:255,current_bg:116,info:27
 ```
 
-You can choose the `BASE SCHEME` among the followings(default: dark on
+You can choose the `BASE SCHEME` among the following(default: dark on
 256-color terminal, otherwise 16):
 
 
@@ -252,7 +252,7 @@ While the customisable `COLOR`s are
 ## Interactive mode
 
 In interactive mode, `sk` will pass the query to the command you specified and
-present the output to you. You can specify the command by `-c` option:
+present the output to you. You can specify the command using the `-c` option:
 
 `sk -i -c 'ag --color "{}"'`
 
@@ -264,7 +264,7 @@ want.
 
 Normally only plugin users need to understand this.
 
-For example, you got the data source as the format:
+For example, you have the data source with the format:
 
 ```
 <filename>:<line number>:<column number>
@@ -290,19 +290,19 @@ Also you can use `--with-nth` to re-arrange the order of fields.
 ## Difference to fzf
 
 [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder written
-in Go and [skim](https://github.com/lotabout/skim) trys to implement a new one
+in Go and [skim](https://github.com/lotabout/skim) tries to implement a new one
 in Rust!
 
-This project is written from scratch. Some decisions of impelmentation are
+This project is written from scratch. Some decisions of implementation are
 different from fzf. For example:
 
 1. The fuzzy search algorithm is different.
 2. UI of showing matched items. `fzf` will show only the range matched while
    `skim` will show each character matched.
-3. `skim` have interactive mode.
+3. `skim` has an interactive mode.
 4. `skim`'s range syntax is git style.
 
 ## How to contribute
 
 [Create new issues](https://github.com/lotabout/skim/issues/new) if you meet any bugs
-or have any ideas. Pull request is warmly welcome.
+or have any ideas. Pull requests are warmly welcomed.
