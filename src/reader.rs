@@ -13,7 +13,6 @@ use std::time::Duration;
 use std::collections::HashMap;
 use std::mem;
 
-use std::io::Write;
 use getopts;
 use regex::Regex;
 use sender::CachedSender;
