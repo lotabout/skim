@@ -115,9 +115,7 @@ impl Matcher {
 
                         matcher_engine.as_ref().map(|mat| {
                             let matched_items: MatchedItemGroup = items.into_iter()
-                                .map(|item| mat.match_item(item))
-                                .filter(Option::is_some)
-                                .map(|item| item.unwrap())
+                                .filter_map(|item| mat.match_item(item))
                                 .collect();
                             let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
                         });
