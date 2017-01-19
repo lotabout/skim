@@ -63,7 +63,7 @@ Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
 
 ## Build Manually
 
-Current requires nightly rust to build. Clone the repo and run:
+Clone the repo and run:
 
 ```
 cargo build --release

@@ -8,6 +8,7 @@ use std::fs::File;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::Duration;
+use utf8parse;
 
 use event::{Event, EventArg, parse_action};
 
@@ -93,6 +94,30 @@ impl Input {
     }
 }
 
+// check https://github.com/rust-lang/rust/issues/27802#issuecomment-270555935
+struct SimpleUtf8Receiver {
+    tx: Sender<char>,
+}
+
+impl SimpleUtf8Receiver {
+    pub fn new(tx: Sender<char>) -> Self {
+        SimpleUtf8Receiver {
+            tx: tx,
+        }
+    }
+}
+
+impl utf8parse::Receiver for SimpleUtf8Receiver {
+    fn codepoint(&mut self, ch: char) {
+        self.tx.send(ch);
+    }
+
+    fn invalid_sequence(&mut self) {
+        // ignore it
+    }
+}
+
+
 struct KeyBoard {
     rx: Receiver<char>,
     buf: VecDeque<char>,
@@ -102,10 +127,10 @@ impl KeyBoard {
     pub fn new(f: File) -> Self {
         let (tx, rx) = channel();
         thread::spawn(move || {
-            for ch in f.chars() {
-                if ch.is_ok() {
-                    let _ = tx.send(ch.unwrap());
-                }
+            let mut utf8_receiver = SimpleUtf8Receiver::new(tx);
+            let mut utf8_parser = utf8parse::Parser::new();
+            for byte in f.bytes() {
+                utf8_parser.advance(&mut utf8_receiver, byte.unwrap());
             }
         });
 
