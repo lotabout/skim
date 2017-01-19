@@ -2,21 +2,28 @@
 name = "skim"
 version = "0.2.1-beta.2"
 authors = ["Mark Wallace <lotabout@gmail.com>"]
+description = "Fuzzy Finder in rust!"
+documentation = "https://github.com/lotabout/skim"
+homepage = "https://github.com/lotabout/skim"
+repository = "https://github.com/lotabout/skim"
+readme  = "README.md"
+keywords = ["fuzzy", "menu", "util"]
+license = "MIT"
 
 [[bin]]
 name = "sk"
 
 [dependencies]
-libc = "*"
+libc = "0.2.20"
 getopts = "0.2"
 regex = "0.2"
 lazy_static = "0.2.1"
-clippy = {version = "*", optional = true}
+clippy = {version = "0.0.108", optional = true}
 shlex = "0.1.1"
 utf8parse = "0.1.0"
 
 [dependencies.ncurses]
-version = "*"
+version = "5.85.0"
 features = ["wide"]
 
 [features]
