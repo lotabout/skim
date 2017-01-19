@@ -109,7 +109,7 @@ impl SimpleUtf8Receiver {
 
 impl utf8parse::Receiver for SimpleUtf8Receiver {
     fn codepoint(&mut self, ch: char) {
-        self.tx.send(ch);
+        let _ = self.tx.send(ch);
     }
 
     fn invalid_sequence(&mut self) {

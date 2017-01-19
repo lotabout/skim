@@ -10,7 +10,7 @@ use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use std::io::Write;
+//use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
