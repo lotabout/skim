@@ -9,7 +9,7 @@ name = "sk"
 [dependencies]
 libc = "*"
 getopts = "0.2"
-regex = "0.1"
+regex = "0.2"
 lazy_static = "0.2.1"
 clippy = {version = "*", optional = true}
 shlex = "0.1.1"

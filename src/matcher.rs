@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use event::{Event, EventArg};
 use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
@@ -10,6 +10,7 @@ use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use std::io::Write;
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -17,10 +18,14 @@ macro_rules! println_stderr(
     } }
 );
 
-#[derive(Clone, Copy)]
+lazy_static! {
+    static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End]);
+    static ref RE_AND: Regex = Regex::new(r"([^ |]+( +\| +[^ |]*)+)|( +)").unwrap();
+    static ref RE_OR: Regex = Regex::new(r" +\| +").unwrap();
+}
+
+#[derive(Clone, Copy, Debug)]
 enum Algorithm {
-    Fuzzy,
-    Regex,
     PrefixExact,
     SuffixExact,
     Exact,
@@ -31,13 +36,13 @@ enum Algorithm {
 #[derive(Clone, Copy, PartialEq)]
 enum MatcherMode {
     Regex,
+    Plain,
+    Fuzzy,
     Exact,
-    FUZZY,
 }
 
 pub struct Matcher {
     tx_result: Sender<(Event, EventArg)>,
-    rank_criterion: Vec<RankCriteria>,
     mode: MatcherMode,
 }
 
@@ -45,8 +50,7 @@ impl Matcher {
     pub fn new(tx_result: Sender<(Event, EventArg)>) -> Self {
         Matcher {
             tx_result: tx_result,
-            rank_criterion: vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End],
-            mode: MatcherMode::FUZZY,
+            mode: MatcherMode::Fuzzy,
         }
     }
 
@@ -58,7 +62,7 @@ impl Matcher {
                     vec.push(c);
                 }
             }
-            self.rank_criterion = vec;
+            *RANK_CRITERION.write().unwrap() = vec;
         }
 
         if options.opt_present("exact") {
@@ -98,7 +102,7 @@ impl Matcher {
             });
         }
 
-        let mut matcher_engine: Option<MatchingEngine> = None;
+        let mut matcher_engine: Option<Box<MatchEngine>> = None;
         let mut num_processed: usize = 0;
         loop {
 
@@ -143,9 +147,7 @@ impl Matcher {
                         // notifiy the model that the query had been changed
                         let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
 
-                        matcher_engine = Some(MatchingEngine::builder(&query, self.mode)
-                                              .rank(&self.rank_criterion)
-                                              .build());
+                        matcher_engine = Some(EngineFactory::build(&query, self.mode));
                     }
 
                     _ => {}
@@ -156,67 +158,217 @@ impl Matcher {
 
 }
 
-// <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
-type ExactFilter = Box<Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
-
-struct MatchingEngine<'a> {
-    query: String,
-    query_chars: Vec<char>,
-    query_lower_chars: Vec<char>,
-    query_regex: Option<Regex>,
-    rank_criterion: Option<&'a [RankCriteria]>,
-    algorithm: Algorithm
+// A match engine will execute the matching algorithm
+trait MatchEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem>;
+    fn display(&self) -> String;
 }
 
-impl<'a> MatchingEngine<'a> {
-    pub fn builder(query: &str, mode: MatcherMode) -> Self {
-        let (algo, query) = if mode == MatcherMode::Regex {
-            (Algorithm::Regex, query)
-        } else if query.starts_with('\'') {
-            if mode == MatcherMode::Exact {
-                (Algorithm::Fuzzy, &query[1..])
-            } else {
-                (Algorithm::Exact, &query[1..])
-            }
-        } else if query.starts_with('^') {
-            (Algorithm::PrefixExact, &query[1..])
-        } else if query.starts_with('!') {
-            if query.ends_with('$') {
-                (Algorithm::InverseSuffixExact, &query[1..(query.len()-1)])
-            } else {
-                (Algorithm::InverseExact, &query[1..])
-            }
-        } else if query.ends_with('$') {
-            (Algorithm::SuffixExact, &query[..(query.len()-1)])
-        } else if mode == MatcherMode::Exact {
-            (Algorithm::Exact, query)
-        } else {
-            (Algorithm::Fuzzy, query)
-        };
+fn build_rank(score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
+    let mut rank = [0; 4];
+    for (idx, criteria) in (*RANK_CRITERION.read().unwrap()).iter().enumerate().take(4) {
+        rank[idx] = match *criteria {
+            RankCriteria::Score    => score,
+            RankCriteria::Index    => index,
+            RankCriteria::Begin    => begin,
+            RankCriteria::End      => end,
+            RankCriteria::NegScore => -score,
+            RankCriteria::NegIndex => -index,
+            RankCriteria::NegBegin => -begin,
+            RankCriteria::NegEnd   => -end,
+        }
+    }
+    rank
+}
 
-        MatchingEngine {
-            query: query.to_string(),
-            query_chars: query.chars().collect(),
-            query_lower_chars: query.to_lowercase().chars().collect(),
+
+//------------------------------------------------------------------------------
+// Regular Expression engine
+#[derive(Debug)]
+struct RegexEngine {
+    query_regex: Option<Regex>,
+}
+
+impl RegexEngine {
+    pub fn builder(query: &str) -> Self {
+        RegexEngine {
             query_regex:  Regex::new(query).ok(),
-            rank_criterion: None,
-            algorithm: algo,
         }
     }
 
-    pub fn rank(mut self, rank: &'a [RankCriteria]) -> Self {
-        self.rank_criterion = Some(rank);
+    pub fn build(self) -> Self {
         self
+    }
+}
+
+impl MatchEngine for RegexEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        let mut matched_result = None;
+        for &(start, end) in item.get_matching_ranges() {
+            if self.query_regex.is_none() {
+                matched_result = Some((0, 0));
+                break;
+            }
+
+            let source: String = item.get_lower_chars()[start .. end].iter().cloned().collect();
+            matched_result = score::regex_match(&source, &self.query_regex)
+                .map(|(s, e)| (s+start, e+start));
+
+            if matched_result.is_some() {
+                break;
+            }
+        }
+
+        if matched_result.is_none() {
+            return None;
+        }
+
+        let (begin, end) = matched_result.unwrap();
+        let score = (end - begin) as i64;
+        let rank = build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
+
+        Some(MatchedItem::builder(item)
+             .rank(rank)
+             .matched_range(MatchedRange::Range(begin, end))
+             .build())
+    }
+
+    fn display(&self) -> String {
+        format!("(Regex: {})", self.query_regex.as_ref().map_or("".to_string(), |re| re.as_str().to_string()))
+    }
+}
+
+//------------------------------------------------------------------------------
+// Fuzzy engine
+#[derive(Debug)]
+struct FuzzyEngine {
+    query: String,
+    query_chars: Vec<char>,
+    query_lower_chars: Vec<char>,
+}
+
+impl FuzzyEngine {
+    pub fn builder(query: &str) -> Self {
+        FuzzyEngine {
+            query: query.to_string(),
+            query_chars: query.chars().collect(),
+            query_lower_chars: query.to_lowercase().chars().collect(),
+        }
+    }
+
+    pub fn build(self) -> Self {
+        self
+    }
+}
+
+impl MatchEngine for FuzzyEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        // iterate over all matching fields:
+        let mut matched_result = None;
+        for &(start, end) in item.get_matching_ranges() {
+            let source = &item.get_lower_chars()[start .. end];
+
+            matched_result = score::fuzzy_match(source, &self.query_chars, &self.query_lower_chars)
+                .map(|(s, vec)| {
+                    if start != 0 {
+                        (s, vec.iter().map(|x| x + start).collect())
+                    } else {
+                        (s, vec)
+                    }
+                });
+
+            if matched_result.is_some() {
+                break;
+            }
+        }
+
+        if matched_result == None {
+            return None;
+        }
+
+        let (score, matched_range) = matched_result.unwrap();
+
+        let begin = *matched_range.get(0).unwrap_or(&0) as i64;
+        let end = *matched_range.last().unwrap_or(&0) as i64;
+
+        let rank = build_rank(-score, item.get_index() as i64, begin, end);
+
+        Some(MatchedItem::builder(item)
+             .rank(rank)
+             .matched_range(MatchedRange::Chars(matched_range))
+             .build())
+    }
+
+    fn display(&self) -> String {
+        format!("(Fuzzy: {})", self.query)
+    }
+}
+
+//------------------------------------------------------------------------------
+// Exact engine
+#[derive(Debug)]
+struct ExactEngine {
+    query: String,
+    query_chars: Vec<char>,
+    query_lower_chars: Vec<char>,
+    algorithm: Algorithm,
+}
+
+impl ExactEngine {
+    pub fn builder(query: &str, algo: Algorithm) -> Self {
+        ExactEngine {
+            query: query.to_string(),
+            query_chars: query.chars().collect(),
+            query_lower_chars: query.to_lowercase().chars().collect(),
+            algorithm: algo,
+        }
     }
 
     pub fn build(self) -> Self {
         self
     }
 
-    pub fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item_exact(&self, item: Arc<Item>, filter: ExactFilter) -> Option<MatchedItem>{
+        let mut matched_result = None;
+        let mut range_start = 0;
+        let mut range_end = 0;
+        for &(start, end) in item.get_matching_ranges() {
+            if self.query == "" {
+                matched_result = Some(((0, 0), (0, 0)));
+                break;
+            }
+
+            let chars: Vec<_> = item.get_text().chars().collect();
+            let source: String = chars[start .. end].iter().cloned().collect();
+            matched_result = score::exact_match(&source, &self.query);
+
+            if matched_result.is_some() {
+                range_start = start;
+                range_end = end;
+                break;
+            }
+        }
+
+        let result_range = filter(&matched_result, range_end - range_start);
+        if result_range.is_none() {return None;}
+
+        let (begin, end) = result_range.map(|(s, e)| (s + range_start, e + range_start)).unwrap();
+        let score = (end - begin) as i64;
+        let rank = build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
+
+        Some(MatchedItem::builder(item)
+             .rank(rank)
+             .matched_range(MatchedRange::Range(begin, end))
+             .build())
+    }
+}
+
+// <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
+type ExactFilter = Box<Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
+
+impl MatchEngine for ExactEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
         match self.algorithm {
-            Algorithm::Fuzzy => self.match_item_fuzzy(item),
-            Algorithm::Regex => self.match_item_regex(item),
             Algorithm::Exact => {
                 self.match_item_exact(item, Box::new(|matched_result, _| {
                     matched_result.map(|(first, _)| first)
@@ -254,128 +406,179 @@ impl<'a> MatchingEngine<'a> {
         }
     }
 
-    fn build_rank(&self, score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
-        self.rank_criterion.map(|criterion| {
-            let mut rank = [0; 4];
-            for (idx, criteria) in criterion.iter().enumerate().take(4) {
-                rank[idx] = match *criteria {
-                    RankCriteria::Score    => score,
-                    RankCriteria::Index    => index,
-                    RankCriteria::Begin    => begin,
-                    RankCriteria::End      => end,
-                    RankCriteria::NegScore => -score,
-                    RankCriteria::NegIndex => -index,
-                    RankCriteria::NegBegin => -begin,
-                    RankCriteria::NegEnd   => -end,
-                }
-            }
-            rank
-        }).unwrap_or([0; 4])
-    }
-
-    fn match_item_regex(&self, item: Arc<Item>) -> Option<MatchedItem> {
-        let mut matched_result = None;
-        for &(start, end) in item.get_matching_ranges() {
-            if self.query == "" {
-                matched_result = Some((0, 0));
-                break;
-            }
-
-            let source: String = item.get_lower_chars()[start .. end].iter().cloned().collect();
-            matched_result = score::regex_match(&source, &self.query_regex)
-                .map(|(s, e)| (s+start, e+start));
-
-            if matched_result.is_some() {
-                break;
-            }
-        }
-
-        if matched_result.is_none() {
-            return None;
-        }
-
-        let (begin, end) = matched_result.unwrap();
-        let score = (end - begin) as i64;
-        let rank = self.build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
-
-        Some(MatchedItem::builder(item)
-             .rank(rank)
-             .matched_range(MatchedRange::Range(begin, end))
-             .build())
-    }
-
-    fn match_item_fuzzy(&self, item: Arc<Item>) -> Option<MatchedItem> {
-        // iterate over all matching fields:
-        let mut matched_result = None;
-        for &(start, end) in item.get_matching_ranges() {
-            let source = &item.get_lower_chars()[start .. end];
-
-            matched_result = score::fuzzy_match(source, &self.query_chars, &self.query_lower_chars)
-                .map(|(s, vec)| {
-                    if start != 0 {
-                        (s, vec.iter().map(|x| x + start).collect())
-                    } else {
-                        (s, vec)
-                    }
-                });
-
-            if matched_result.is_some() {
-                break;
-            }
-        }
-
-        if matched_result == None {
-            return None;
-        }
-
-        let (score, matched_range) = matched_result.unwrap();
-
-        let begin = *matched_range.get(0).unwrap_or(&0) as i64;
-        let end = *matched_range.last().unwrap_or(&0) as i64;
-
-        let rank = self.build_rank(-score, item.get_index() as i64, begin, end);
-
-        Some(MatchedItem::builder(item)
-             .rank(rank)
-             .matched_range(MatchedRange::Chars(matched_range))
-             .build())
-    }
-
-    fn match_item_exact(&self, item: Arc<Item>, filter: ExactFilter) -> Option<MatchedItem>{
-        let mut matched_result = None;
-        let mut range_start = 0;
-        let mut range_end = 0;
-        for &(start, end) in item.get_matching_ranges() {
-            if self.query == "" {
-                matched_result = Some(((0, 0), (0, 0)));
-                break;
-            }
-
-            let chars: Vec<_> = item.get_text().chars().collect();
-            let source: String = chars[start .. end].iter().cloned().collect();
-            matched_result = score::exact_match(&source, &self.query);
-
-            if matched_result.is_some() {
-                range_start = start;
-                range_end = end;
-                break;
-            }
-        }
-
-        let result_range = filter(&matched_result, range_end - range_start);
-        if result_range.is_none() {return None;}
-
-        let (begin, end) = result_range.map(|(s, e)| (s + range_start, e + range_start)).unwrap();
-        let score = (end - begin) as i64;
-        let rank = self.build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
-
-        Some(MatchedItem::builder(item)
-             .rank(rank)
-             .matched_range(MatchedRange::Range(begin, end))
-             .build())
+    fn display(&self) -> String {
+        format!("({:?}: {})", self.algorithm, self.query)
     }
 }
 
+//------------------------------------------------------------------------------
+// OrEngine, a combinator
+struct OrEngine {
+    engines: Vec<Box<MatchEngine>>,
+}
+
+impl OrEngine {
+    pub fn builder(query: &str, mode: MatcherMode) -> Self {
+        // mock
+        OrEngine {
+            engines: RE_OR.split(query).map(|q| EngineFactory::build(q, mode)).collect(),
+        }
+    }
+
+    pub fn build(self) -> Self {
+        self
+    }
+}
+
+impl MatchEngine for OrEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        for engine in self.engines.iter() {
+            let result = engine.match_item(item.clone());
+            if result.is_some() {
+                return result;
+            }
+        }
+
+        None
+    }
+
+    fn display(&self) -> String {
+        format!("(Or: {})", self.engines.iter().map(|e| e.display()).collect::<Vec<_>>().join(", "))
+    }
+}
+
+//------------------------------------------------------------------------------
+// AndEngine, a combinator
+struct AndEngine {
+    engines: Vec<Box<MatchEngine>>,
+}
+
+impl AndEngine {
+    pub fn builder(query: &str, mode: MatcherMode) -> Self {
+        let query_trim = query.trim_matches(|c| c == ' ' || c == '|');
+        let mut engines = vec![];
+        let mut last = 0;
+        for mat in RE_AND.find_iter(query_trim) {
+            let (start, end) = (mat.start(), mat.end());
+            let term = &query_trim[last..start].trim_matches(|c| c == ' ' || c == '|');
+            if !term.is_empty() {
+                engines.push(EngineFactory::build(term, mode));
+            }
+
+            if !mat.as_str().trim().is_empty() {
+                engines.push(Box::new(OrEngine::builder(mat.as_str().trim(), mode).build()));
+            }
+            last = end;
+        }
+
+        let term = &query_trim[last..].trim_matches(|c| c == ' ' || c == '|');;
+        if !term.is_empty() {
+            engines.push(EngineFactory::build(term, mode));
+        }
+
+        AndEngine {
+            engines: engines,
+        }
+    }
+
+    pub fn build(self) -> Self {
+        self
+    }
+
+    fn merge_matched_items(&self, mut items: Vec<MatchedItem>) -> MatchedItem {
+        items.sort();
+        let rank = items[0].rank;
+        let item = items[0].item.clone();
+        let mut ranges = vec![];
+        for item in items.into_iter() {
+            match item.matched_range {
+                Some(MatchedRange::Range(start, end)) => {
+                    ranges.extend((start..end).into_iter());
+                }
+                Some(MatchedRange::Chars(vec)) => {
+                    ranges.extend(vec.iter());
+                }
+                _ => {}
+            }
+        }
+
+        ranges.sort();
+        ranges.dedup();
+        MatchedItem::builder(item)
+            .rank(rank)
+            .matched_range(MatchedRange::Chars(ranges))
+            .build()
+    }
+}
+
+impl MatchEngine for AndEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        // mock
+        let mut results = vec![];
+        for engine in self.engines.iter() {
+            let result = engine.match_item(item.clone());
+            if result.is_none() {
+                return None;
+            } else {
+                results.push(result.unwrap());
+            }
+        }
+
+        if results.is_empty() {
+            None
+        } else {
+            Some(self.merge_matched_items(results))
+        }
+    }
+
+    fn display(&self) -> String {
+        format!("(And: {})", self.engines.iter().map(|e| e.display()).collect::<Vec<_>>().join(", "))
+    }
+}
+
+//------------------------------------------------------------------------------
+struct EngineFactory {}
+impl EngineFactory {
+    pub fn build(query: &str, mode: MatcherMode) -> Box<MatchEngine> {
+        match mode {
+            MatcherMode::Regex => Box::new(RegexEngine::builder(query).build()),
+            MatcherMode::Plain => Box::new(FuzzyEngine::builder(query).build()),
+            MatcherMode::Fuzzy | MatcherMode::Exact => {
+                if query.contains(" ") {
+                    Box::new(AndEngine::builder(query, mode).build())
+                } else {
+                    EngineFactory::build_single(query, mode)
+                }
+            }
+        }
+    }
+
+    fn build_single(query: &str, mode: MatcherMode) -> Box<MatchEngine> {
+        if query.starts_with('\'') {
+            if mode == MatcherMode::Exact {
+                Box::new(FuzzyEngine::builder(&query[1..]).build())
+            } else {
+                Box::new(ExactEngine::builder(&query[1..], Algorithm::Exact).build())
+            }
+        } else if query.starts_with('^') {
+            Box::new(ExactEngine::builder(&query[1..], Algorithm::PrefixExact).build())
+        } else if query.starts_with('!') {
+            if query.ends_with('$') {
+                Box::new(ExactEngine::builder(&query[1..(query.len()-1)], Algorithm::InverseSuffixExact).build())
+            } else {
+                Box::new(ExactEngine::builder(&query[1..], Algorithm::InverseExact).build())
+            }
+        } else if query.ends_with('$') {
+            Box::new(ExactEngine::builder(&query[..(query.len()-1)], Algorithm::SuffixExact).build())
+        } else if mode == MatcherMode::Exact {
+            Box::new(ExactEngine::builder(query, Algorithm::Exact).build())
+        } else {
+            Box::new(FuzzyEngine::builder(query).build())
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
 #[derive(Debug)]
 pub enum RankCriteria {
     Score,
@@ -399,5 +602,32 @@ pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
         "-begin" => Some(RankCriteria::NegBegin),
         "-end"   => Some(RankCriteria::NegEnd),
         _ => None,
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_engine_factory() {
+        let x1 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Fuzzy);
+        assert_eq!(x1.display(), "(And: (Or: (Exact: abc), (Fuzzy: def)), (PrefixExact: gh), (Or: (Fuzzy: ij), (Fuzzy: kl)), (Fuzzy: mn))");
+
+        let x2 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Plain);
+        assert_eq!(x2.display(), "(Fuzzy: 'abc | def ^gh ij | kl mn)");
+
+        let x3 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Regex);
+        assert_eq!(x3.display(), "(Regex: 'abc | def ^gh ij | kl mn)");
+
+        let x = EngineFactory::build("abc ", MatcherMode::Fuzzy);
+        assert_eq!(x.display(), "(And: (Fuzzy: abc))");
+
+        let x = EngineFactory::build("abc def", MatcherMode::Fuzzy);
+        assert_eq!(x.display(), "(And: (Fuzzy: abc), (Fuzzy: def))");
+
+        let x = EngineFactory::build("abc | def", MatcherMode::Fuzzy);
+        assert_eq!(x.display(), "(And: (Or: (Fuzzy: abc), (Fuzzy: def)))");
     }
 }

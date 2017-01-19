@@ -163,7 +163,9 @@ impl Clone for Item {
 }
 
 fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> String {
-    let mut ranges =  delimiter.find_iter(text).collect::<Vec<(usize, usize)>>();
+    let mut ranges =  delimiter.find_iter(text)
+        .map(|m| (m.start(), m.end()))
+        .collect::<Vec<(usize, usize)>>();
     let &(_, end) = ranges.last().unwrap_or(&(0, 0));
     ranges.push((end, text.len()));
 
@@ -179,7 +181,9 @@ fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) 
 }
 
 fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> Vec<(usize, usize)> {
-    let mut ranges =  delimiter.find_iter(text).collect::<Vec<(usize, usize)>>();
+    let mut ranges =  delimiter.find_iter(text)
+        .map(|m| (m.start(), m.end()))
+        .collect::<Vec<(usize, usize)>>();
     let &(_, end) = ranges.last().unwrap_or(&(0, 0));
     ranges.push((end, text.len()));
 

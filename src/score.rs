@@ -130,7 +130,8 @@ pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usiz
                 return None;
             }
 
-            let (start, end) = ret.unwrap();
+            let mat = ret.unwrap();
+            let (start, end) = (mat.start(), mat.end());
             let first = (&choice[0..start]).chars().count();
             let last = first + (&choice[start..end]).chars().count();
             Some((first, last))

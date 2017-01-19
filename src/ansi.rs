@@ -19,7 +19,7 @@ pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
     // Because ANSI color code can affect text of next lines. We will save the last attribute and
     // add it to the newest line if no new color is specified.
     match RE.find(text) {
-        Some((start, _)) if start == 0 => {}
+        Some(mat) if mat.start() == 0 => {}
         Some(_) | None => {
             last_attr.map(|attr| {
                 colors.push((0, attr));
@@ -29,7 +29,8 @@ pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
 
     let mut num_chars = 0;
     let mut last = 0;
-    for (start, end) in RE.find_iter(text) {
+    for mat in RE.find_iter(text) {
+        let (start, end) = (mat.start(), mat.end());
         strip_string.push_str(&text[last..start]);
         num_chars += (&text[last..start]).chars().count();
 
