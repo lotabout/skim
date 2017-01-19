@@ -144,7 +144,7 @@ fn real_main() -> i32 {
 
     // print version
     if options.opt_present("version") {
-        println!("0.2.1-beta.1");
+        println!("0.2.1-beta.2");
         return 0;
     }
 

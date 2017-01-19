@@ -1,6 +1,6 @@
 [root]
 name = "skim"
-version = "0.2.1-beta.1"
+version = "0.2.1-beta.2"
 dependencies = [
  "clippy 0.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "getopts 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
