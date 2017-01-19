@@ -138,7 +138,7 @@ impl Query {
 //------------------------------------------------------------------------------
 // Actions
 //
-    pub fn act_query_rotate_mode(&mut self) {
+    pub fn act_query_toggle_interactive(&mut self) {
         self.mode = match self.mode {
             QueryMode::QUERY => QueryMode::CMD,
             QueryMode::CMD   => QueryMode::QUERY,

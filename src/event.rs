@@ -17,6 +17,7 @@ pub enum Event {
     EvModelDrawInfo,
     EvModelNewItem,
     EvModelNotifyProcessed,
+    EvModelNotifyMatcherMode,
     EvModelRestart,
 
     EvReaderNewItem,
@@ -62,6 +63,7 @@ pub enum Event {
     EvActToggleAll,
     EvActToggleDown,
     EvActToggleIn,
+    EvActToggleInteractive,
     EvActToggleOut,
     EvActToggleSort,
     EvActToggleUp,
@@ -103,6 +105,7 @@ pub fn parse_action(action: &str) -> Option<Event> {
         "toggle-all"           =>   Some(Event::EvActToggleAll),
         "toggle-down"          =>   Some(Event::EvActToggleDown),
         "toggle-in"            =>   Some(Event::EvActToggleIn),
+        "toggle-interactive"   =>   Some(Event::EvActToggleInteractive),
         "toggle-out"           =>   Some(Event::EvActToggleOut),
         "toggle-sort"          =>   Some(Event::EvActToggleSort),
         "toggle-up"            =>   Some(Event::EvActToggleUp),

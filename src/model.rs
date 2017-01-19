@@ -44,6 +44,7 @@ pub struct Model {
     matcher_stopped: bool,
     num_read: usize,
     num_processed: usize,
+    matcher_mode: String,
     timer: Instant,
 }
 
@@ -69,6 +70,7 @@ impl Model {
             reader_stopped: false,
             matcher_stopped: false,
             timer: Instant::now(),
+            matcher_mode: "".to_string(),
             theme: ColorTheme::new(),
         }
     }
@@ -140,6 +142,10 @@ impl Model {
                             }
                         }
 
+                    }
+
+                    Event::EvModelNotifyMatcherMode => {
+                        self.matcher_mode = *arg.downcast().unwrap();
                     }
 
                     Event::EvMatcherStopped => {
@@ -331,6 +337,11 @@ impl Model {
 
         // display matched/total number
         curses.cprint(format!(" {}/{}", self.items.len(), self.num_read).as_ref(), COLOR_INFO, false);
+
+        // display the matcher mode
+        if !self.matcher_mode.is_empty() {
+            curses.cprint(format!("/{}", &self.matcher_mode).as_ref(), COLOR_INFO, false);
+        }
 
         // display the percentage of the number of processed items
         if self.num_processed < self.num_read {

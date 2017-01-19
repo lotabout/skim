@@ -36,7 +36,6 @@ enum Algorithm {
 #[derive(Clone, Copy, PartialEq)]
 enum MatcherMode {
     Regex,
-    Plain,
     Fuzzy,
     Exact,
 }
@@ -104,6 +103,7 @@ impl Matcher {
 
         let mut matcher_engine: Option<Box<MatchEngine>> = None;
         let mut num_processed: usize = 0;
+        let mut matcher_mode = self.mode;
         loop {
 
             if matcher_restart.load(Ordering::Relaxed) {
@@ -147,7 +147,31 @@ impl Matcher {
                         // notifiy the model that the query had been changed
                         let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
 
-                        matcher_engine = Some(EngineFactory::build(&query, self.mode));
+                        let mode_string = match matcher_mode {
+                            MatcherMode::Regex => "RE".to_string(),
+                            MatcherMode::Exact => "EX".to_string(),
+                            _ => "".to_string(),
+                        };
+                        let _ = self.tx_result.send((Event::EvModelNotifyMatcherMode, Box::new(mode_string)));
+
+                        matcher_engine = Some(EngineFactory::build(&query, matcher_mode));
+                    }
+
+                    Event::EvActRotateMode => {
+                        if self.mode == MatcherMode::Regex {
+                            // sk started with regex mode.
+                            matcher_mode = if matcher_mode == self.mode {
+                                MatcherMode::Fuzzy
+                            } else {
+                                MatcherMode::Regex
+                            };
+                        } else {
+                            matcher_mode = if matcher_mode == self.mode {
+                                MatcherMode::Regex
+                            } else {
+                                self.mode
+                            }
+                        }
                     }
 
                     _ => {}
@@ -542,7 +566,6 @@ impl EngineFactory {
     pub fn build(query: &str, mode: MatcherMode) -> Box<MatchEngine> {
         match mode {
             MatcherMode::Regex => Box::new(RegexEngine::builder(query).build()),
-            MatcherMode::Plain => Box::new(FuzzyEngine::builder(query).build()),
             MatcherMode::Fuzzy | MatcherMode::Exact => {
                 if query.contains(" ") {
                     Box::new(AndEngine::builder(query, mode).build())
@@ -614,9 +637,6 @@ mod test {
     fn test_engine_factory() {
         let x1 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Fuzzy);
         assert_eq!(x1.display(), "(And: (Or: (Exact: abc), (Fuzzy: def)), (PrefixExact: gh), (Or: (Fuzzy: ij), (Fuzzy: kl)), (Fuzzy: mn))");
-
-        let x2 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Plain);
-        assert_eq!(x2.display(), "(Fuzzy: 'abc | def ^gh ij | kl mn)");
 
         let x3 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Regex);
         assert_eq!(x3.display(), "(Regex: 'abc | def ^gh ij | kl mn)");

@@ -113,8 +113,8 @@ impl Reader {
             match ev {
                 Event::EvReaderRestart => {
                     // close existing command or file if exists
-                    let (cmd, query) = *arg.downcast::<(String, String)>().unwrap();
-                    if cmd == last_command && query == last_query { continue; }
+                    let (cmd, query, force_update) = *arg.downcast::<(String, String, bool)>().unwrap();
+                    if !force_update && cmd == last_command && query == last_query { continue; }
 
                     // restart command with new `command`
                     if cmd != last_command {

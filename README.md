@@ -92,12 +92,17 @@ the ones you selected in vim.
 
 ## As Interactive Interface
 
-`skim` can invoke other commands dynamically. Normally you would want to integrate it with
-[ag](https://github.com/ggreer/the_silver_searcher) or [ack](https://github.com/petdance/ack2) for
-searching contents in a project directory:
+`skim` can invoke other commands dynamically. Normally you would want to
+integrate it with [rg](https://github.com/BurntSushi/ripgrep)
+[ag](https://github.com/ggreer/the_silver_searcher) or
+[ack](https://github.com/petdance/ack2) for searching contents in a project
+directory:
 
 ```
+# work with ag
 sk --ansi -i -c 'ag --color "{}"'
+# or with rg
+sk --ansi -c 'rg --color=always --line-number "{}"'
 ```
 
 ![interactive mode demo](https://cloud.githubusercontent.com/assets/1527040/21603930/655d859a-d1db-11e6-9fec-c25099d30a12.gif)
@@ -117,7 +122,7 @@ Some common used keybindings.
 
 ## Search Syntax
 
-`skim` borrowed `fzf`'s syntax for matching items
+`skim` borrowed `fzf`'s syntax for matching items:
 
 | Token    | Match type                 | Description                       |
 |----------|----------------------------|-----------------------------------|
@@ -128,11 +133,23 @@ Some common used keybindings.
 | `!fire`  | inverse-exact-match        | items that do not include `fire`  |
 | `!.mp3$` | inverse-suffix-exact-match | items that do not end with `.mp3` |
 
+`skim` also support the combination of tokens.
+
+- space has the meaning of `AND`. With the term `src main`, `skim` will search
+    for items that match **both** `src` and `main`.
+- ` | ` means `OR` (note the spaces around `|`). With the term `.md$ |
+    .markdown$`, `skim` will search for items ends with either `.md` or
+    `.markdown`.
+- `OR` have higher precedence. So `readme .md$ | .markdown$` is groupped into
+    `readme AND (.md$ OR .markdown$)`.
+
 In case that you want to use regular expressions, `skim` provide `regex` mode:
 
 ```
 sk --regex
 ```
+
+You can switch to `regex` mode dynamically by pressing `Ctrl-R` (Rotate Mode).
 
 ## exit code
 
@@ -183,7 +200,7 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 | toggle               | None                        |
 | toggle-all           | None                        |
 | toggle-down          | tab                         |
-| toggle-in            | None                        |
+| toggle-interactive   | ctrl-q                      |
 | toggle-out           | None                        |
 | toggle-sort          | None                        |
 | toggle-up            | shift-tab                   |
@@ -256,9 +273,15 @@ present the output to you. You can specify the command using the `-c` option:
 
 `sk -i -c 'ag --color "{}"'`
 
-In the above example, the replstr `{}` will be replaced with the query you
+In the above example, the replace string `{}` will be replaced with the query you
 type before invoking the command. Use `-I <replstr>` to change replstr if you
 want.
+
+For example, with the input "hello" in interactive mode, `skim` will replace
+the above command with `ag --color "hello"` and invoke it.
+
+If you want to further narrow down the result returned by the command, press
+`Ctrl-Q` to toggle interactive mode.
 
 ## Fields support
 

@@ -205,7 +205,7 @@ fn real_main() -> i32 {
     // reader
     let (tx_reader, rx_reader) = channel();
     let (tx_item, rx_item) = sync_channel(128);
-    let mut reader = reader::Reader::new(rx_reader, tx_item);
+    let mut reader = reader::Reader::new(rx_reader, tx_item.clone());
     reader.parse_options(&options);
     thread::spawn(move || {
         reader.run();
@@ -235,7 +235,7 @@ fn real_main() -> i32 {
     // Helper functions
 
     // light up the fire
-    let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+    let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query(), false))));
 
     let redraw_query = |query: &query::Query| {
         let _ = tx_model.send((EvModelDrawQuery, Box::new(query.get_print_func())));
@@ -243,7 +243,14 @@ fn real_main() -> i32 {
 
     let on_query_change = |query: &query::Query| {
         // restart the reader with new parameter
-        let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query()))));
+        let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query(), false))));
+        // send redraw event
+        redraw_query(query);
+    };
+
+    let on_query_force_update = |query: &query::Query| {
+        // restart the reader with new parameter
+        let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query(), true))));
         // send redraw event
         redraw_query(query);
     };
@@ -326,9 +333,15 @@ fn real_main() -> i32 {
                 on_query_change(&query);
             }
 
-            EvActRotateMode => {
-                query.act_query_rotate_mode();
+            EvActToggleInteractive => {
+                query.act_query_toggle_interactive();
                 redraw_query(&query);
+            }
+
+            EvActRotateMode => {
+                // tell the matcher to switch mode
+                let _ = tx_item.send((EvActRotateMode, Box::new(false)));
+                on_query_force_update(&query);
             }
 
             EvActAccept => {

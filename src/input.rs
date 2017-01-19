@@ -488,6 +488,7 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     //ret.insert(Key::AltZ,  (Event::EvActToggleAll, None));
     ret.insert(Key::Tab,   (Event::EvActToggleDown, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleIn, None));
+    ret.insert(Key::CtrlQ,  (Event::EvActToggleInteractive, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleOut, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleSort, None));
     ret.insert(Key::BTab,  (Event::EvActToggleUp, None));
