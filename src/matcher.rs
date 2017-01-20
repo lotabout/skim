@@ -631,7 +631,7 @@ pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::{MatcherMode, EngineFactory};
 
     #[test]
     fn test_engine_factory() {

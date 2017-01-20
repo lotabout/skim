@@ -42,10 +42,11 @@ impl Query {
     }
 
     // currently they are not used, but will in the future
-    //pub fn query(mut self, query: &str) -> Self {
-        //self.query_before = query.chars().collect();
-        //self
-    //}
+    #[cfg(test)]
+    pub fn query(mut self, query: &str) -> Self {
+        self.query_before = query.chars().collect();
+        self
+    }
 
     //pub fn cmd(mut self, cmd: &str) -> Self {
         //self.cmd_before = cmd.chars().collect();

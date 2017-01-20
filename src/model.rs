@@ -746,8 +746,8 @@ fn reshape_string(text: &[char],
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
+mod tests {
+    use super::{rune_width, accumulate_text_width, reshape_string};
 
     fn to_chars(s: &str) -> Vec<char> {
         s.to_string().chars().collect()
