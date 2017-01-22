@@ -59,6 +59,27 @@ fn fuzzy_score(string: &[char], index: usize, pattern: &[char], pattern_idx: usi
     score
 }
 
+#[derive(Clone, Copy, Debug)]
+struct MatchingStatus {
+    pub idx: usize,
+    pub score: i64,
+    pub final_score: i64,
+    pub adj_num: usize,
+    pub back_ref: usize,
+}
+
+impl MatchingStatus {
+    pub fn empty() -> Self {
+        MatchingStatus {
+            idx: 0,
+            score: 0,
+            final_score: 0,
+            adj_num: 1,
+            back_ref: 0,
+        }
+    }
+}
+
 pub fn fuzzy_match(choice: &[char],
                    pattern: &[char],
                    pattern_lower: &[char]) -> Option<(i64, Vec<usize>)>{
@@ -76,7 +97,8 @@ pub fn fuzzy_match(choice: &[char],
             let mut vec = vec_cell.borrow_mut();
             for (idx, &ch) in choice.iter().enumerate() {
                 if ch == pattern_char && (idx as i64) > prev_matched_idx {
-                    vec.push((idx, fuzzy_score(choice, idx, pattern, pattern_idx), 0)); // (char_idx, score, vec_idx back_ref)
+                    let score = fuzzy_score(choice, idx, pattern, pattern_idx);
+                    vec.push(MatchingStatus{idx: idx, score: score, final_score: score, adj_num: 1, back_ref: 0});
                 }
             }
 
@@ -84,7 +106,7 @@ pub fn fuzzy_match(choice: &[char],
                 // not matched
                 return None;
             }
-            prev_matched_idx = vec[0].0 as i64;
+            prev_matched_idx = vec[0].idx as i64;
         }
         scores.push(vec_cell);
     }
@@ -94,32 +116,47 @@ pub fn fuzzy_match(choice: &[char],
         let mut next_row = scores[pattern_idx+1].borrow_mut();
 
         for idx in 0..next_row.len() {
-            let (next_char_idx, next_score, _) = next_row[idx];
-//(back_ref, &score)
-            let (back_ref, score) = cur_row.iter()
-                .take_while(|&&(idx, _, _)| idx < next_char_idx)
-                .map(|&(char_idx, score, _)| {
-                    let adjacent_num = next_char_idx - char_idx - 1;
-                    score + next_score + if adjacent_num == 0 {BONUS_ADJACENCY} else {PENALTY_UNMATCHED * adjacent_num as i64}
-                })
-                .enumerate()
-                .max_by_key(|&(_, x)| x)
-                .unwrap();
+            let next = next_row[idx];
+            let prev  = if idx > 0 {next_row[idx-1]} else {MatchingStatus::empty()};
+            let score_before_idx = prev.final_score - prev.score + next.score
+                + PENALTY_UNMATCHED * ((next.idx - prev.idx) as i64)
+                - if prev.adj_num == 0 {BONUS_ADJACENCY} else {0};
 
-            next_row[idx] = (next_char_idx, score, back_ref);
+            let (back_ref, score, adj_num) = cur_row.iter()
+                .enumerate()
+                .take_while(|&(_, &MatchingStatus{idx, ..})| idx < next.idx)
+                .skip_while(|&(_, &MatchingStatus{idx, ..})| idx < prev.idx)
+                .map(|(back_ref, ref cur)| {
+                    let adj_num = next.idx - cur.idx - 1;
+                    let final_score = cur.final_score + next.score + if adj_num == 0 {
+                        BONUS_ADJACENCY
+                    } else {
+                        PENALTY_UNMATCHED * adj_num as i64
+                    };
+                    (back_ref, final_score, adj_num)
+                })
+                .max_by_key(|&(_, x, _)| x)
+                .unwrap_or((prev.back_ref, score_before_idx, prev.adj_num));
+
+            next_row[idx] = if idx > 0 && score < score_before_idx {
+                MatchingStatus{final_score: score_before_idx, back_ref: prev.back_ref, adj_num: adj_num, .. next}
+            } else {
+                MatchingStatus{final_score: score, back_ref: back_ref, adj_num: adj_num, .. next}
+            };
         }
     }
 
-    let (mut next_col, &(_, score, _)) = scores[pattern.len()-1].borrow().iter().enumerate().max_by_key(|&(_, &x)| x.1).unwrap();
+    let last_row = scores[pattern.len()-1].borrow();
+    let (mut next_col, &MatchingStatus{final_score, ..}) = last_row.iter().enumerate().max_by_key(|&(_, ref x)| x.final_score).unwrap();
     let mut pattern_idx = pattern.len() as i64 - 1;
     while pattern_idx >= 0 {
-        let (idx, _, next) = scores[pattern_idx as usize].borrow()[next_col];
-        next_col = next;
-        picked.push(idx);
+        let status = scores[pattern_idx as usize].borrow()[next_col];
+        next_col = status.back_ref;
+        picked.push(status.idx);
         pattern_idx -= 1;
     }
     picked.reverse();
-    Some((score, picked))
+    Some((final_score, picked))
 }
 
 pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)>{
