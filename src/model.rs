@@ -6,6 +6,7 @@ use std::cmp::{max, min};
 use orderedvec::OrderedVec;
 use std::sync::Arc;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 use curses::*;
 use curses;
@@ -230,11 +231,11 @@ impl Model {
                         self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActScrollLeft => {
-                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-1)));
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(-1)));
                         self.act_redraw_items_and_status(&curses);
                     }
                     Event::EvActScrollRight => {
-                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(1)));
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(1)));
                         self.act_redraw_items_and_status(&curses);
                     }
 
@@ -517,20 +518,18 @@ impl Model {
 
         let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
         let index = current_item.item.get_full_index();
-        if !self.selected.contains_key(&index) {
-            self.selected.insert(index, current_item.clone());
-        } else {
-            self.selected.remove(&index);
+        match self.selected.entry(index) {
+            Occupied(occ) => { occ.remove_entry(); },
+            Vacant(vac) => { vac.insert(current_item.clone()); },
         }
     }
 
     pub fn act_toggle_all(&mut self) {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
-            if !self.selected.contains_key(&index) {
-                self.selected.insert(index, current_item.clone());
-            } else {
-                self.selected.remove(&index);
+            match self.selected.entry(index) {
+                Occupied(occ) => { occ.remove_entry(); },
+                Vacant(vac) => { vac.insert(current_item.clone()); },
             }
         }
     }

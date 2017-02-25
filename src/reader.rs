@@ -52,7 +52,7 @@ impl ReaderOption {
 
         if let Some(delimiter) = options.opt_str("d") {
             self.delimiter = Regex::new(&(".*?".to_string() + &delimiter))
-                .unwrap_or(Regex::new(r".*?\t").unwrap());
+                .unwrap_or_else(|_| Regex::new(r".*?\t").unwrap());
         }
 
         if let Some(transform_fields) = options.opt_str("with-nth") {
@@ -110,46 +110,41 @@ impl Reader {
         });
 
         while let Ok((ev, arg)) = self.rx_cmd.recv() {
-            match ev {
-                Event::EvReaderRestart => {
-                    // close existing command or file if exists
-                    let (cmd, query, force_update) = *arg.downcast::<(String, String, bool)>().unwrap();
-                    if !force_update && cmd == last_command && query == last_query { continue; }
+            if let Event::EvReaderRestart = ev {
+                // close existing command or file if exists
+                let (cmd, query, force_update) = *arg.downcast::<(String, String, bool)>().unwrap();
+                if !force_update && cmd == last_command && query == last_query { continue; }
 
-                    // restart command with new `command`
-                    if cmd != last_command {
-                        // stop existing command
-                        tx_reader.take().map(|tx| {tx.send(true)});
-                        thread_reader.take().map(|thrd| {thrd.join()});
+                // restart command with new `command`
+                if cmd != last_command {
+                    // stop existing command
+                    tx_reader.take().map(|tx| {tx.send(true)});
+                    thread_reader.take().map(|thrd| {thrd.join()});
 
-                        // create needed data for thread
-                        let (tx, rx_reader) = channel();
-                        tx_reader = Some(tx);
-                        let cmd_clone = cmd.clone();
-                        let option_clone = self.option.clone();
-                        let tx_sender_clone = tx_sender.clone();
-                        let query_clone = query.clone();
+                    // create needed data for thread
+                    let (tx, rx_reader) = channel();
+                    tx_reader = Some(tx);
+                    let cmd_clone = cmd.clone();
+                    let option_clone = self.option.clone();
+                    let tx_sender_clone = tx_sender.clone();
+                    let query_clone = query.clone();
 
-                        // start the new command
-                        thread_reader = Some(thread::spawn(move || {
-                            let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
-                            let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
+                    // start the new command
+                    thread_reader = Some(thread::spawn(move || {
+                        let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
+                        let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
 
-                            reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
+                        reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
 
-                            let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
-                        }));
-                    } else {
-                        // tell sender to restart
-                        let _ = tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
-                    }
-
-                    last_command = cmd;
-                    last_query = query;
+                        let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
+                    }));
+                } else {
+                    // tell sender to restart
+                    let _ = tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
                 }
-                _ => {
-                    // do nothing
-                }
+
+                last_command = cmd;
+                last_query = query;
             }
         }
     }

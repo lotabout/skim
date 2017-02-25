@@ -126,7 +126,7 @@ pub fn fuzzy_match(choice: &[char],
                 .enumerate()
                 .take_while(|&(_, &MatchingStatus{idx, ..})| idx < next.idx)
                 .skip_while(|&(_, &MatchingStatus{idx, ..})| idx < prev.idx)
-                .map(|(back_ref, ref cur)| {
+                .map(|(back_ref, cur)| {
                     let adj_num = next.idx - cur.idx - 1;
                     let final_score = cur.final_score + next.score + if adj_num == 0 {
                         BONUS_ADJACENCY
@@ -147,7 +147,7 @@ pub fn fuzzy_match(choice: &[char],
     }
 
     let last_row = scores[pattern.len()-1].borrow();
-    let (mut next_col, &MatchingStatus{final_score, ..}) = last_row.iter().enumerate().max_by_key(|&(_, ref x)| x.final_score).unwrap();
+    let (mut next_col, &MatchingStatus{final_score, ..}) = last_row.iter().enumerate().max_by_key(|&(_, x)| x.final_score).unwrap();
     let mut pattern_idx = pattern.len() as i64 - 1;
     while pattern_idx >= 0 {
         let status = scores[pattern_idx as usize].borrow()[next_col];
