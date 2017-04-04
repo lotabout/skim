@@ -114,7 +114,6 @@ impl Model {
                     Event::EvModelRestart => {
                         // clean the model
                         self.clean_model();
-                        self.update_size(&curses);
                     }
 
                     Event::EvModelDrawQuery => {
