@@ -2,6 +2,7 @@
 // Modeled after fzf
 
 use ncurses::*;
+use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
 use libc::{STDIN_FILENO, STDERR_FILENO, fdopen, c_char};
@@ -100,8 +101,22 @@ pub fn get_color_pair(fg: i16, bg: i16) -> attr_t {
     *pair
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Copy)]
+pub enum Margin {
+    Fixed(i32),
+    Percent(i32),
+}
+
 pub struct Curses {
     screen: SCREEN,
+    top: i32,
+    bottom: i32,
+    left: i32,
+    right: i32,
+    margin_top: Margin,
+    margin_bottom: Margin,
+    margin_left: Margin,
+    margin_right: Margin,
 }
 
 unsafe impl Send for Curses {}
@@ -120,6 +135,65 @@ impl Curses {
 
         Curses {
             screen: screen,
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            margin_top: Margin::Fixed(0),
+            margin_bottom: Margin::Fixed(0),
+            margin_left: Margin::Fixed(0),
+            margin_right: Margin::Fixed(0),
+        }
+    }
+
+    fn parse_margin(&self, margin: &str) -> Margin {
+        if margin.ends_with("%") {
+            Margin::Percent(margin[0..margin.len()-1].parse::<i32>().unwrap_or(100))
+        } else {
+            Margin::Fixed(margin.parse::<i32>().unwrap_or(0))
+        }
+    }
+
+    pub fn parse_options(&mut self, options: &getopts::Matches) {
+        if let Some(margin_option) = options.opt_str("margin") {
+            let margins = margin_option
+                .split(",")
+                .collect::<Vec<&str>>();
+
+            match margins.len() {
+                1 => {
+                    let margin = self.parse_margin(margins[0]);
+                    self.margin_top = margin;
+                    self.margin_bottom = margin;
+                    self.margin_left = margin;
+                    self.margin_right = margin;
+                }
+                2 => {
+                    let margin_tb = self.parse_margin(margins[0]);
+                    self.margin_top = margin_tb;
+                    self.margin_bottom = margin_tb;
+
+                    let margin_rl = self.parse_margin(margins[1]);
+                    self.margin_left = margin_rl;
+                    self.margin_right = margin_rl;
+                }
+                3 => {
+                    self.margin_top = self.parse_margin(margins[0]);
+                    let margin_rl = self.parse_margin(margins[1]);
+                    self.margin_left = margin_rl;
+                    self.margin_right = margin_rl;
+                    self.margin_bottom = self.parse_margin(margins[2]);
+                }
+                4 => {
+                    self.margin_top = self.parse_margin(margins[0]);
+                    self.margin_right = self.parse_margin(margins[1]);
+                    self.margin_bottom = self.parse_margin(margins[2]);
+                    self.margin_left = self.parse_margin(margins[3]);
+                }
+                _ => { }
+            }
+
+            self.resize();
         }
     }
 
@@ -131,22 +205,48 @@ impl Curses {
         }
     }
 
+    pub fn resize(&mut self) {
+        let mut max_y = 0;
+        let mut max_x = 0;
+        getmaxyx(stdscr(), &mut max_y, &mut max_x);
+
+        self.top = match self.margin_top {
+            Margin::Fixed(num) => num,
+            Margin::Percent(per) => per * max_y / 100,
+        };
+
+        self.bottom = match self.margin_bottom {
+            Margin::Fixed(num) => num,
+            Margin::Percent(per) => per * max_y / 100,
+        };
+
+        self.left = match self.margin_left {
+            Margin::Fixed(num) => num,
+            Margin::Percent(per) => per * max_x / 100,
+        };
+
+        self.right = match self.margin_right {
+            Margin::Fixed(num) => num,
+            Margin::Percent(per) => per * max_x / 100,
+        };
+    }
+
     pub fn mv(&self, y: i32, x: i32) {
-        mv(y, x);
+        mv(y+self.top, x+self.left);
     }
 
     pub fn get_maxyx(&self) -> (i32, i32) {
         let mut max_y = 0;
         let mut max_x = 0;
         getmaxyx(stdscr(), &mut max_y, &mut max_x);
-        (max_y, max_x)
+        (max_y-self.top-self.bottom, max_x-self.left-self.right)
     }
 
     pub fn getyx(&self) -> (i32, i32) {
         let mut y = 0;
         let mut x = 0;
         getyx(stdscr(), &mut y, &mut x);
-        (y, x)
+        (y-self.top, x-self.left)
     }
 
     pub fn clrtoeol(&self) {

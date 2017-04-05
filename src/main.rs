@@ -71,6 +71,8 @@ Usage: sk [options]
     --color [BASE][,COLOR:ANSI]
                          change color theme
     --reverse            Reverse orientation
+    --margin=MARGIN      Screen Margin (TRBL / TB,RL / T,RL,B / T,R,B,L)
+                         e.g. (sk --margin 1,10%)
 
   Scripting
     -q, --query \"\"       specify the initial query
@@ -117,6 +119,7 @@ fn real_main() -> i32 {
     opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
+    opts.optopt("", "margin", "margin around the finder", "");
     opts.optflag("", "reverse", "reverse orientation");
     opts.optflag("", "version", "print out the current version of skim");
 
@@ -168,7 +171,8 @@ fn real_main() -> i32 {
         }
     });
 
-    let curses = Curses::new();
+    let mut curses = Curses::new();
+    curses.parse_options(&options);
 
     //------------------------------------------------------------------------------
     // input
@@ -243,9 +247,9 @@ fn real_main() -> i32 {
 
     let on_query_change = |query: &query::Query| {
         // restart the reader with new parameter
-        let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query(), false))));
         // send redraw event
         redraw_query(query);
+        let _ = tx_reader.send((EvReaderRestart, Box::new((query.get_cmd(), query.get_query(), false))));
     };
 
     let on_query_force_update = |query: &query::Query| {

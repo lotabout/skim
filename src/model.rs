@@ -97,9 +97,8 @@ impl Model {
         curses::init(Some(&self.theme), false, false);
     }
 
-    pub fn run(&mut self, curses: Curses) {
+    pub fn run(&mut self, mut curses: Curses) {
         // generate a new instance of curses for printing
-
 
         // main loop
         loop {
@@ -239,7 +238,7 @@ impl Model {
 
                     Event::EvActRedraw => {
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
-                        self.act_redarw(&curses, print_query_func);
+                        self.act_redarw(&mut curses, print_query_func);
                     }
 
                     _ => {}
@@ -259,10 +258,11 @@ impl Model {
         }
     }
 
-    fn update_size(&mut self, curses: &Curses) {
+    fn update_size(&mut self, curses: &mut Curses) {
         // update the (height, width)
         curses.endwin();
         curses.refresh();
+        curses.resize();
         let (h, w) = curses.get_maxyx();
         self.height = h-2;
         self.width = w-2;
@@ -567,7 +567,7 @@ impl Model {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn act_redarw(&mut self, curses: &Curses, print_query_func: ClosureType) {
+    pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: ClosureType) {
         self.update_size(curses);
         curses.erase();
         self.draw_items(curses);
