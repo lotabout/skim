@@ -95,6 +95,8 @@ fn print_usage() {
 
 }
 
+type EventTuple = (Event, EventArg);
+
 fn real_main() -> i32 {
 
     //------------------------------------------------------------------------------
@@ -128,7 +130,7 @@ fn real_main() -> i32 {
     args.extend(env::var("SKIM_DEFAULT_OPTIONS")
                 .ok()
                 .and_then(|val| shlex::split(&val))
-                .unwrap_or(Vec::new()));
+                .unwrap_or_else(Vec::new));
 
     for arg in env::args().skip(1) {
         args.push(arg);
@@ -151,7 +153,7 @@ fn real_main() -> i32 {
         return 0;
     }
 
-    let (tx_input, rx_input): (Sender<(Event, EventArg)>, Receiver<(Event, EventArg)>) = channel();
+    let (tx_input, rx_input): (Sender<EventTuple>, Receiver<EventTuple>) = channel();
     //------------------------------------------------------------------------------
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
@@ -352,7 +354,7 @@ fn real_main() -> i32 {
                 // sync with model to quit
 
                 let accept_key = *arg.downcast::<Option<String>>()
-                    .unwrap_or(Box::new(None));
+                    .unwrap_or_else(|_| Box::new(None));
 
                 let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
                 let _ = tx_model.send((EvActAccept, Box::new((accept_key, tx))));

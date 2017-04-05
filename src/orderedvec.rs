@@ -80,7 +80,7 @@ impl<T> OrderedVec<T> where T: Ord {
     }
 
     pub fn is_empty(&self) -> bool {
-        return self.len() == 0
+        self.ordered.is_empty() && self.unordered.is_empty()
     }
 }
 
