@@ -147,6 +147,15 @@ impl Reader {
                     last_command = cmd;
                     last_query = query;
                 }
+
+                Event::EvActAccept => {
+                    // stop existing command
+                    tx_reader.take().map(|tx| {tx.send(true)});
+                    thread_reader.take().map(|thrd| {thrd.join()});
+                    let tx_ack: Sender<usize> = *arg.downcast().unwrap();
+                    let _ = tx_ack.send(0);
+                }
+
                 _ => {
                     // do nothing
                 }

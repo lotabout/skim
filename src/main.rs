@@ -349,6 +349,11 @@ fn real_main() -> i32 {
             }
 
             EvActAccept => {
+                // kill reader
+                let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
+                let _ = tx_reader.send((EvActAccept, Box::new(tx)));
+                let _ = rx.recv();
+
                 // sync with model to quit
 
                 let accept_key = *arg.downcast::<Option<String>>()
@@ -356,7 +361,7 @@ fn real_main() -> i32 {
 
                 let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
                 let _ = tx_model.send((EvActAccept, Box::new((accept_key, tx))));
-                let selected = rx.recv().unwrap_or(0);;
+                let selected = rx.recv().unwrap_or(0);
                 exit_code = if selected > 0 {0} else {1};
                 break;
             }
