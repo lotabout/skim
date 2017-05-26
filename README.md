@@ -66,10 +66,18 @@ Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
 Clone the repo and run:
 
 ```
+cargo install
+```
+
+Alternatively, run:
+
+```
 cargo build --release
 ```
 
 then put the resulting `target/release/sk` executable on your PATH.
+
+Note: on linux, also make sure the `libncursesw5-dev` package is installed.
 
 # Usage
 
