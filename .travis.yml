@@ -13,10 +13,6 @@ matrix:
     env: TARGET=x86_64-unknown-linux-gnu
 before_install:
 - export PATH="$PATH:$HOME/.cargo/bin"
-install:
-- bash ci/install.sh
-script:
-- bash ci/script.sh
 before_deploy:
 - bash ci/before_deploy.sh
 deploy:
