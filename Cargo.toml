@@ -21,6 +21,7 @@ lazy_static = "0.2.1"
 clippy = {version = "0.0.108", optional = true}
 shlex = "0.1.1"
 utf8parse = "0.1.0"
+unicode-width = "0.1.4"
 
 [dependencies.ncurses]
 version = "5.85.0"

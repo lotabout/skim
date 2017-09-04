@@ -6,6 +6,7 @@ extern crate getopts;
 extern crate regex;
 extern crate shlex;
 extern crate utf8parse;
+extern crate unicode_width;
 #[macro_use] extern crate lazy_static;
 mod item;
 mod reader;

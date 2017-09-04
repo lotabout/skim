@@ -6,6 +6,7 @@ use std::cmp::{max, min};
 use orderedvec::OrderedVec;
 use std::sync::Arc;
 use std::collections::HashMap;
+use unicode_width::UnicodeWidthChar;
 
 use curses::*;
 use curses;
@@ -645,7 +646,7 @@ impl LinePrinter {
 
     fn print_char_raw(&mut self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
         // the hidden chracter
-        let w = rune_width(ch);
+        let w = ch.width_cjk().unwrap();
 
         self.current += w as i32;
 
@@ -688,16 +689,6 @@ impl LinePrinter {
 //==============================================================================
 // helper functions
 
-// a very naive solution
-// actually only east asian characters occupies 2 characters
-fn rune_width(ch: char) -> usize {
-    if ch.len_utf8() > 1 {
-        2
-    } else {
-        1
-    }
-}
-
 // return an array, arr[i] store the display width till char[i]
 fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
     let mut ret = Vec::new();
@@ -706,7 +697,7 @@ fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
         w += if ch == '\t' {
             tabstop - (w % tabstop)
         } else {
-            rune_width(ch)
+            ch.width_cjk().unwrap()
         };
         ret.push(w);
     }
@@ -746,16 +737,10 @@ fn reshape_string(text: &[char],
 
 #[cfg(test)]
 mod tests {
-    use super::{rune_width, accumulate_text_width, reshape_string};
+    use super::{accumulate_text_width, reshape_string};
 
     fn to_chars(s: &str) -> Vec<char> {
         s.to_string().chars().collect()
-    }
-
-    #[test]
-    fn test_rune_width() {
-        assert_eq!(rune_width('a'), 1);
-        assert_eq!(rune_width('中'), 2);
     }
 
     #[test]
