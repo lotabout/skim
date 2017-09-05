@@ -12,6 +12,9 @@ use std::thread;
 use std::time::Duration;
 use std::collections::HashMap;
 use std::mem;
+use std::fs::File;
+
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 use getopts;
 use regex::Regex;
@@ -194,7 +197,13 @@ fn reader(cmd: &str,
     let (command, mut source): (Option<Child>, Box<BufRead>) = if istty {
         get_command_output(cmd).expect("command not found")
     } else {
-        (None, Box::new(BufReader::new(stdin())))
+        // termion required the stdin to be type tty, so we use dup to achieve that
+        unsafe {
+            let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
+            let tty = File::open("/dev/tty").unwrap();
+            libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
+            (None, Box::new(BufReader::new(stdin)))
+        }
     };
 
     let (tx_control, rx_control) = channel();
