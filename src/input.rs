@@ -32,21 +32,23 @@ impl Input {
     pub fn run(&mut self) {
         loop {
             match self.keyboard.get_key() {
+                Some(Key::Char(ch)) => {
+                    let _ = self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
+                }
+                Some(Key::Pos(row, col)) => {
+                    let _ = self.tx_input.send((Event::EvReportCursorPos, Box::new((row, col))));
+                }
                 Some(key) => {
-                    if let Key::Char(ch) = key {
-                        let _ = self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
-                    } else {
-                        // search event from keymap
-                        match self.keymap.get(&key) {
-                            Some(&(ev, Some(ref args))) => {
-                                let _ = self.tx_input.send((ev, Box::new(Some(args.clone()))));
-                            }
-                            Some(&(ev, None)) => {
-                                let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
-                            }
-                            None => {
-                                let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
-                            }
+                    // search event from keymap
+                    match self.keymap.get(&key) {
+                        Some(&(ev, Some(ref args))) => {
+                            let _ = self.tx_input.send((ev, Box::new(Some(args.clone()))));
+                        }
+                        Some(&(ev, None)) => {
+                            let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
+                        }
+                        None => {
+                            let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
                         }
                     }
                 }
@@ -237,7 +239,23 @@ impl KeyBoard {
             Some('y')      => Some(Key::AltY), // -> \u{79}
             Some('z')      => Some(Key::AltZ),
 
-            Some('\u{5B}') | Some('\u{4F}') => {
+            Some(c @ '\u{5B}') | Some( c @ '\u{4F}') => {
+                // try to match ^[{row};{col}R pattern first
+                if c == '\u{5B}' && self.buf.contains(&';') && self.buf.contains(&'R') {
+                    let mut row = String::new();
+                    let mut col = String::new();
+                    while self.buf.front() != Some(&';') {
+                        row.push(self.buf.pop_front().unwrap());
+                    }
+                    self.buf.pop_front();
+                    while self.buf.front() != Some(&'R') {
+                        col.push(self.buf.pop_front().unwrap());
+                    }
+                    self.buf.pop_front();
+
+                    return Some(Key::Pos(row.parse::<u16>().unwrap(), col.parse::<u16>().unwrap()));
+                }
+
                 // other special sequence
                 let ch = self.buf.pop_front();
                 match ch {
@@ -361,6 +379,7 @@ pub enum Key {
     AltA, AltB, AltC, AltD, AltE, AltF, AltG, AltH, AltI, AltJ, AltK, AltL, AltM,
     AltN, AltO, AltP, AltQ, AltR, AltS, AltT, AltU, AltV, AltW, AltX, AltY, AltZ,
     Char(char),
+    Pos(u16, u16),
 }
 
 pub fn parse_key(key: &str) -> Option<Key> {

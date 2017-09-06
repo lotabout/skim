@@ -7,6 +7,8 @@ extern crate regex;
 extern crate shlex;
 extern crate utf8parse;
 extern crate unicode_width;
+extern crate termion;
+
 #[macro_use] extern crate lazy_static;
 mod item;
 mod reader;
@@ -121,6 +123,7 @@ fn real_main() -> i32 {
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
     opts.optopt("", "margin", "margin around the finder", "");
+    opts.optopt("", "height", "height", "");
     opts.optflag("", "reverse", "reverse orientation");
     opts.optflag("", "version", "print out the current version of skim");
 
@@ -172,8 +175,7 @@ fn real_main() -> i32 {
         }
     });
 
-    let mut curses = Curses::new();
-    curses.parse_options(&options);
+    let mut curses = Curses::new(&options);
 
     //------------------------------------------------------------------------------
     // input
@@ -387,6 +389,10 @@ fn real_main() -> i32 {
                 let _ = tx_model.send((ev, arg));
             }
 
+            EvReportCursorPos => {
+                let (y, x): (u16, u16) = *arg.downcast().unwrap();
+                println!("{}, {}", y, x);
+            }
             _ => {}
         }
     }
