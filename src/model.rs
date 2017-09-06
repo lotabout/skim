@@ -20,7 +20,7 @@ macro_rules! println_stderr(
     } }
 );
 
-pub type ClosureType = Box<Fn(&Curses) + Send>;
+pub type ClosureType = Box<Fn(&mut Curses) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -118,11 +118,11 @@ impl Model {
 
                     Event::EvModelDrawQuery => {
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
-                        self.draw_query(&curses, print_query_func);
+                        self.draw_query(&mut curses, print_query_func);
                         curses.refresh();
                     }
                     Event::EvModelDrawInfo => {
-                        self.draw_status(&curses);
+                        self.draw_status(&mut curses);
                         curses.refresh();
                     }
 
@@ -137,7 +137,7 @@ impl Model {
 
                             // update the screen
                             if num_processed & 0xFFF == 0 {
-                                self.act_redraw_items_and_status(&curses);
+                                self.act_redraw_items_and_status(&mut curses);
                             }
                         }
 
@@ -149,7 +149,7 @@ impl Model {
 
                     Event::EvMatcherStopped => {
                         self.matcher_stopped = true;
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
 
                     Event::EvReaderStopped => {
@@ -186,55 +186,55 @@ impl Model {
                     }
                     Event::EvActUp => {
                         self.act_move_line_cursor(1);
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActDown => {
                         self.act_move_line_cursor(-1);
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggle => {
                         self.act_toggle();
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggleDown => {
                         self.act_toggle();
                         self.act_move_line_cursor(-1);
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggleUp => {
                         self.act_toggle();
                         self.act_move_line_cursor(1);
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggleAll => {
                         self.act_toggle_all();
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActSelectAll => {
                         self.act_select_all();
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActDeselectAll => {
                         self.act_deselect_all();
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageDown => {
                         let height = 1-self.height;
                         self.act_move_line_cursor(height);
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageUp => {
                         let height = self.height-1;
                         self.act_move_line_cursor(height);
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActScrollLeft => {
                         self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-1)));
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActScrollRight => {
                         self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(1)));
-                        self.act_redraw_items_and_status(&curses);
+                        self.act_redraw_items_and_status(&mut curses);
                     }
 
                     Event::EvActRedraw => {
@@ -275,7 +275,7 @@ impl Model {
         }
     }
 
-    fn draw_items(&mut self, curses: &Curses) {
+    fn draw_items(&mut self, curses: &mut Curses) {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
@@ -318,7 +318,7 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_status(&self, curses: &Curses) {
+    fn draw_status(&self, curses: &mut Curses) {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
@@ -362,7 +362,7 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_query(&self, curses: &Curses, print_query_func: ClosureType) {
+    fn draw_query(&self, curses: &mut Curses, print_query_func: ClosureType) {
         let (h, w) = curses.get_maxyx();
         let (h, _) = (h as usize, w as usize);
 
@@ -372,7 +372,7 @@ impl Model {
         print_query_func(curses);
     }
 
-    fn draw_item(&self, curses: &Curses, matched_item: &MatchedItem, is_current: bool) {
+    fn draw_item(&self, curses: &mut Curses, matched_item: &MatchedItem, is_current: bool) {
         let index = matched_item.item.get_full_index();
 
         if self.selected.contains_key(&index) {
@@ -473,7 +473,7 @@ impl Model {
         }
     }
 
-    fn print_char(&self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
+    fn print_char(&self, curses: &mut Curses, ch: char, color: i16, is_bold: bool) {
         if ch != '\t' {
             curses.caddch(ch, color, is_bold);
         } else {
@@ -577,7 +577,7 @@ impl Model {
         curses.refresh();
     }
 
-    fn act_redraw_items_and_status(&mut self, curses: &Curses) {
+    fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
         self.draw_items(curses);
         self.draw_status(curses);
         curses.refresh();
@@ -644,7 +644,7 @@ impl LinePrinter {
     }
 
 
-    fn print_char_raw(&mut self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
+    fn print_char_raw(&mut self, curses: &mut Curses, ch: char, color: i16, is_bold: bool) {
         // the hidden chracter
         let w = ch.width_cjk().unwrap();
 
@@ -669,7 +669,7 @@ impl LinePrinter {
         }
     }
 
-    pub fn print_char(&mut self, curses: &Curses, ch: char, color: i16, is_bold: bool) {
+    pub fn print_char(&mut self, curses: &mut Curses, ch: char, color: i16, is_bold: bool) {
         if ch != '\t' {
             self.print_char_raw(curses, ch, color, is_bold);
         } else {

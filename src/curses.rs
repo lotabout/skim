@@ -6,6 +6,13 @@ use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
 use libc::{STDIN_FILENO, STDERR_FILENO, fdopen, c_char};
+use std::sync::mpsc::Receiver;
+use std::io::{stdout, Write, Stdout};
+use std::fmt;
+use termion::event::{Key, Event, MouseEvent};
+use termion::input::{TermRead, MouseTerminal};
+use termion::raw::{IntoRawMode, RawTerminal};
+use termion;
 
 //use std::io::Write;
 macro_rules! println_stderr(
@@ -35,6 +42,7 @@ lazy_static! {
 }
 
 pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
+    return;
     // initialize ncurses
     let mut use_color = USE_COLOR.write().unwrap();
 
@@ -107,46 +115,88 @@ pub enum Margin {
     Percent(i32),
 }
 
+// A curse object is an abstraction of the screen to be draw on
+// |
+// |
+// |
+// +------------+ start_line
+// |  ^         |
+// | <          | <-- top = start_line + margin_top
+// |  (margins) |
+// |           >| <-- bottom = end_line - margin_bottom
+// |          v |
+// +------------+ end_line
+// |
+// |
+
 pub struct Curses {
-    screen: SCREEN,
+    //screen: SCREEN,
+    term: Option<RawTerminal<Stdout>>,
     top: i32,
     bottom: i32,
     left: i32,
     right: i32,
+    height: Margin,
     margin_top: Margin,
     margin_bottom: Margin,
     margin_left: Margin,
     margin_right: Margin,
+    rx_cursor_pos: Receiver<(u16, u16)>,
 }
 
 unsafe impl Send for Curses {}
 
 impl Curses {
-    pub fn new() -> Self {
-        let local_conf = LcCategory::all;
-        setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
-        let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const c_char)};
-        let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const c_char)};
-        let screen = newterm(None, stderr, stdin);
-        set_term(screen);
-        //let screen = initscr();
-        raw();
-        noecho();
+    pub fn new(options: &getopts::Matches, rx_cursor_pos: Receiver<(u16,u16)>) -> Self {
+        // reserve enough lines according to height
+        //
 
-        Curses {
-            screen: screen,
+        let margins = if let Some(margin_option) = options.opt_str("margin") {
+            Curses::parse_margin(&margin_option)
+        } else {
+            (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0))
+        };
+        let (margin_top, margin_right, margin_bottom, margin_left) = margins;
+
+        let height = if let Some(height_option) = options.opt_str("height") {
+            Curses::parse_margin_string(&height_option)
+        } else {
+            Margin::Percent(100)
+        };
+
+        //let local_conf = LcCategory::all;
+        //setlocale(local_conf, "en_US.UTF-8"); // for showing wide characters
+        //let stdin = unsafe { fdopen(STDIN_FILENO, "r".as_ptr() as *const c_char)};
+        //let stderr = unsafe { fdopen(STDERR_FILENO, "w".as_ptr() as *const c_char)};
+        //let screen = newterm(None, stderr, stdin);
+        //set_term(screen);
+
+
+        //let screen = initscr();
+        //raw();
+        //noecho();
+
+        let term = stdout().into_raw_mode().unwrap();
+        print!("{}", termion::clear::All);
+
+        let mut ret = Curses {
+            term: Some(term),
             top: 0,
             bottom: 0,
             left: 0,
             right: 0,
-            margin_top: Margin::Fixed(0),
-            margin_bottom: Margin::Fixed(0),
-            margin_left: Margin::Fixed(0),
-            margin_right: Margin::Fixed(0),
-        }
+            height,
+            margin_top,
+            margin_bottom,
+            margin_left,
+            margin_right,
+            rx_cursor_pos,
+        };
+        ret.resize();
+        ret
     }
 
-    fn parse_margin(&self, margin: &str) -> Margin {
+    fn parse_margin_string(margin: &str) -> Margin {
         if margin.ends_with("%") {
             Margin::Percent(margin[0..margin.len()-1].parse::<i32>().unwrap_or(100))
         } else {
@@ -154,46 +204,35 @@ impl Curses {
         }
     }
 
-    pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if let Some(margin_option) = options.opt_str("margin") {
-            let margins = margin_option
-                .split(",")
-                .collect::<Vec<&str>>();
+    pub fn parse_margin(margin_option: &str) -> (Margin, Margin, Margin, Margin) {
+        let margins = margin_option
+            .split(",")
+            .collect::<Vec<&str>>();
 
-            match margins.len() {
-                1 => {
-                    let margin = self.parse_margin(margins[0]);
-                    self.margin_top = margin;
-                    self.margin_bottom = margin;
-                    self.margin_left = margin;
-                    self.margin_right = margin;
-                }
-                2 => {
-                    let margin_tb = self.parse_margin(margins[0]);
-                    self.margin_top = margin_tb;
-                    self.margin_bottom = margin_tb;
-
-                    let margin_rl = self.parse_margin(margins[1]);
-                    self.margin_left = margin_rl;
-                    self.margin_right = margin_rl;
-                }
-                3 => {
-                    self.margin_top = self.parse_margin(margins[0]);
-                    let margin_rl = self.parse_margin(margins[1]);
-                    self.margin_left = margin_rl;
-                    self.margin_right = margin_rl;
-                    self.margin_bottom = self.parse_margin(margins[2]);
-                }
-                4 => {
-                    self.margin_top = self.parse_margin(margins[0]);
-                    self.margin_right = self.parse_margin(margins[1]);
-                    self.margin_bottom = self.parse_margin(margins[2]);
-                    self.margin_left = self.parse_margin(margins[3]);
-                }
-                _ => { }
+        match margins.len() {
+            1 => {
+                let margin = Curses::parse_margin_string(margins[0]);
+                (margin, margin, margin, margin)
             }
-
-            self.resize();
+            2 => {
+                let margin_tb = Curses::parse_margin_string(margins[0]);
+                let margin_rl = Curses::parse_margin_string(margins[1]);
+                (margin_tb, margin_rl, margin_tb, margin_rl)
+            }
+            3 => {
+                let margin_top = Curses::parse_margin_string(margins[0]);
+                let margin_rl = Curses::parse_margin_string(margins[1]);
+                let margin_bottom = Curses::parse_margin_string(margins[2]);
+                (margin_top, margin_rl, margin_bottom, margin_rl)
+            }
+            4 => {
+                let margin_top = Curses::parse_margin_string(margins[0]);
+                let margin_right = Curses::parse_margin_string(margins[1]);
+                let margin_bottom = Curses::parse_margin_string(margins[2]);
+                let margin_left = Curses::parse_margin_string(margins[3]);
+                (margin_top, margin_right, margin_bottom, margin_left)
+            }
+            _ => (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0))
         }
     }
 
@@ -206,9 +245,7 @@ impl Curses {
     }
 
     pub fn resize(&mut self) {
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr(), &mut max_y, &mut max_x);
+        let (max_y, max_x) = self.terminal_size();
 
         self.top = match self.margin_top {
             Margin::Fixed(num) => num,
@@ -231,69 +268,97 @@ impl Curses {
         };
     }
 
-    pub fn mv(&self, y: i32, x: i32) {
-        mv(y+self.top, x+self.left);
+    fn get_term(&mut self) -> &mut RawTerminal<Stdout> {
+        self.term.as_mut().unwrap()
+    }
+
+    pub fn mv(&mut self, y: i32, x: i32) {
+        //mv(y+self.top, x+self.left);
+        println_stderr!("mv: {}, {}", y, x);
+        let target_x = (x+self.left+1) as u16;
+        let target_y = (y+self.top+1) as u16;
+        write!(self.get_term(), "{}", termion::cursor::Goto(target_x, target_y));
     }
 
     pub fn get_maxyx(&self) -> (i32, i32) {
-        let mut max_y = 0;
-        let mut max_x = 0;
-        getmaxyx(stdscr(), &mut max_y, &mut max_x);
+        let (max_y, max_x) = self.terminal_size();
+        println_stderr!("max_y, max_x: {}, {}", max_y, max_x);
         (max_y-self.top-self.bottom, max_x-self.left-self.right)
     }
 
-    pub fn getyx(&self) -> (i32, i32) {
-        let mut y = 0;
-        let mut x = 0;
-        getyx(stdscr(), &mut y, &mut x);
-        (y-self.top, x-self.left)
+    pub fn getyx(&mut self) -> (i32, i32) {
+        write!(self.get_term(), "\x1B[6n");
+        self.get_term().flush().unwrap();
+        let (y, x) = self.rx_cursor_pos.recv().unwrap();
+        println_stderr!("y, x: {}, {}", y, x);
+        (y as i32 - self.top, x as i32 - self.left)
     }
 
-    pub fn clrtoeol(&self) {
-        clrtoeol();
+    fn terminal_size(&self) -> (i32, i32) {
+        let (max_x, max_y) = termion::terminal_size().unwrap();
+        (max_y as i32, max_x as i32)
+    }
+
+    pub fn clrtoeol(&mut self) {
+        write!(self.get_term(), "{}", termion::clear::UntilNewline);
     }
 
     pub fn endwin(&self) {
-        endwin();
+        //endwin();
     }
 
-    pub fn erase(&self) {
-        erase();
-    }
-
-    pub fn cprint(&self, text: &str, pair: i16, is_bold: bool) {
-        let attr = self.get_color(pair, is_bold);
-        attron(attr);
-        addstr(text);
-        attroff(attr);
-    }
-
-    pub fn caddch(&self, ch: char, pair: i16, is_bold: bool) {
-        let attr = self.get_color(pair, is_bold);
-        attron(attr);
-        addstr(&ch.to_string()); // to support wide character
-        attroff(attr);
-    }
-
-    pub fn printw(&self, text: &str) {
-        printw(text);
-    }
-
-    pub fn close(&self) {
-        endwin();
-        delscreen(self.screen);
-    }
-
-    pub fn attr_on(&self, attr: attr_t) {
-        if attr == 0 {
-            attrset(0);
-        } else {
-            attron(attr);
+    pub fn erase(&mut self) {
+        //erase();
+        println_stderr!("erase");
+        let (max_y, _) = self.terminal_size();
+        for row in 0..max_y {
+            self.mv(row, 0);
+            write!(self.get_term(), "{}", termion::clear::CurrentLine);
         }
     }
 
-    pub fn refresh(&self) {
-        refresh();
+    pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
+        //let attr = self.get_color(pair, is_bold);
+        //attron(attr);
+        //addstr(text);
+        //attroff(attr);
+        println_stderr!("cprint: {}", text);
+        write!(self.get_term(), "{}", text);
+    }
+
+    pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
+        //let attr = self.get_color(pair, is_bold);
+        //attron(attr);
+        //addstr(&ch.to_string()); // to support wide character
+        //attroff(attr);
+        println_stderr!("caddch: {}", ch);
+        write!(self.get_term(), "{}", ch);
+    }
+
+    pub fn printw(&mut self, text: &str) {
+        //printw(text);
+        println_stderr!("printw: {}", text);
+        write!(self.get_term(), "{}", text);
+    }
+
+    pub fn close(&mut self) {
+        //endwin();
+        //delscreen(self.screen);
+        self.term.take();
+    }
+
+    pub fn attr_on(&self, attr: attr_t) {
+        //if attr == 0 {
+            //attrset(0);
+        //} else {
+            //attron(attr);
+        //}
+    }
+
+    pub fn refresh(&mut self) {
+        //refresh();
+        println_stderr!("refresh");
+        self.get_term().flush().unwrap();
     }
 }
 

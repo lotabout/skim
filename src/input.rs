@@ -253,7 +253,7 @@ impl KeyBoard {
                     }
                     self.buf.pop_front();
 
-                    return Some(Key::Pos(row.parse::<u16>().unwrap(), col.parse::<u16>().unwrap()));
+                    return Some(Key::Pos(row.parse::<u16>().unwrap() - 1, col.parse::<u16>().unwrap() - 1));
                 }
 
                 // other special sequence

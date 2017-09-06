@@ -34,6 +34,7 @@ use std::mem;
 use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::Curses;
+use std::io::Write;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -175,8 +176,28 @@ fn real_main() -> i32 {
         }
     });
 
-    let mut curses = Curses::new(&options);
+    //------------------------------------------------------------------------------
+    // reader -- read items from stdin or output of comment
+    // NOTE: termion requires stdin to be /dev/tty, reader properly ensure that.
+    // Thus the creation of the reader should come before curses.
 
+    let (tx_reader, rx_reader) = channel();
+    let (tx_item, rx_item) = sync_channel(128);
+    let mut reader = reader::Reader::new(rx_reader, tx_item.clone());
+    reader.parse_options(&options);
+    thread::spawn(move || {
+        reader.run();
+    });
+    println_stderr!("reader created");
+
+    //------------------------------------------------------------------------------
+    // curses
+
+    // Special channel for receiving current cursor position.
+    let (tx_curses, rx_curses) = channel();
+    let curses = Curses::new(&options, rx_curses);
+
+    println_stderr!("curses created");
     //------------------------------------------------------------------------------
     // input
     let tx_input_clone = tx_input.clone();
@@ -187,6 +208,7 @@ fn real_main() -> i32 {
         input.run();
     });
 
+    println_stderr!("input created");
     //------------------------------------------------------------------------------
     // query
     let default_command = match env::var("SKIM_DEFAULT_COMMAND") {
@@ -198,25 +220,19 @@ fn real_main() -> i32 {
         .build();
     query.parse_options(&options);
 
+    println_stderr!("query created");
     //------------------------------------------------------------------------------
     // model
     let (tx_model, rx_model) = channel();
     let mut model = model::Model::new(rx_model);
+
     model.parse_options(&options);
+    println_stderr!("model created");
     model.init();
-    thread::spawn(move || {
+    let m = thread::spawn(move || {
         model.run(curses);
     });
-
-    //------------------------------------------------------------------------------
-    // reader
-    let (tx_reader, rx_reader) = channel();
-    let (tx_item, rx_item) = sync_channel(128);
-    let mut reader = reader::Reader::new(rx_reader, tx_item.clone());
-    reader.parse_options(&options);
-    thread::spawn(move || {
-        reader.run();
-    });
+    println_stderr!("model run");
 
     //------------------------------------------------------------------------------
     // matcher
@@ -228,6 +244,7 @@ fn real_main() -> i32 {
         matcher.run(rx_item);
     });
 
+    println_stderr!("matcher created");
     //------------------------------------------------------------------------------
     // start a timer for notifying refresh
     let tx_model_clone = tx_model.clone();
@@ -273,6 +290,7 @@ fn real_main() -> i32 {
 
     let _ = tx_input.send((EvActRedraw, Box::new(true))); // trigger draw
     while let Ok((ev, arg)) = rx_input.recv() {
+        println_stderr!("{:?}, {:?}", ev, arg);
         match ev {
             EvActAddChar =>  {
                 let ch: char = *arg.downcast().unwrap();
@@ -391,7 +409,7 @@ fn real_main() -> i32 {
 
             EvReportCursorPos => {
                 let (y, x): (u16, u16) = *arg.downcast().unwrap();
-                println!("{}, {}", y, x);
+                tx_curses.send((y, x));
             }
             _ => {}
         }
