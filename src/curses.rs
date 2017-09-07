@@ -173,24 +173,13 @@ impl Curses {
 
         // reserve the necessary lines to show skim
         let (max_y, _) = Curses::terminal_size();
-        match height {
-            Margin::Fixed(rows) => {
-                print!("{}", "\n".repeat(min(rows, max_y - y) as usize));
-            }
-            Margin::Percent(100) => {}
-            Margin::Percent(percent) => {
-                print!("{}", "\n".repeat(min(max_y * percent / 100, max_y-y) as usize));
-            }
-        }
+        Curses::reserve_lines(y, max_y, height);
 
         let start_y = match height {
             Margin::Percent(100) => 0,
-            Margin::Percent(p) => min(max_y, y) - p*max_y/100,
-            Margin::Fixed(rows) => min(max_y, y) - rows,
+            Margin::Percent(p) => min(y, max_y- p*max_y/100),
+            Margin::Fixed(rows) => min(y, max_y - rows),
         };
-
-        stdout().flush().unwrap();
-        println_stderr!("height = {:?}, max_y = {}, start_y = {}", height, max_y, start_y);
 
         let term: Box<Write> = if Margin::Percent(100) == height {
             Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap()))
@@ -214,6 +203,17 @@ impl Curses {
         };
         ret.resize();
         ret
+    }
+
+    fn reserve_lines(y: i32, max_y: i32, height: Margin) {
+        let rows = match height {
+            Margin::Percent(100) => {return;}
+            Margin::Percent(percent) => max_y*percent/100,
+            Margin::Fixed(rows) => rows,
+        };
+
+        print!("{}", "\n".repeat((rows-1) as usize));
+        stdout().flush().unwrap();
     }
 
     fn get_cursor_pos() -> (i32, i32) {
@@ -293,8 +293,6 @@ impl Curses {
             Margin::Fixed(rows) => min(max_y, rows),
         };
 
-        println_stderr!("height = {}, max_y = {}, max_x = {}", height, max_y, max_x);
-
         let start = if self.height == Margin::Percent(100) { 0 } else { self.start_y };
 
         self.top = start + match self.margin_top {
@@ -302,7 +300,7 @@ impl Curses {
             Margin::Percent(per) => per * height / 100,
         };
 
-        self.bottom = start + height-1 - match self.margin_bottom {
+        self.bottom = start + height - match self.margin_bottom {
             Margin::Fixed(num) => num,
             Margin::Percent(per) => per * height / 100,
         };
@@ -316,7 +314,6 @@ impl Curses {
             Margin::Fixed(num) => num,
             Margin::Percent(per) => per * max_x / 100,
         };
-        println_stderr!("top: {}, bottom: {}, height: {}", self.top, self.bottom, height);
     }
 
     fn get_term(&mut self) -> &mut Box<Write> {
@@ -325,7 +322,6 @@ impl Curses {
 
     pub fn mv(&mut self, y: i32, x: i32) {
         //mv(y+self.top, x+self.left);
-        println_stderr!("mv: {}, {}", y, x);
         let target_x = (x+self.left+1) as u16;
         let target_y = (y+self.top+1) as u16;
         write!(self.get_term(), "{}", termion::cursor::Goto(target_x, target_y));
@@ -333,15 +329,13 @@ impl Curses {
 
     pub fn get_maxyx(&self) -> (i32, i32) {
         let (max_y, max_x) = Curses::terminal_size();
-        println_stderr!("max_y, max_x: {}, {} | {}, {}", max_y, max_x, (self.top-self.bottom)+1, (self.left-self.right)+1);
-        ((self.bottom-self.top)+1, (self.right-self.left)+1)
+        (self.bottom-self.top, self.right-self.left)
     }
 
     pub fn getyx(&mut self) -> (i32, i32) {
         write!(self.get_term(), "\x1B[6n");
         self.get_term().flush().unwrap();
         let (y, x) = self.rx_cursor_pos.recv().unwrap();
-        println_stderr!("y, x: {}, {} | {}, {}", y, x, y as i32 - self.top, x as i32 - self.left);
         (y as i32 - self.top, x as i32 - self.left)
     }
 
@@ -358,18 +352,19 @@ impl Curses {
         //endwin();
     }
 
-    pub fn erase(&mut self) {
-        //erase();
-        println_stderr!("erase");
+    fn height(&self) -> i32 {
         let (max_y, _) = Curses::terminal_size();
-
-        let height = match self.height {
+        match self.height {
             Margin::Percent(100) => max_y,
             Margin::Percent(p) => min(max_y, p*max_y/100),
             Margin::Fixed(rows) => min(max_y, rows),
-        };
+        }
+    }
 
-        for row in 0..height {
+    pub fn erase(&mut self) {
+        //erase();
+        println_stderr!("erase");
+        for row in (0..self.height()).rev() {
             self.mv(row, 0);
             write!(self.get_term(), "{}", termion::clear::CurrentLine);
         }
@@ -402,6 +397,7 @@ impl Curses {
     pub fn close(&mut self) {
         //endwin();
         //delscreen(self.screen);
+        self.erase();
         self.term.take();
     }
 
