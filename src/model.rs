@@ -39,7 +39,6 @@ pub struct Model {
 
     multi_selection: bool,
     pub tabstop: usize,
-    theme: ColorTheme,
 
     reader_stopped: bool,
     matcher_stopped: bool,
@@ -72,7 +71,6 @@ impl Model {
             matcher_stopped: false,
             timer: Instant::now(),
             matcher_mode: "".to_string(),
-            theme: ColorTheme::new(),
         }
     }
 
@@ -88,14 +86,6 @@ impl Model {
         if options.opt_present("reverse") {
             self.reverse = true;
         }
-
-        if let Some(color) = options.opt_str("color") {
-            self.theme = ColorTheme::from_options(&color);
-        }
-    }
-
-    pub fn init(&mut self) {
-        curses::init(Some(&self.theme), false, false);
     }
 
     pub fn run(&mut self, mut curses: Curses) {

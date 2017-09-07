@@ -228,7 +228,6 @@ fn real_main() -> i32 {
 
     model.parse_options(&options);
     println_stderr!("model created");
-    model.init();
     let m = thread::spawn(move || {
         model.run(curses);
     });

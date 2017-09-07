@@ -1,8 +1,7 @@
 // Parse ANSI attr code
 
 use regex::Regex;
-use curses::get_color_pair;
-use ncurses::*;
+use curses::{register_ansi, attr_t};
 use std::sync::Mutex;
 
 pub fn parse_ansi(text: &str) -> (String, Vec<(usize, attr_t)>) {
@@ -53,71 +52,74 @@ fn interpret_code(code: &str) -> Option<attr_t> {
         return None;
     }
 
-    let mut state256 = 0;
-    let mut attr = 0;
-    let mut fg = -1;
-    let mut bg = -1;
-    let mut use_fg = true;
+    let key = register_ansi(code.to_owned());
+    Some(key)
 
-    let code = &code[2..code.len()-1]; // ^[[1;30;40m -> 1;30;40
-    if code.is_empty() {
-        return Some(A_NORMAL());
-    }
+    //let mut state256 = 0;
+    //let mut attr = 0;
+    //let mut fg = -1;
+    //let mut bg = -1;
+    //let mut use_fg = true;
 
-    for num in code.split(';').map(|x| x.parse::<i16>()) {
-        match state256 {
-            0 => {
-                match num.unwrap_or(0) {
-                    0 => {attr = 0;}
-                    1 => {attr |= A_BOLD();}
-                    4 => {attr |= A_UNDERLINE();}
-                    5 => {attr |= A_BLINK();}
-                    7 => {attr |= A_REVERSE();}
-                    8 => {attr |= A_INVIS();}
-                    38 => {
-                        use_fg = true;
-                        state256 += 1;
-                    }
-                    48 => {
-                        use_fg = false;
-                        state256 += 1;
-                    }
-                    39 => {
-                        fg = -1;
-                    }
-                    49 => {
-                        bg = -1;
-                    }
-                    num if num >= 30 && num <= 37 => {
-                        fg = num - 30;
-                    }
-                    num if num >= 40 && num <= 47 => {
-                        bg = num - 40;
-                    }
-                    _ => {
-                    }
-                }
-            }
-            1 => {
-                match num.unwrap_or(0) {
-                    5 => { state256 += 1; }
-                    _ => { state256 = 0; }
-                }
-            }
-            2 => {
-                if use_fg {
-                    fg = num.unwrap_or(-1);
-                } else {
-                    bg = num.unwrap_or(-1);
-                }
-            }
-            _ => {}
-        }
-    }
+    //let code = &code[2..code.len()-1]; // ^[[1;30;40m -> 1;30;40
+    //if code.is_empty() {
+        //return Some(A_NORMAL());
+    //}
 
-    if fg != -1 || bg != -1 {
-        attr |= get_color_pair(fg, bg);
-    }
+    //for num in code.split(';').map(|x| x.parse::<i16>()) {
+        //match state256 {
+            //0 => {
+                //match num.unwrap_or(0) {
+                    //0 => {attr = 0;}
+                    //1 => {attr |= A_BOLD();}
+                    //4 => {attr |= A_UNDERLINE();}
+                    //5 => {attr |= A_BLINK();}
+                    //7 => {attr |= A_REVERSE();}
+                    //8 => {attr |= A_INVIS();}
+                    //38 => {
+                        //use_fg = true;
+                        //state256 += 1;
+                    //}
+                    //48 => {
+                        //use_fg = false;
+                        //state256 += 1;
+                    //}
+                    //39 => {
+                        //fg = -1;
+                    //}
+                    //49 => {
+                        //bg = -1;
+                    //}
+                    //num if num >= 30 && num <= 37 => {
+                        //fg = num - 30;
+                    //}
+                    //num if num >= 40 && num <= 47 => {
+                        //bg = num - 40;
+                    //}
+                    //_ => {
+                    //}
+                //}
+            //}
+            //1 => {
+                //match num.unwrap_or(0) {
+                    //5 => { state256 += 1; }
+                    //_ => { state256 = 0; }
+                //}
+            //}
+            //2 => {
+                //if use_fg {
+                    //fg = num.unwrap_or(-1);
+                //} else {
+                    //bg = num.unwrap_or(-1);
+                //}
+            //}
+            //_ => {}
+        //}
+    //}
 
-    Some(attr)
+    //if fg != -1 || bg != -1 {
+        //attr |= get_color_pair(fg, bg);
+    //}
+
+    //Some(attr)
 }

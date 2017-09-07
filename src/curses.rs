@@ -1,7 +1,7 @@
 // An abstract layer towards ncurses-rs, which provides keycode, color scheme support
 // Modeled after fzf
 
-use ncurses::*;
+//use ncurses::*;
 use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
@@ -17,6 +17,9 @@ use termion::screen::{AlternateScreen, ToMainScreen};
 use termion::cursor::DetectCursorPos;
 use termion;
 use std::cmp::{min, max};
+use termion::{color, style};
+use std::fmt;
+use std::default::Default;
 
 //use std::io::Write;
 macro_rules! println_stderr(
@@ -38,80 +41,92 @@ pub static COLOR_SELECTED:      i16 = 8;
 pub static COLOR_HEADER:        i16 = 9;
 static COLOR_USER:              i16 = 10;
 
+pub type attr_t = i16;
+
 lazy_static! {
-    static ref COLOR_MAP: RwLock<HashMap<i16, attr_t>> = RwLock::new(HashMap::new());
-    static ref FG: RwLock<i16> = RwLock::new(7);
-    static ref BG: RwLock<i16> = RwLock::new(0);
-    static ref USE_COLOR: RwLock<bool> = RwLock::new(true);
+    // all colors are refered by the pair number
+    static ref RESOURCE_MAP: RwLock<HashMap<attr_t, String>> = RwLock::new(HashMap::new());
+
+    // COLOR_MAP is used to store ((fg <<8 ) | bg) -> attr_t, used to handle ANSI code
+    static ref COLOR_MAP: RwLock<HashMap<String, attr_t>> = RwLock::new(HashMap::new());
+    //static ref FG: RwLock<i16> = RwLock::new(7);
+    //static ref BG: RwLock<i16> = RwLock::new(0);
+    //static ref USE_COLOR: RwLock<bool> = RwLock::new(true);
 }
 
-pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
-    return;
-    // initialize ncurses
-    let mut use_color = USE_COLOR.write().unwrap();
-
-    if let Some(theme) = theme {
-        let base_theme = if tigetnum("colors") >= 256 {
-            DARK256
-        } else {
-            DEFAULT16
-        };
-
-        init_pairs(&base_theme, theme, is_black);
-        *use_color = true;
-    } else {
-        *use_color = false;
-    }
+// register the color as color pair
+fn register_resource(key: attr_t, resource: String) {
+    let mut resource_map = RESOURCE_MAP.write().unwrap();
+    resource_map.entry(key).or_insert_with(|| {resource});
 }
 
-fn init_pairs(base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
-    let mut fg = FG.write().unwrap();
-    let mut bg = BG.write().unwrap();
+pub fn register_ansi(ansi: String) -> attr_t {
+    //let fg = if fg == -1 { *FG.read().unwrap() } else {fg};
+    //let bg = if bg == -1 { *BG.read().unwrap() } else {bg};
 
-
-    *fg = shadow(base.fg, theme.fg);
-    *bg = shadow(base.bg, theme.bg);
-
-    if is_black {
-        *bg = COLOR_BLACK;
-    } else if theme.use_default {
-        *fg = COLOR_DEFAULT;
-        *bg = COLOR_DEFAULT;
-        use_default_colors();
-    }
-
-    if !theme.use_default {
-        assume_default_colors(shadow(base.fg, theme.fg) as i32, shadow(base.bg, theme.bg) as i32);
-    }
-
-    start_color();
-
-    init_pair(COLOR_PROMPT,        shadow(base.prompt,        theme.prompt),        *bg);
-    init_pair(COLOR_MATCHED,       shadow(base.matched,       theme.matched),       shadow(base.matched_bg, theme.matched_bg));
-    init_pair(COLOR_CURRENT,       shadow(base.current,       theme.current),       shadow(base.current_bg, theme.current_bg));
-    init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), shadow(base.current_match_bg, theme.current_match_bg));
-    init_pair(COLOR_SPINNER,       shadow(base.spinner,       theme.spinner),       *bg);
-    init_pair(COLOR_INFO,          shadow(base.info,          theme.info),          *bg);
-    init_pair(COLOR_CURSOR,        shadow(base.cursor,        theme.cursor),        shadow(base.current_bg, theme.current_bg));
-    init_pair(COLOR_SELECTED,      shadow(base.selected,      theme.selected),      shadow(base.current_bg, theme.current_bg));
-    init_pair(COLOR_HEADER,        shadow(base.header,        theme.header),        shadow(base.bg, theme.bg));
-}
-
-
-pub fn get_color_pair(fg: i16, bg: i16) -> attr_t {
-    let fg = if fg == -1 { *FG.read().unwrap() } else {fg};
-    let bg = if bg == -1 { *BG.read().unwrap() } else {bg};
-
-    let key = (fg << 8) + bg;
     let mut color_map = COLOR_MAP.write().unwrap();
     let pair_num = color_map.len() as i16;
-    let pair = color_map.entry(key).or_insert_with(|| {
+    if color_map.contains_key(&ansi) {
+        *color_map.get(&ansi).unwrap()
+    } else {
         let next_pair = COLOR_USER + pair_num;
-        init_pair(next_pair, fg, bg);
-        COLOR_PAIR(next_pair)
-    });
-    *pair
+        register_resource(next_pair, ansi);
+        next_pair
+    }
 }
+
+//pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
+    //return;
+    //// initialize ncurses
+    //let mut use_color = USE_COLOR.write().unwrap();
+
+    //if let Some(theme) = theme {
+        //let base_theme = if tigetnum("colors") >= 256 {
+            //DARK256
+        //} else {
+            //DEFAULT16
+        //};
+
+        //init_pairs(&base_theme, theme, is_black);
+        //*use_color = true;
+    //} else {
+        //*use_color = false;
+    //}
+//}
+
+//fn init_pairs(base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
+    //let mut fg = FG.write().unwrap();
+    //let mut bg = BG.write().unwrap();
+
+
+    //*fg = shadow(base.fg, theme.fg);
+    //*bg = shadow(base.bg, theme.bg);
+
+    //if is_black {
+        //*bg = COLOR_BLACK;
+    //} else if theme.use_default {
+        //*fg = COLOR_DEFAULT;
+        //*bg = COLOR_DEFAULT;
+        //use_default_colors();
+    //}
+
+    //if !theme.use_default {
+        //assume_default_colors(shadow(base.fg, theme.fg) as i32, shadow(base.bg, theme.bg) as i32);
+    //}
+
+    //start_color();
+
+    //init_pair(COLOR_PROMPT,        shadow(base.prompt,        theme.prompt),        *bg);
+    //init_pair(COLOR_MATCHED,       shadow(base.matched,       theme.matched),       shadow(base.matched_bg, theme.matched_bg));
+    //init_pair(COLOR_CURRENT,       shadow(base.current,       theme.current),       shadow(base.current_bg, theme.current_bg));
+    //init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), shadow(base.current_match_bg, theme.current_match_bg));
+    //init_pair(COLOR_SPINNER,       shadow(base.spinner,       theme.spinner),       *bg);
+    //init_pair(COLOR_INFO,          shadow(base.info,          theme.info),          *bg);
+    //init_pair(COLOR_CURSOR,        shadow(base.cursor,        theme.cursor),        shadow(base.current_bg, theme.current_bg));
+    //init_pair(COLOR_SELECTED,      shadow(base.selected,      theme.selected),      shadow(base.current_bg, theme.current_bg));
+    //init_pair(COLOR_HEADER,        shadow(base.header,        theme.header),        shadow(base.bg, theme.bg));
+//}
+
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 pub enum Margin {
@@ -186,6 +201,14 @@ impl Curses {
         } else {
             Box::new(stdout().into_raw_mode().unwrap())
         };
+
+        // register
+        let theme = if let Some(color) = options.opt_str("color") {
+            ColorTheme::from_options(&color)
+        } else {
+            ColorTheme::dark256()
+        };
+        theme.register_self();
 
         let mut ret = Curses {
             term: Some(term),
@@ -278,11 +301,13 @@ impl Curses {
     }
 
     fn get_color(&self, pair: i16, is_bold: bool) -> attr_t {
-        if *USE_COLOR.read().unwrap() {
-            attr_color(pair, is_bold)
-        } else {
-            attr_mono(pair, is_bold)
-        }
+        pair
+        //attr_color(pair, is_bold)
+        //if *USE_COLOR.read().unwrap() {
+            //attr_color(pair, is_bold)
+        //} else {
+            //attr_mono(pair, is_bold)
+        //}
     }
 
     pub fn resize(&mut self) {
@@ -402,12 +427,23 @@ impl Curses {
     }
 
     pub fn attr_on(&self, attr: attr_t) {
+
         //if attr == 0 {
             //attrset(0);
         //} else {
             //attron(attr);
         //}
     }
+
+    fn attron(&mut self, key: attr_t) {
+        let resource_map = RESOURCE_MAP.read().unwrap();
+        resource_map.get(&key).map(|s| write!(self.get_term(), "{}", s));
+    }
+
+    fn attroff(&mut self, key: attr_t) {
+        write!(self.get_term(), "{}", color::Fg(color::Reset));
+    }
+
 
     pub fn refresh(&mut self) {
         //refresh();
@@ -417,79 +453,162 @@ impl Curses {
 }
 
 // use default if x is COLOR_UNDEFINED, else use x
-fn shadow(default: i16, x: i16) -> i16 {
-    if x == COLOR_UNDEFINED { default } else { x }
-}
+//fn shadow(default: i16, x: i16) -> i16 {
+    //if x == COLOR_UNDEFINED { default } else { x }
+//}
 
 
-fn attr_color(pair: i16, is_bold: bool) -> attr_t {
-    let attr = if pair > COLOR_NORMAL {COLOR_PAIR(pair)} else {0};
+//fn attr_color(pair: i16, is_bold: bool) -> attr_t {
+    //let attr = if pair > COLOR_NORMAL {COLOR_PAIR(pair)} else {0};
 
-    attr | if is_bold {A_BOLD()} else {0}
-}
+    //attr | if is_bold {A_BOLD()} else {0}
+//}
 
-fn attr_mono(pair: i16, is_bold: bool) -> attr_t {
-    let mut attr = 0;
-    match pair {
-        x if x == COLOR_NORMAL => {
-            if is_bold {
-                attr = A_REVERSE();
-            }
-        }
-        x if x == COLOR_MATCHED => {
-            attr = A_UNDERLINE();
-        }
-        x if x == COLOR_CURRENT_MATCH => {
-            attr = A_UNDERLINE() | A_REVERSE()
-        }
-        _ => {}
+//fn attr_mono(pair: i16, is_bold: bool) -> attr_t {
+    //let mut attr = 0;
+    //match pair {
+        //x if x == COLOR_NORMAL => {
+            //if is_bold {
+                //attr = A_REVERSE();
+            //}
+        //}
+        //x if x == COLOR_MATCHED => {
+            //attr = A_UNDERLINE();
+        //}
+        //x if x == COLOR_CURRENT_MATCH => {
+            //attr = A_UNDERLINE() | A_REVERSE()
+        //}
+        //_ => {}
+    //}
+    //attr | if is_bold {A_BOLD()} else {0}
+//}
+
+struct ColorWrapper(Box<color::Color>);
+
+impl color::Color for ColorWrapper {
+    fn write_fg(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.write_fg(f)
     }
-    attr | if is_bold {A_BOLD()} else {0}
+    fn write_bg(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.write_bg(f)
+    }
 }
 
-const COLOR_DEFAULT: i16 = -1;
-const COLOR_UNDEFINED: i16 = -2;
-
-#[derive(Clone, Debug)]
 pub struct ColorTheme {
-    use_default: bool,
+    fg:               ColorWrapper, // text fg
+    bg:               ColorWrapper, // text bg
+    matched:          ColorWrapper,
+    matched_bg:       ColorWrapper,
+    current:          ColorWrapper,
+    current_bg:       ColorWrapper,
+    current_match:    ColorWrapper,
+    current_match_bg: ColorWrapper,
+    spinner:          ColorWrapper,
+    info:             ColorWrapper,
+    prompt:           ColorWrapper,
+    cursor:           ColorWrapper,
+    selected:         ColorWrapper,
+    header:           ColorWrapper,
+}
 
-    fg: i16, // text fg
-    bg: i16, // text bg
-    matched: i16,
-    matched_bg: i16,
-    current: i16,
-    current_bg: i16,
-    current_match: i16,
-    current_match_bg: i16,
-    spinner: i16,
-    info: i16,
-    prompt: i16,
-    cursor: i16,
-    selected: i16,
-    header: i16,
+impl Default for ColorTheme {
+    fn default() -> Self {
+        ColorTheme {
+            fg:               ColorWrapper(Box::new(color::White)),
+            bg:               ColorWrapper(Box::new(color::Black)),
+            matched:          ColorWrapper(Box::new(color::Green)),
+            matched_bg:       ColorWrapper(Box::new(color::Black)),
+            current:          ColorWrapper(Box::new(color::Yellow)),
+            current_bg:       ColorWrapper(Box::new(color::Black)),
+            current_match:    ColorWrapper(Box::new(color::Green)),
+            current_match_bg: ColorWrapper(Box::new(color::Black)),
+            spinner:          ColorWrapper(Box::new(color::Green)),
+            info:             ColorWrapper(Box::new(color::White)),
+            prompt:           ColorWrapper(Box::new(color::Blue)),
+            cursor:           ColorWrapper(Box::new(color::Red)),
+            selected:         ColorWrapper(Box::new(color::Magenta)),
+            header:           ColorWrapper(Box::new(color::Cyan)),
+        }
+    }
 }
 
 impl ColorTheme {
     pub fn new() -> Self {
         ColorTheme {
-            use_default:  true,
-            fg:               COLOR_UNDEFINED,
-            bg:               COLOR_UNDEFINED,
-            matched:          COLOR_UNDEFINED,
-            matched_bg:       COLOR_UNDEFINED,
-            current:          COLOR_UNDEFINED,
-            current_bg:       COLOR_UNDEFINED,
-            current_match:    COLOR_UNDEFINED,
-            current_match_bg: COLOR_UNDEFINED,
-            spinner:          COLOR_UNDEFINED,
-            info:             COLOR_UNDEFINED,
-            prompt:           COLOR_UNDEFINED,
-            cursor:           COLOR_UNDEFINED,
-            selected:         COLOR_UNDEFINED,
-            header:           COLOR_UNDEFINED,
+            fg:               ColorWrapper(Box::new(color::Reset)),
+            bg:               ColorWrapper(Box::new(color::Reset)),
+            matched:          ColorWrapper(Box::new(color::Reset)),
+            matched_bg:       ColorWrapper(Box::new(color::Reset)),
+            current:          ColorWrapper(Box::new(color::Reset)),
+            current_bg:       ColorWrapper(Box::new(color::Reset)),
+            current_match:    ColorWrapper(Box::new(color::Reset)),
+            current_match_bg: ColorWrapper(Box::new(color::Reset)),
+            spinner:          ColorWrapper(Box::new(color::Reset)),
+            info:             ColorWrapper(Box::new(color::Reset)),
+            prompt:           ColorWrapper(Box::new(color::Reset)),
+            cursor:           ColorWrapper(Box::new(color::Reset)),
+            selected:         ColorWrapper(Box::new(color::Reset)),
+            header:           ColorWrapper(Box::new(color::Reset)),
         }
     }
+
+    pub fn dark256() -> Self {
+        ColorTheme {
+            fg:               ColorWrapper(Box::new(color::AnsiValue(15))),
+            bg:               ColorWrapper(Box::new(color::AnsiValue(0))),
+            matched:          ColorWrapper(Box::new(color::AnsiValue(108))),
+            matched_bg:       ColorWrapper(Box::new(color::AnsiValue(0))),
+            current:          ColorWrapper(Box::new(color::AnsiValue(254))),
+            current_bg:       ColorWrapper(Box::new(color::AnsiValue(236))),
+            current_match:    ColorWrapper(Box::new(color::AnsiValue(151))),
+            current_match_bg: ColorWrapper(Box::new(color::AnsiValue(236))),
+            spinner:          ColorWrapper(Box::new(color::AnsiValue(148))),
+            info:             ColorWrapper(Box::new(color::AnsiValue(144))),
+            prompt:           ColorWrapper(Box::new(color::AnsiValue(110))),
+            cursor:           ColorWrapper(Box::new(color::AnsiValue(161))),
+            selected:         ColorWrapper(Box::new(color::AnsiValue(168))),
+            header:           ColorWrapper(Box::new(color::AnsiValue(109))),
+        }
+    }
+
+    pub fn monokai256() -> Self {
+        ColorTheme {
+            fg:               ColorWrapper(Box::new(color::AnsiValue(252))),
+            bg:               ColorWrapper(Box::new(color::AnsiValue(234))),
+            matched:          ColorWrapper(Box::new(color::AnsiValue(234))),
+            matched_bg:       ColorWrapper(Box::new(color::AnsiValue(186))),
+            current:          ColorWrapper(Box::new(color::AnsiValue(254))),
+            current_bg:       ColorWrapper(Box::new(color::AnsiValue(236))),
+            current_match:    ColorWrapper(Box::new(color::AnsiValue(234))),
+            current_match_bg: ColorWrapper(Box::new(color::AnsiValue(186))),
+            spinner:          ColorWrapper(Box::new(color::AnsiValue(148))),
+            info:             ColorWrapper(Box::new(color::AnsiValue(144))),
+            prompt:           ColorWrapper(Box::new(color::AnsiValue(110))),
+            cursor:           ColorWrapper(Box::new(color::AnsiValue(161))),
+            selected:         ColorWrapper(Box::new(color::AnsiValue(168))),
+            header:           ColorWrapper(Box::new(color::AnsiValue(109))),
+        }
+    }
+
+    pub fn light256() -> Self {
+        ColorTheme {
+            fg:               ColorWrapper(Box::new(color::AnsiValue(15))),
+            bg:               ColorWrapper(Box::new(color::AnsiValue(0))),
+            matched:          ColorWrapper(Box::new(color::AnsiValue(0))),
+            matched_bg:       ColorWrapper(Box::new(color::AnsiValue(220))),
+            current:          ColorWrapper(Box::new(color::AnsiValue(237))),
+            current_bg:       ColorWrapper(Box::new(color::AnsiValue(251))),
+            current_match:    ColorWrapper(Box::new(color::AnsiValue(66))),
+            current_match_bg: ColorWrapper(Box::new(color::AnsiValue(251))),
+            spinner:          ColorWrapper(Box::new(color::AnsiValue(65))),
+            info:             ColorWrapper(Box::new(color::AnsiValue(101))),
+            prompt:           ColorWrapper(Box::new(color::AnsiValue(25))),
+            cursor:           ColorWrapper(Box::new(color::AnsiValue(161))),
+            selected:         ColorWrapper(Box::new(color::AnsiValue(168))),
+            header:           ColorWrapper(Box::new(color::AnsiValue(31))),
+        }
+    }
+
 
     pub fn from_options(color: &str) -> Self {
         let mut theme = ColorTheme::new();
@@ -497,103 +616,54 @@ impl ColorTheme {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
                 theme = match color[0] {
-                    "molokai" => MONOKAI256.clone(),
-                    "light" => LIGHT256.clone(),
-                    "16"  => DEFAULT16.clone(),
-                    "dark" | _ => DARK256.clone(),
+                    "molokai"  => ColorTheme::monokai256(),
+                    "light"    => ColorTheme::light256(),
+                    "16"       => ColorTheme::default(),
+                    "dark" | _ => ColorTheme::dark256(),
                 }
             }
 
+            let new_color = if color[1].len() == 7 {
+                // 256 color
+                let r = u8::from_str_radix(&color[1][1..3], 16).unwrap_or(255);
+                let g = u8::from_str_radix(&color[1][3..5], 16).unwrap_or(255);
+                let b = u8::from_str_radix(&color[1][5..7], 16).unwrap_or(255);
+                ColorWrapper(Box::new(color::Rgb(r, g, b)))
+            } else {
+                ColorWrapper(Box::new(color::AnsiValue(color[1].parse::<u8>().unwrap_or(255))))
+            };
+
             match color[0] {
-                "fg"               => theme.fg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "bg"               => theme.bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "matched"          => theme.matched = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "matched_bg"       => theme.matched_bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "current"          => theme.current = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "current_bg"       => theme.current_bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "current_match"    => theme.current_match = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "current_match_bg" => theme.current_match_bg = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "spinner"          => theme.spinner = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "info"             => theme.info = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "prompt"           => theme.prompt = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "cursor"           => theme.cursor = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "selected"         => theme.selected = color[1].parse().unwrap_or(COLOR_UNDEFINED),
-                "header"           => theme.header = color[1].parse().unwrap_or(COLOR_UNDEFINED),
+                "fg"               => theme.fg = new_color,
+                "bg"               => theme.bg = new_color,
+                "matched"          => theme.matched = new_color,
+                "matched_bg"       => theme.matched_bg = new_color,
+                "current"          => theme.current = new_color,
+                "current_bg"       => theme.current_bg = new_color,
+                "current_match"    => theme.current_match = new_color,
+                "current_match_bg" => theme.current_match_bg = new_color,
+                "spinner"          => theme.spinner = new_color,
+                "info"             => theme.info = new_color,
+                "prompt"           => theme.prompt = new_color,
+                "cursor"           => theme.cursor = new_color,
+                "selected"         => theme.selected = new_color,
+                "header"           => theme.header = new_color,
                 _ => {}
             }
         }
         theme
     }
+
+    pub fn register_self(&self) {
+        register_resource(COLOR_PROMPT,        format!("{}{}", color::Fg(self.prompt), color::Bg(self.bg)));
+        register_resource(COLOR_MATCHED,       format!("{}{}", color::Fg(self.matched), color::Bg(self.matched_bg)));
+        register_resource(COLOR_CURRENT,       format!("{}{}", color::Fg(self.current), color::Bg(self.current_bg)));
+        register_resource(COLOR_CURRENT_MATCH, format!("{}{}", color::Fg(self.current_match), color::Bg(self.current_match_bg)));
+        register_resource(COLOR_SPINNER,       format!("{}{}", color::Fg(self.spinner), color::Bg(self.bg)));
+        register_resource(COLOR_INFO,          format!("{}{}", color::Fg(self.info), color::Bg(self.bg)));
+        register_resource(COLOR_CURSOR,        format!("{}{}", color::Fg(self.cursor), color::Bg(self.current_bg)));
+        register_resource(COLOR_SELECTED,      format!("{}{}", color::Fg(self.selected), color::Bg(self.current_bg)));
+        register_resource(COLOR_HEADER,        format!("{}{}", color::Fg(self.header), color::Bg(self.bg)));
+    }
 }
 
-const DEFAULT16: ColorTheme = ColorTheme {
-    use_default:   true,
-    fg:               15,
-    bg:               0,
-    matched:          COLOR_GREEN,
-    matched_bg:       COLOR_BLACK,
-    current:          COLOR_YELLOW,
-    current_bg:       COLOR_BLACK,
-    current_match:    COLOR_GREEN,
-    current_match_bg: COLOR_BLACK,
-    spinner:          COLOR_GREEN,
-    info:             COLOR_WHITE,
-    prompt:           COLOR_BLUE,
-    cursor:           COLOR_RED,
-    selected:         COLOR_MAGENTA,
-    header:           COLOR_CYAN,
-};
-
-const DARK256: ColorTheme = ColorTheme {
-    use_default:   true,
-    fg:               15,
-    bg:               0,
-    matched:          108,
-    matched_bg:       0,
-    current:          254,
-    current_bg:       236,
-    current_match:    151,
-    current_match_bg: 236,
-    spinner:          148,
-    info:             144,
-    prompt:           110,
-    cursor:           161,
-    selected:         168,
-    header:           109,
-};
-
-const MONOKAI256: ColorTheme = ColorTheme {
-    use_default:   true,
-    fg:               252,
-    bg:               234,
-    matched:          234,
-    matched_bg:       186,
-    current:          254,
-    current_bg:       236,
-    current_match:    234,
-    current_match_bg: 186,
-    spinner:          148,
-    info:             144,
-    prompt:           110,
-    cursor:           161,
-    selected:         168,
-    header:           109,
-};
-
-const LIGHT256: ColorTheme = ColorTheme {
-    use_default:   true,
-    fg:               15,
-    bg:               0,
-    matched:          0,
-    matched_bg:       220,
-    current:          237,
-    current_bg:       251,
-    current_match:    66,
-    current_match_bg: 251,
-    spinner:          65,
-    info:             101,
-    prompt:           25,
-    cursor:           161,
-    selected:         168,
-    header:           31,
-};

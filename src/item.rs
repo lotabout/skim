@@ -2,13 +2,13 @@
 // the internal states, such as selected or not
 
 use std::cmp::Ordering;
-use ncurses::*;
 use ansi::parse_ansi;
 use regex::Regex;
 use reader::FieldRange;
 use std::borrow::Cow;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
+use curses::attr_t;
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
