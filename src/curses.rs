@@ -6,7 +6,7 @@ use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
-use std::io::{stdin, stdout, Write};
+use std::io::{stdin, stdout, Write, BufWriter};
 use std::io::prelude::*;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -161,6 +161,8 @@ pub struct Curses {
 
 unsafe impl Send for Curses {}
 
+const CURSES_BUF_SIZE: usize = 100 * 1024;
+
 impl Curses {
     pub fn new(options: &getopts::Matches, rx_cursor_pos: Receiver<(u16,u16)>) -> Self {
         ColorTheme::init_from_options(&options);
@@ -193,9 +195,9 @@ impl Curses {
         };
 
         let term: Box<Write> = if Margin::Percent(100) == height {
-            Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap()))
+            Box::new(AlternateScreen::from(BufWriter::with_capacity(CURSES_BUF_SIZE, stdout().into_raw_mode().unwrap())))
         } else {
-            Box::new(stdout().into_raw_mode().unwrap())
+            Box::new(BufWriter::with_capacity(CURSES_BUF_SIZE, stdout().into_raw_mode().unwrap()))
         };
 
         let mut ret = Curses {
