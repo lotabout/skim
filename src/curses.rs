@@ -5,21 +5,15 @@
 use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
-use libc::{STDIN_FILENO, STDERR_FILENO, fdopen, c_char};
 use std::sync::mpsc::Receiver;
-use std::io::{stdin, stdout, Write, Stdout, BufReader, BufRead};
+use std::io::{stdin, stdout, Write};
 use std::io::prelude::*;
-use std::fs::File;
-use termion::event::{Key, Event, MouseEvent};
-use termion::input::{TermRead, MouseTerminal};
-use termion::raw::{IntoRawMode, RawTerminal};
-use termion::screen::{AlternateScreen, ToMainScreen};
-use termion::cursor::DetectCursorPos;
+use termion::raw::IntoRawMode;
+use termion::screen::AlternateScreen;
 use termion;
-use std::cmp::{min, max};
-use termion::{color, style};
+use std::cmp::min;
+use termion::color;
 use std::fmt;
-use std::default::Default;
 
 //use std::io::Write;
 macro_rules! println_stderr(
@@ -70,7 +64,8 @@ pub fn register_ansi(ansi: String) -> attr_t {
         *color_map.get(&ansi).unwrap()
     } else {
         let next_pair = COLOR_USER + pair_num;
-        register_resource(next_pair, ansi);
+        register_resource(next_pair, ansi.clone());
+        color_map.insert(ansi, next_pair);
         next_pair
     }
 }
@@ -168,8 +163,9 @@ unsafe impl Send for Curses {}
 
 impl Curses {
     pub fn new(options: &getopts::Matches, rx_cursor_pos: Receiver<(u16,u16)>) -> Self {
+        ColorTheme::init_from_options(&options);
+
         // reserve enough lines according to height
-        //
 
         let margins = if let Some(margin_option) = options.opt_str("margin") {
             Curses::parse_margin(&margin_option)
@@ -188,7 +184,7 @@ impl Curses {
 
         // reserve the necessary lines to show skim
         let (max_y, _) = Curses::terminal_size();
-        Curses::reserve_lines(y, max_y, height);
+        Curses::reserve_lines(max_y, height);
 
         let start_y = match height {
             Margin::Percent(100) => 0,
@@ -201,14 +197,6 @@ impl Curses {
         } else {
             Box::new(stdout().into_raw_mode().unwrap())
         };
-
-        // register
-        let theme = if let Some(color) = options.opt_str("color") {
-            ColorTheme::from_options(&color)
-        } else {
-            ColorTheme::dark256()
-        };
-        theme.register_self();
 
         let mut ret = Curses {
             term: Some(term),
@@ -228,7 +216,7 @@ impl Curses {
         ret
     }
 
-    fn reserve_lines(y: i32, max_y: i32, height: Margin) {
+    fn reserve_lines(max_y: i32, height: Margin) {
         let rows = match height {
             Margin::Percent(100) => {return;}
             Margin::Percent(percent) => max_y*percent/100,
@@ -300,16 +288,6 @@ impl Curses {
         }
     }
 
-    fn get_color(&self, pair: i16, is_bold: bool) -> attr_t {
-        pair
-        //attr_color(pair, is_bold)
-        //if *USE_COLOR.read().unwrap() {
-            //attr_color(pair, is_bold)
-        //} else {
-            //attr_mono(pair, is_bold)
-        //}
-    }
-
     pub fn resize(&mut self) {
         let (max_y, max_x) = Curses::terminal_size();
         let height = match self.height {
@@ -346,14 +324,12 @@ impl Curses {
     }
 
     pub fn mv(&mut self, y: i32, x: i32) {
-        //mv(y+self.top, x+self.left);
         let target_x = (x+self.left+1) as u16;
         let target_y = (y+self.top+1) as u16;
         write!(self.get_term(), "{}", termion::cursor::Goto(target_x, target_y));
     }
 
     pub fn get_maxyx(&self) -> (i32, i32) {
-        let (max_y, max_x) = Curses::terminal_size();
         (self.bottom-self.top, self.right-self.left)
     }
 
@@ -387,8 +363,7 @@ impl Curses {
     }
 
     pub fn erase(&mut self) {
-        //erase();
-        println_stderr!("erase");
+        //println_stderr!("erase");
         for row in (0..self.height()).rev() {
             self.mv(row, 0);
             write!(self.get_term(), "{}", termion::clear::CurrentLine);
@@ -396,43 +371,35 @@ impl Curses {
     }
 
     pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
-        //let attr = self.get_color(pair, is_bold);
-        //attron(attr);
-        //addstr(text);
-        //attroff(attr);
-        println_stderr!("cprint: {}", text);
+        //println_stderr!("cprint: {:?}", text);
+        self.attron(pair);
         write!(self.get_term(), "{}", text);
+        self.attroff(pair);
     }
 
     pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
-        //let attr = self.get_color(pair, is_bold);
-        //attron(attr);
-        //addstr(&ch.to_string()); // to support wide character
-        //attroff(attr);
-        println_stderr!("caddch: {}", ch);
+        //println_stderr!("caddch: {:?}", ch);
+        self.attron(pair);
         write!(self.get_term(), "{}", ch);
+        self.attroff(pair);
     }
 
     pub fn printw(&mut self, text: &str) {
-        //printw(text);
-        println_stderr!("printw: {}", text);
+        //println_stderr!("printw: {:?}", text);
         write!(self.get_term(), "{}", text);
     }
 
     pub fn close(&mut self) {
-        //endwin();
-        //delscreen(self.screen);
         self.erase();
         self.term.take();
     }
 
-    pub fn attr_on(&self, attr: attr_t) {
-
-        //if attr == 0 {
-            //attrset(0);
-        //} else {
-            //attron(attr);
-        //}
+    pub fn attr_on(&mut self, attr: attr_t) {
+        if attr == 0 {
+            self.attrclear();
+        } else {
+            self.attron(attr);
+        }
     }
 
     fn attron(&mut self, key: attr_t) {
@@ -440,23 +407,19 @@ impl Curses {
         resource_map.get(&key).map(|s| write!(self.get_term(), "{}", s));
     }
 
-    fn attroff(&mut self, key: attr_t) {
-        write!(self.get_term(), "{}", color::Fg(color::Reset));
+    fn attroff(&mut self, _: attr_t) {
+        write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
     }
 
+    fn attrclear(&mut self) {
+        write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
+    }
 
     pub fn refresh(&mut self) {
-        //refresh();
-        println_stderr!("refresh");
+        //println_stderr!("refresh");
         self.get_term().flush().unwrap();
     }
 }
-
-// use default if x is COLOR_UNDEFINED, else use x
-//fn shadow(default: i16, x: i16) -> i16 {
-    //if x == COLOR_UNDEFINED { default } else { x }
-//}
-
 
 //fn attr_color(pair: i16, is_bold: bool) -> attr_t {
     //let attr = if pair > COLOR_NORMAL {COLOR_PAIR(pair)} else {0};
@@ -494,6 +457,15 @@ impl color::Color for ColorWrapper {
     }
 }
 
+impl<'a> color::Color for &'a ColorWrapper {
+    fn write_fg(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        (*self).write_fg(f)
+    }
+    fn write_bg(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        (*self).write_bg(f)
+    }
+}
+
 pub struct ColorTheme {
     fg:               ColorWrapper, // text fg
     bg:               ColorWrapper, // text bg
@@ -511,11 +483,22 @@ pub struct ColorTheme {
     header:           ColorWrapper,
 }
 
-impl Default for ColorTheme {
+
+impl ColorTheme {
+    pub fn init_from_options(options: &getopts::Matches) {
+        // register
+        let theme = if let Some(color) = options.opt_str("color") {
+            ColorTheme::from_options(&color)
+        } else {
+            ColorTheme::dark256()
+        };
+        theme.register_self();
+    }
+
     fn default() -> Self {
         ColorTheme {
-            fg:               ColorWrapper(Box::new(color::White)),
-            bg:               ColorWrapper(Box::new(color::Black)),
+            fg:               ColorWrapper(Box::new(color::Reset)),
+            bg:               ColorWrapper(Box::new(color::Reset)),
             matched:          ColorWrapper(Box::new(color::Green)),
             matched_bg:       ColorWrapper(Box::new(color::Black)),
             current:          ColorWrapper(Box::new(color::Yellow)),
@@ -530,32 +513,11 @@ impl Default for ColorTheme {
             header:           ColorWrapper(Box::new(color::Cyan)),
         }
     }
-}
 
-impl ColorTheme {
-    pub fn new() -> Self {
+    fn dark256() -> Self {
         ColorTheme {
             fg:               ColorWrapper(Box::new(color::Reset)),
             bg:               ColorWrapper(Box::new(color::Reset)),
-            matched:          ColorWrapper(Box::new(color::Reset)),
-            matched_bg:       ColorWrapper(Box::new(color::Reset)),
-            current:          ColorWrapper(Box::new(color::Reset)),
-            current_bg:       ColorWrapper(Box::new(color::Reset)),
-            current_match:    ColorWrapper(Box::new(color::Reset)),
-            current_match_bg: ColorWrapper(Box::new(color::Reset)),
-            spinner:          ColorWrapper(Box::new(color::Reset)),
-            info:             ColorWrapper(Box::new(color::Reset)),
-            prompt:           ColorWrapper(Box::new(color::Reset)),
-            cursor:           ColorWrapper(Box::new(color::Reset)),
-            selected:         ColorWrapper(Box::new(color::Reset)),
-            header:           ColorWrapper(Box::new(color::Reset)),
-        }
-    }
-
-    pub fn dark256() -> Self {
-        ColorTheme {
-            fg:               ColorWrapper(Box::new(color::AnsiValue(15))),
-            bg:               ColorWrapper(Box::new(color::AnsiValue(0))),
             matched:          ColorWrapper(Box::new(color::AnsiValue(108))),
             matched_bg:       ColorWrapper(Box::new(color::AnsiValue(0))),
             current:          ColorWrapper(Box::new(color::AnsiValue(254))),
@@ -571,7 +533,7 @@ impl ColorTheme {
         }
     }
 
-    pub fn monokai256() -> Self {
+    fn monokai256() -> Self {
         ColorTheme {
             fg:               ColorWrapper(Box::new(color::AnsiValue(252))),
             bg:               ColorWrapper(Box::new(color::AnsiValue(234))),
@@ -590,10 +552,10 @@ impl ColorTheme {
         }
     }
 
-    pub fn light256() -> Self {
+    fn light256() -> Self {
         ColorTheme {
-            fg:               ColorWrapper(Box::new(color::AnsiValue(15))),
-            bg:               ColorWrapper(Box::new(color::AnsiValue(0))),
+            fg:               ColorWrapper(Box::new(color::Reset)),
+            bg:               ColorWrapper(Box::new(color::Reset)),
             matched:          ColorWrapper(Box::new(color::AnsiValue(0))),
             matched_bg:       ColorWrapper(Box::new(color::AnsiValue(220))),
             current:          ColorWrapper(Box::new(color::AnsiValue(237))),
@@ -609,9 +571,8 @@ impl ColorTheme {
         }
     }
 
-
-    pub fn from_options(color: &str) -> Self {
-        let mut theme = ColorTheme::new();
+    fn from_options(color: &str) -> Self {
+        let mut theme = ColorTheme::default();
         for pair in color.split(',') {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
@@ -620,7 +581,8 @@ impl ColorTheme {
                     "light"    => ColorTheme::light256(),
                     "16"       => ColorTheme::default(),
                     "dark" | _ => ColorTheme::dark256(),
-                }
+                };
+                continue;
             }
 
             let new_color = if color[1].len() == 7 {
@@ -654,16 +616,17 @@ impl ColorTheme {
         theme
     }
 
-    pub fn register_self(&self) {
-        register_resource(COLOR_PROMPT,        format!("{}{}", color::Fg(self.prompt), color::Bg(self.bg)));
-        register_resource(COLOR_MATCHED,       format!("{}{}", color::Fg(self.matched), color::Bg(self.matched_bg)));
-        register_resource(COLOR_CURRENT,       format!("{}{}", color::Fg(self.current), color::Bg(self.current_bg)));
-        register_resource(COLOR_CURRENT_MATCH, format!("{}{}", color::Fg(self.current_match), color::Bg(self.current_match_bg)));
-        register_resource(COLOR_SPINNER,       format!("{}{}", color::Fg(self.spinner), color::Bg(self.bg)));
-        register_resource(COLOR_INFO,          format!("{}{}", color::Fg(self.info), color::Bg(self.bg)));
-        register_resource(COLOR_CURSOR,        format!("{}{}", color::Fg(self.cursor), color::Bg(self.current_bg)));
-        register_resource(COLOR_SELECTED,      format!("{}{}", color::Fg(self.selected), color::Bg(self.current_bg)));
-        register_resource(COLOR_HEADER,        format!("{}{}", color::Fg(self.header), color::Bg(self.bg)));
+    fn register_self(&self) {
+        register_resource(COLOR_NORMAL,        format!("{}{}", color::Fg(color::Reset),        color::Bg(color::Reset)));
+        register_resource(COLOR_PROMPT,        format!("{}{}", color::Fg(&self.prompt),        color::Bg(&self.bg)));
+        register_resource(COLOR_MATCHED,       format!("{}{}", color::Fg(&self.matched),       color::Bg(&self.matched_bg)));
+        register_resource(COLOR_CURRENT,       format!("{}{}", color::Fg(&self.current),       color::Bg(&self.current_bg)));
+        register_resource(COLOR_CURRENT_MATCH, format!("{}{}", color::Fg(&self.current_match), color::Bg(&self.current_match_bg)));
+        register_resource(COLOR_SPINNER,       format!("{}{}", color::Fg(&self.spinner),       color::Bg(&self.bg)));
+        register_resource(COLOR_INFO,          format!("{}{}", color::Fg(&self.info),          color::Bg(&self.bg)));
+        register_resource(COLOR_CURSOR,        format!("{}{}", color::Fg(&self.cursor),        color::Bg(&self.current_bg)));
+        register_resource(COLOR_SELECTED,      format!("{}{}", color::Fg(&self.selected),      color::Bg(&self.current_bg)));
+        register_resource(COLOR_HEADER,        format!("{}{}", color::Fg(&self.header),        color::Bg(&self.bg)));
     }
 }
 

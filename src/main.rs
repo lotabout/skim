@@ -188,7 +188,6 @@ fn real_main() -> i32 {
     thread::spawn(move || {
         reader.run();
     });
-    println_stderr!("reader created");
 
     //------------------------------------------------------------------------------
     // curses
@@ -197,7 +196,6 @@ fn real_main() -> i32 {
     let (tx_curses, rx_curses) = channel();
     let curses = Curses::new(&options, rx_curses);
 
-    println_stderr!("curses created");
     //------------------------------------------------------------------------------
     // input
     let tx_input_clone = tx_input.clone();
@@ -208,7 +206,6 @@ fn real_main() -> i32 {
         input.run();
     });
 
-    println_stderr!("input created");
     //------------------------------------------------------------------------------
     // query
     let default_command = match env::var("SKIM_DEFAULT_COMMAND") {
@@ -220,18 +217,15 @@ fn real_main() -> i32 {
         .build();
     query.parse_options(&options);
 
-    println_stderr!("query created");
     //------------------------------------------------------------------------------
     // model
     let (tx_model, rx_model) = channel();
     let mut model = model::Model::new(rx_model);
 
     model.parse_options(&options);
-    println_stderr!("model created");
     let m = thread::spawn(move || {
         model.run(curses);
     });
-    println_stderr!("model run");
 
     //------------------------------------------------------------------------------
     // matcher
@@ -243,7 +237,6 @@ fn real_main() -> i32 {
         matcher.run(rx_item);
     });
 
-    println_stderr!("matcher created");
     //------------------------------------------------------------------------------
     // start a timer for notifying refresh
     let tx_model_clone = tx_model.clone();
@@ -289,7 +282,6 @@ fn real_main() -> i32 {
 
     let _ = tx_input.send((EvActRedraw, Box::new(true))); // trigger draw
     while let Ok((ev, arg)) = rx_input.recv() {
-        println_stderr!("{:?}, {:?}", ev, arg);
         match ev {
             EvActAddChar =>  {
                 let ch: char = *arg.downcast().unwrap();

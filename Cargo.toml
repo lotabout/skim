@@ -12,6 +12,7 @@ license = "MIT"
 
 [[bin]]
 name = "sk"
+path = "src/main.rs"
 
 [dependencies]
 libc = "0.2.20"
@@ -23,6 +24,7 @@ shlex = "0.1.1"
 utf8parse = "0.1.0"
 unicode-width = "0.1.4"
 termion = "*"
+#termion = {git = 'https://github.com/lotabout/termion.git'}
 
 [dependencies.ncurses]
 version = "5.85.0"
