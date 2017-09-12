@@ -28,10 +28,6 @@ log = "0.3.8"
 env_logger = "0.4.3"
 time = "*"
 
-[dependencies.ncurses]
-version = "5.85.0"
-features = ["wide"]
-
 [features]
 default = []
 

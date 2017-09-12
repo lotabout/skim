@@ -1,7 +1,6 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 extern crate libc;
-extern crate ncurses;
 extern crate getopts;
 extern crate regex;
 extern crate shlex;
