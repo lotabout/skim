@@ -278,19 +278,7 @@ impl Model {
 
         // clear all lines
         let (h, w) = curses.get_maxyx();
-        if self.reverse {
-            for l in 2..h {
-                curses.mv(l, 0);
-                curses.clrtoeol();
-            }
-        } else {
-            for l in 0..(h-2) {
-                curses.mv(l, 0);
-                curses.clrtoeol();
-            }
-        }
-
-        let (h, _) = (h as usize, w as usize);
+        let h = h as usize;
 
         // screen-line: y         <--->   item-line: (height - y - 1)
         //              h-1                          h-(h-1)-1 = 0
@@ -309,6 +297,7 @@ impl Model {
 
             let item = self.items.get(i).unwrap().clone();
             self.draw_item(curses, &item, l == self.line_cursor);
+            curses.clrtoeol();
         }
 
         // restore cursor
@@ -579,8 +568,8 @@ impl Model {
     fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
         curses.hide_cursor();
         self.draw_items(curses);
-        curses.show_cursor();
         self.draw_status(curses);
+        curses.show_cursor();
         curses.refresh();
     }
 
