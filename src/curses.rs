@@ -6,7 +6,7 @@ use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
-use std::io::{stdin, stdout, Write, BufWriter};
+use std::io::{stdin, stdout, stderr, Write};
 use std::io::prelude::*;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -15,14 +15,9 @@ use std::cmp::min;
 use termion::color;
 use std::fmt;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-
-//use std::io::Write;
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
+use libc;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::fs::File;
 
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
@@ -44,9 +39,6 @@ lazy_static! {
 
     // COLOR_MAP is used to store ((fg <<8 ) | bg) -> attr_t, used to handle ANSI code
     static ref COLOR_MAP: RwLock<HashMap<String, attr_t>> = RwLock::new(HashMap::new());
-    //static ref FG: RwLock<i16> = RwLock::new(7);
-    //static ref BG: RwLock<i16> = RwLock::new(0);
-    //static ref USE_COLOR: RwLock<bool> = RwLock::new(true);
 }
 
 // register the color as color pair
@@ -157,10 +149,11 @@ pub struct Curses {
     margin_bottom: Margin,
     margin_left: Margin,
     margin_right: Margin,
-    rx_cursor_pos: Receiver<(u16, u16)>,
+
     stdout_buffer: String,
     current_y: i32,
     current_x: i32,
+    last_attr: attr_t,
 }
 
 unsafe impl Send for Curses {}
@@ -168,7 +161,7 @@ unsafe impl Send for Curses {}
 const CURSES_BUF_SIZE: usize = 100 * 1024;
 
 impl Curses {
-    pub fn new(options: &getopts::Matches, rx_cursor_pos: Receiver<(u16,u16)>) -> Self {
+    pub fn new(options: &getopts::Matches) -> Self {
         ColorTheme::init_from_options(&options);
 
         // reserve enough lines according to height
@@ -216,10 +209,10 @@ impl Curses {
             margin_bottom,
             margin_left,
             margin_right,
-            rx_cursor_pos,
             stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
             current_y: 0,
             current_x: 0,
+            last_attr: COLOR_NORMAL,
         };
         ret.resize();
         ret
@@ -337,9 +330,8 @@ impl Curses {
         self.current_x = x + self.left;
         let target_y = (y+self.top+1) as u16;
         let target_x = (x+self.left+1) as u16;
-        //write!(self.get_term(), "{}", termion::cursor::Goto(target_x, target_y));
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(target_x, target_y)).as_str());
-        debug!("curses:mv: {}/{}", y, x);
+        //debug!("curses:mv: {}/{}", y, x);
     }
 
     pub fn get_maxyx(&self) -> (i32, i32) {
@@ -347,14 +339,8 @@ impl Curses {
     }
 
     pub fn getyx(&mut self) -> (i32, i32) {
-        debug!("curses:getyx: {}/{}", self.current_y - self.top, self.current_x - self.left);
+        //debug!("curses:getyx: {}/{}", self.current_y - self.top, self.current_x - self.left);
         (self.current_y - self.top, self.current_x - self.left)
-        //debug!("curses:getyx: sent");
-        //write!(self.get_term(), "\x1B[6n");
-        //self.get_term().flush().unwrap();
-        //let (y, x) = self.rx_cursor_pos.recv().unwrap();
-        //debug!("curses:getyx: received {}/{}|{}/{}", y, x, y as i32 - self.top, x as i32 - self.left);
-        //(y as i32 - self.top, x as i32 - self.left)
     }
 
     fn terminal_size() -> (i32, i32) {
@@ -363,8 +349,8 @@ impl Curses {
     }
 
     pub fn clrtoeol(&mut self) {
+        //debug!("curses:clrtoeol");
         self.stdout_buffer.push_str(format!("{}", termion::clear::UntilNewline).as_str());
-        //write!(self.get_term(), "{}", termion::clear::UntilNewline);
     }
 
     pub fn endwin(&mut self) {
@@ -386,7 +372,6 @@ impl Curses {
         for row in (0..self.height()).rev() {
             self.mv(row, 0);
             self.stdout_buffer.push_str(format!("{}", termion::clear::CurrentLine).as_str());
-            //write!(self.get_term(), "{}", termion::clear::CurrentLine);
         }
     }
 
@@ -395,24 +380,19 @@ impl Curses {
         self.attron(pair);
         self.current_x += text.width_cjk() as i32;
         self.stdout_buffer.push_str(format!("{}", text).as_str());
-        //write!(self.get_term(), "{}", text);
         self.attroff(pair);
     }
 
     pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
-        //println_stderr!("caddch: {:?}", ch);
         self.attron(pair);
         self.current_x += ch.width_cjk().unwrap() as i32;
         self.stdout_buffer.push_str(format!("{}", ch).as_str());
-        //write!(self.get_term(), "{}", ch);
         self.attroff(pair);
     }
 
     pub fn printw(&mut self, text: &str) {
-        //println_stderr!("printw: {:?}", text);
         self.current_x += text.width_cjk() as i32;
         self.stdout_buffer.push_str(format!("{}", text).as_str());
-        //write!(self.get_term(), "{}", text);
     }
 
     pub fn close(&mut self) {
@@ -430,21 +410,29 @@ impl Curses {
     }
 
     fn attron(&mut self, key: attr_t) {
+        if key == self.last_attr {
+            return;
+        }
+
         let resource_map = RESOURCE_MAP.read().unwrap();
-        resource_map.get(&key).map(|s|
-            self.stdout_buffer.push_str(s)
-                                   //write!(self.get_term(), "{}", s)
-                                   );
+        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
+        self.last_attr = key
     }
 
     fn attroff(&mut self, _: attr_t) {
+        if self.last_attr == COLOR_NORMAL {
+            return;
+        }
         self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
-        //write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
+        self.last_attr = COLOR_NORMAL;
     }
 
     fn attrclear(&mut self) {
+        if self.last_attr == COLOR_NORMAL {
+            return;
+        }
         self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
-        //write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
+        self.last_attr = COLOR_NORMAL;
     }
 
     pub fn refresh(&mut self) {
@@ -455,16 +443,15 @@ impl Curses {
             write!(term, "{}", &self.stdout_buffer);
             term.flush().unwrap();
         }
+        //debug!("refresh:\n{}\n", &self.stdout_buffer);
         self.stdout_buffer.clear();
     }
 
     pub fn hide_cursor(&mut self) {
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Hide).as_str());
-        //write!(self.get_term(), "{}", termion::cursor::Hide);
     }
     pub fn show_cursor(&mut self) {
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
-        //write!(self.get_term(), "{}", termion::cursor::Show);
     }
 }
 
@@ -664,7 +651,7 @@ impl ColorTheme {
     }
 
     fn register_self(&self) {
-        register_resource(COLOR_NORMAL,        format!("{}{}", color::Fg(color::Reset),        color::Bg(color::Reset)));
+        register_resource(COLOR_NORMAL,        String::new());
         register_resource(COLOR_PROMPT,        format!("{}{}", color::Fg(&self.prompt),        color::Bg(&self.bg)));
         register_resource(COLOR_MATCHED,       format!("{}{}", color::Fg(&self.matched),       color::Bg(&self.matched_bg)));
         register_resource(COLOR_CURRENT,       format!("{}{}", color::Fg(&self.current),       color::Bg(&self.current_bg)));

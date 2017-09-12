@@ -38,6 +38,8 @@ use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::Curses;
 use std::io::Write;
+use std::fs::File;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 macro_rules! println_stderr(
     ($($arg:tt)*) => { {
@@ -202,34 +204,24 @@ fn real_main() -> i32 {
     });
 
     //------------------------------------------------------------------------------
-    // reader -- read items from stdin or output of comment
-    // NOTE: termion requires stdin to be /dev/tty, reader properly ensure that.
-    // Thus the creation of the reader should come before curses.
-
-    let (tx_reader, rx_reader) = channel();
-    let (tx_item, rx_item) = sync_channel(128);
-    let mut reader = reader::Reader::new(rx_reader, tx_item.clone());
-    reader.parse_options(&options);
-    thread::spawn(move || {
-        reader.run();
-    });
-
-    //------------------------------------------------------------------------------
     // curses
 
-    // Special channel for receiving current cursor position.
-    let (tx_curses, rx_curses) = channel();
-    let curses = Curses::new(&options, rx_curses);
+    // termion require the stdin to be terminal file
+    // see: https://github.com/ticki/termion/issues/64
+    // Here is a workaround. But reader will need to know the real stdin.
+    let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
+    let real_stdin = if !istty {
+        unsafe {
+            let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
+            let tty = File::open("/dev/tty").unwrap();
+            libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
+            Some(stdin)
+        }
+    } else {
+        None
+    };
 
-    //------------------------------------------------------------------------------
-    // input
-    let tx_input_clone = tx_input.clone();
-    let mut input = input::Input::new(tx_input_clone);
-    input.parse_keymap(options.opt_str("b"));
-    input.parse_expect_keys(options.opt_str("e"));
-    thread::spawn(move || {
-        input.run();
-    });
+    let curses = Curses::new(&options);
 
     //------------------------------------------------------------------------------
     // query
@@ -243,12 +235,34 @@ fn real_main() -> i32 {
     query.parse_options(&options);
 
     //------------------------------------------------------------------------------
+    // reader -- read items from stdin or output of comment
+
+    debug!("reader start");
+    let (tx_reader, rx_reader) = channel();
+    let (tx_item, rx_item) = sync_channel(128);
+    let mut reader = reader::Reader::new(rx_reader, tx_item.clone(), real_stdin);
+    reader.parse_options(&options);
+    thread::spawn(move || {
+        reader.run();
+    });
+
+    //------------------------------------------------------------------------------
+    // input
+    let tx_input_clone = tx_input.clone();
+    let mut input = input::Input::new(tx_input_clone);
+    input.parse_keymap(options.opt_str("b"));
+    input.parse_expect_keys(options.opt_str("e"));
+    thread::spawn(move || {
+        input.run();
+    });
+
+    //------------------------------------------------------------------------------
     // model
     let (tx_model, rx_model) = channel();
     let mut model = model::Model::new(rx_model);
 
     model.parse_options(&options);
-    let m = thread::spawn(move || {
+    thread::spawn(move || {
         model.run(curses);
     });
 
@@ -425,7 +439,7 @@ fn real_main() -> i32 {
 
             EvReportCursorPos => {
                 let (y, x): (u16, u16) = *arg.downcast().unwrap();
-                tx_curses.send((y, x));
+                debug!("main:EvReportCursorPos: {}/{}", y, x);
             }
             _ => {}
         }

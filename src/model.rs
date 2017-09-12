@@ -95,7 +95,7 @@ impl Model {
         loop {
             // check for new item
             if let Ok((ev, arg)) = self.rx_cmd.recv() {
-                debug!("model: got {:?}", ev);
+                //debug!("model: got {:?}", ev);
                 match ev {
                     Event::EvModelNewItem => {
                         let items: MatchedItemGroup = *arg.downcast().unwrap();
@@ -108,19 +108,19 @@ impl Model {
                     }
 
                     Event::EvModelDrawQuery => {
-                        debug!("model:EvModelDrawQuery:query");
+                        //debug!("model:EvModelDrawQuery:query");
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
                         self.draw_query(&mut curses, print_query_func);
                         curses.refresh();
                     }
                     Event::EvModelDrawInfo => {
-                        debug!("model:EvModelDrawInfo:status");
+                        //debug!("model:EvModelDrawInfo:status");
                         self.draw_status(&mut curses);
                         curses.refresh();
                     }
 
                     Event::EvModelNotifyProcessed => {
-                        debug!("model:EvModelNotifyProcessed:items_and_status");
+                        //debug!("model:EvModelNotifyProcessed:items_and_status");
                         let num_processed = *arg.downcast::<usize>().unwrap();
                         self.num_processed = num_processed;
 
@@ -142,7 +142,7 @@ impl Model {
                     }
 
                     Event::EvMatcherStopped => {
-                        debug!("model:EvMatcherStopped:items_and_status");
+                        //debug!("model:EvMatcherStopped:items_and_status");
                         self.matcher_stopped = true;
                         self.act_redraw_items_and_status(&mut curses);
                     }
@@ -180,72 +180,72 @@ impl Model {
                         let _ = tx_ack.send(true);
                     }
                     Event::EvActUp => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_move_line_cursor(1);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActDown => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_move_line_cursor(-1);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggle => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_toggle();
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggleDown => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_toggle();
                         self.act_move_line_cursor(-1);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggleUp => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_toggle();
                         self.act_move_line_cursor(1);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActToggleAll => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_toggle_all();
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActSelectAll => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_select_all();
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActDeselectAll => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_deselect_all();
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageDown => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         let height = 1-self.height;
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageUp => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         let height = self.height-1;
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActScrollLeft => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-1)));
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActScrollRight => {
-                        debug!("model:redraw_items_and_status");
+                        //debug!("model:redraw_items_and_status");
                         self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(1)));
                         self.act_redraw_items_and_status(&mut curses);
                     }
 
                     Event::EvActRedraw => {
-                        debug!("model:EvActRedraw:act_redraw");
+                        //debug!("model:EvActRedraw:act_redraw");
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
                         self.act_redarw(&mut curses, print_query_func);
                     }
@@ -269,8 +269,6 @@ impl Model {
 
     fn update_size(&mut self, curses: &mut Curses) {
         // update the (height, width)
-        curses.endwin();
-        curses.refresh();
         curses.resize();
         let (h, w) = curses.get_maxyx();
         self.height = h-2;
@@ -284,6 +282,7 @@ impl Model {
     }
 
     fn draw_items(&mut self, curses: &mut Curses) {
+        //debug!("model:draw_items");
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
@@ -374,7 +373,7 @@ impl Model {
         let (h, w) = curses.get_maxyx();
         let (h, _) = (h as usize, w as usize);
 
-        debug!("model:draw_query");
+        //debug!("model:draw_query");
 
         // print query
         curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
