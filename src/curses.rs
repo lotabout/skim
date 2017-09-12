@@ -132,6 +132,125 @@ pub enum Margin {
 // |
 // |
 
+struct Window {
+    top: i32,
+    bottom: i32,
+    left: i32,
+    right: i32,
+
+    stdout_buffer: String,
+    current_y: i32,
+    current_x: i32,
+}
+
+impl Window {
+    pub fn new(top: i32, right: i32, bottom: i32, left: i32) -> Self {
+        Window {
+            top,
+            bottom,
+            left,
+            right,
+            stdout_buffer: String::with_capacity(CURSES_BUF_SIZE);
+            current_x: 0,
+            current_y: 0,
+        }
+    }
+
+    pub fn mv(&mut self, y: i32, x: i32) {
+        self.current_y = y;
+        self.current_x = x;
+        let target_y = (y+self.top+1) as u16;
+        let target_x = (x+self.left+1) as u16;
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(target_x, target_y)).as_str());
+    }
+
+    pub fn get_maxyx(&self) -> (i32, i32) {
+        (self.bottom-self.top, self.right-self.left)
+    }
+
+    pub fn getyx(&mut self) -> (i32, i32) {
+        (self.current_y, self.current_x)
+    }
+
+    pub fn clrtoeol(&mut self) {
+        let (y, x) = self.getyx();
+        let (_, max_x) = self.get_maxyx();
+        self.stdout_buffer.push_str(&" ".repeat(self.max_x - x));
+        self.mv(y, x);
+    }
+
+    pub fn erase(&mut self) {
+        for row in (0..self.height()).rev() {
+            self.mv(row, 0);
+            self.clrtoeol();
+        }
+    }
+
+    pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
+        self.attron(pair);
+        let (_, max_x) = 
+        let text_width = text.width_cjk() as i32;
+        self.current_x = 
+        self.stdout_buffer.push_str(format!("{}", text).as_str());
+        self.attroff(pair);
+    }
+
+    pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
+        self.attron(pair);
+        self.current_x += ch.width_cjk().unwrap() as i32;
+        self.stdout_buffer.push_str(format!("{}", ch).as_str());
+        self.attroff(pair);
+    }
+
+    pub fn printw(&mut self, text: &str) {
+        self.current_x += text.width_cjk() as i32;
+        self.stdout_buffer.push_str(format!("{}", text).as_str());
+    }
+
+    pub fn close(&mut self) {
+        self.erase();
+        self.refresh();
+        self.term.take();
+    }
+
+    pub fn attr_on(&mut self, attr: attr_t) {
+        if attr == 0 {
+            self.attrclear();
+        } else {
+            self.attron(attr);
+        }
+    }
+
+    fn attron(&mut self, key: attr_t) {
+        let resource_map = RESOURCE_MAP.read().unwrap();
+        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
+    }
+
+    fn attroff(&mut self, _: attr_t) {
+        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
+    }
+
+    fn attrclear(&mut self) {
+        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
+    }
+
+    pub fn refresh(&mut self) {
+        {
+            let mut term = self.term.as_mut().unwrap();
+            write!(term, "{}", &self.stdout_buffer).unwrap();
+            term.flush().unwrap();
+        }
+        self.stdout_buffer.clear();
+    }
+
+    pub fn hide_cursor(&mut self) {
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Hide).as_str());
+    }
+    pub fn show_cursor(&mut self) {
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
+    }
+}
+
 pub struct Curses {
     //screen: SCREEN,
     term: Option<Box<Write>>,
@@ -149,7 +268,6 @@ pub struct Curses {
     stdout_buffer: String,
     current_y: i32,
     current_x: i32,
-    last_attr: attr_t,
 }
 
 unsafe impl Send for Curses {}
@@ -208,7 +326,6 @@ impl Curses {
             stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
             current_y: 0,
             current_x: 0,
-            last_attr: COLOR_NORMAL,
         };
         ret.resize();
         ret
@@ -396,40 +513,24 @@ impl Curses {
     }
 
     fn attron(&mut self, key: attr_t) {
-        if key == self.last_attr {
-            return;
-        }
-
         let resource_map = RESOURCE_MAP.read().unwrap();
         resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
-        self.last_attr = key
     }
 
     fn attroff(&mut self, _: attr_t) {
-        if self.last_attr == COLOR_NORMAL {
-            return;
-        }
         self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
-        self.last_attr = COLOR_NORMAL;
     }
 
     fn attrclear(&mut self) {
-        if self.last_attr == COLOR_NORMAL {
-            return;
-        }
         self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
-        self.last_attr = COLOR_NORMAL;
     }
 
     pub fn refresh(&mut self) {
-        //println_stderr!("refresh");
-        //self.get_term().flush().unwrap();
         {
             let mut term = self.term.as_mut().unwrap();
             write!(term, "{}", &self.stdout_buffer).unwrap();
             term.flush().unwrap();
         }
-        //debug!("refresh:\n{}\n", &self.stdout_buffer);
         self.stdout_buffer.clear();
     }
 
