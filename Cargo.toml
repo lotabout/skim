@@ -24,7 +24,9 @@ shlex = "0.1.1"
 utf8parse = "0.1.0"
 unicode-width = "0.1.4"
 termion = "*"
-#termion = {git = 'https://github.com/lotabout/termion.git'}
+log = "0.3.8"
+env_logger = "0.4.3"
+time = "*"
 
 [dependencies.ncurses]
 version = "5.85.0"

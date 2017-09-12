@@ -14,6 +14,7 @@ use termion;
 use std::cmp::min;
 use termion::color;
 use std::fmt;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 //use std::io::Write;
 macro_rules! println_stderr(
@@ -157,6 +158,9 @@ pub struct Curses {
     margin_left: Margin,
     margin_right: Margin,
     rx_cursor_pos: Receiver<(u16, u16)>,
+    stdout_buffer: String,
+    current_y: i32,
+    current_x: i32,
 }
 
 unsafe impl Send for Curses {}
@@ -195,9 +199,9 @@ impl Curses {
         };
 
         let term: Box<Write> = if Margin::Percent(100) == height {
-            Box::new(AlternateScreen::from(BufWriter::with_capacity(CURSES_BUF_SIZE, stdout().into_raw_mode().unwrap())))
+            Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap()))
         } else {
-            Box::new(BufWriter::with_capacity(CURSES_BUF_SIZE, stdout().into_raw_mode().unwrap()))
+            Box::new(stdout().into_raw_mode().unwrap())
         };
 
         let mut ret = Curses {
@@ -213,6 +217,9 @@ impl Curses {
             margin_left,
             margin_right,
             rx_cursor_pos,
+            stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
+            current_y: 0,
+            current_x: 0,
         };
         ret.resize();
         ret
@@ -326,9 +333,13 @@ impl Curses {
     }
 
     pub fn mv(&mut self, y: i32, x: i32) {
-        let target_x = (x+self.left+1) as u16;
+        self.current_y = y + self.top;
+        self.current_x = x + self.left;
         let target_y = (y+self.top+1) as u16;
-        write!(self.get_term(), "{}", termion::cursor::Goto(target_x, target_y));
+        let target_x = (x+self.left+1) as u16;
+        //write!(self.get_term(), "{}", termion::cursor::Goto(target_x, target_y));
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(target_x, target_y)).as_str());
+        debug!("curses:mv: {}/{}", y, x);
     }
 
     pub fn get_maxyx(&self) -> (i32, i32) {
@@ -336,10 +347,14 @@ impl Curses {
     }
 
     pub fn getyx(&mut self) -> (i32, i32) {
-        write!(self.get_term(), "\x1B[6n");
-        self.get_term().flush().unwrap();
-        let (y, x) = self.rx_cursor_pos.recv().unwrap();
-        (y as i32 - self.top, x as i32 - self.left)
+        debug!("curses:getyx: {}/{}", self.current_y - self.top, self.current_x - self.left);
+        (self.current_y - self.top, self.current_x - self.left)
+        //debug!("curses:getyx: sent");
+        //write!(self.get_term(), "\x1B[6n");
+        //self.get_term().flush().unwrap();
+        //let (y, x) = self.rx_cursor_pos.recv().unwrap();
+        //debug!("curses:getyx: received {}/{}|{}/{}", y, x, y as i32 - self.top, x as i32 - self.left);
+        //(y as i32 - self.top, x as i32 - self.left)
     }
 
     fn terminal_size() -> (i32, i32) {
@@ -348,10 +363,12 @@ impl Curses {
     }
 
     pub fn clrtoeol(&mut self) {
-        write!(self.get_term(), "{}", termion::clear::UntilNewline);
+        self.stdout_buffer.push_str(format!("{}", termion::clear::UntilNewline).as_str());
+        //write!(self.get_term(), "{}", termion::clear::UntilNewline);
     }
 
-    pub fn endwin(&self) {
+    pub fn endwin(&mut self) {
+        //self.refresh();
         //endwin();
     }
 
@@ -368,31 +385,39 @@ impl Curses {
         //println_stderr!("erase");
         for row in (0..self.height()).rev() {
             self.mv(row, 0);
-            write!(self.get_term(), "{}", termion::clear::CurrentLine);
+            self.stdout_buffer.push_str(format!("{}", termion::clear::CurrentLine).as_str());
+            //write!(self.get_term(), "{}", termion::clear::CurrentLine);
         }
     }
 
     pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
         //println_stderr!("cprint: {:?}", text);
         self.attron(pair);
-        write!(self.get_term(), "{}", text);
+        self.current_x += text.width_cjk() as i32;
+        self.stdout_buffer.push_str(format!("{}", text).as_str());
+        //write!(self.get_term(), "{}", text);
         self.attroff(pair);
     }
 
     pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
         //println_stderr!("caddch: {:?}", ch);
         self.attron(pair);
-        write!(self.get_term(), "{}", ch);
+        self.current_x += ch.width_cjk().unwrap() as i32;
+        self.stdout_buffer.push_str(format!("{}", ch).as_str());
+        //write!(self.get_term(), "{}", ch);
         self.attroff(pair);
     }
 
     pub fn printw(&mut self, text: &str) {
         //println_stderr!("printw: {:?}", text);
-        write!(self.get_term(), "{}", text);
+        self.current_x += text.width_cjk() as i32;
+        self.stdout_buffer.push_str(format!("{}", text).as_str());
+        //write!(self.get_term(), "{}", text);
     }
 
     pub fn close(&mut self) {
         self.erase();
+        self.refresh();
         self.term.take();
     }
 
@@ -406,20 +431,40 @@ impl Curses {
 
     fn attron(&mut self, key: attr_t) {
         let resource_map = RESOURCE_MAP.read().unwrap();
-        resource_map.get(&key).map(|s| write!(self.get_term(), "{}", s));
+        resource_map.get(&key).map(|s|
+            self.stdout_buffer.push_str(s)
+                                   //write!(self.get_term(), "{}", s)
+                                   );
     }
 
     fn attroff(&mut self, _: attr_t) {
-        write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
+        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
+        //write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
     }
 
     fn attrclear(&mut self) {
-        write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
+        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
+        //write!(self.get_term(), "{}{}", color::Fg(color::Reset), color::Bg(color::Reset));
     }
 
     pub fn refresh(&mut self) {
         //println_stderr!("refresh");
-        self.get_term().flush().unwrap();
+        //self.get_term().flush().unwrap();
+        {
+            let mut term = self.term.as_mut().unwrap();
+            write!(term, "{}", &self.stdout_buffer);
+            term.flush().unwrap();
+        }
+        self.stdout_buffer.clear();
+    }
+
+    pub fn hide_cursor(&mut self) {
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Hide).as_str());
+        //write!(self.get_term(), "{}", termion::cursor::Hide);
+    }
+    pub fn show_cursor(&mut self) {
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
+        //write!(self.get_term(), "{}", termion::cursor::Show);
     }
 }
 

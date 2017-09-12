@@ -8,6 +8,9 @@ extern crate shlex;
 extern crate utf8parse;
 extern crate unicode_width;
 extern crate termion;
+#[macro_use] extern crate log;
+extern crate env_logger;
+extern crate time;
 
 #[macro_use] extern crate lazy_static;
 mod item;
@@ -90,6 +93,28 @@ Usage: sk [options]
 ";
 
 fn main() {
+    use log::{LogRecord, LogLevelFilter};
+    use env_logger::LogBuilder;
+
+    let format = |record: &LogRecord| {
+        let t = time::now();
+        format!("{},{:03} - {} - {}",
+                time::strftime("%Y-%m-%d %H:%M:%S", &t).unwrap(),
+                t.tm_nsec / 1000_000,
+                record.level(),
+                record.args()
+               )
+    };
+
+    let mut builder = LogBuilder::new();
+    builder.format(format).filter(None, LogLevelFilter::Info);
+
+    if env::var("RUST_LOG").is_ok() {
+        builder.parse(&env::var("RUST_LOG").unwrap());
+    }
+
+    builder.init().unwrap();
+
     let exit_code = real_main();
     std::process::exit(exit_code);
 }
