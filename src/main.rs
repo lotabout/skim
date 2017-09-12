@@ -37,16 +37,8 @@ use std::mem;
 use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::Curses;
-use std::io::Write;
 use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
-
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
 
 const REFRESH_DURATION: u64 = 200;
 

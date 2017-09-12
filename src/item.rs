@@ -10,13 +10,6 @@ use std::ascii::AsciiExt;
 use std::sync::Arc;
 use curses::attr_t;
 
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
-
 // An item will store everything that one line input will need to be operated and displayed.
 //
 // What's special about an item?

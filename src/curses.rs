@@ -5,8 +5,7 @@
 use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
-use std::sync::mpsc::Receiver;
-use std::io::{stdin, stdout, stderr, Write};
+use std::io::{stdin, stdout, Write};
 use std::io::prelude::*;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -15,9 +14,6 @@ use std::cmp::min;
 use termion::color;
 use std::fmt;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-use libc;
-use std::os::unix::io::{FromRawFd, IntoRawFd};
-use std::fs::File;
 
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
@@ -321,10 +317,6 @@ impl Curses {
         };
     }
 
-    fn get_term(&mut self) -> &mut Box<Write> {
-        self.term.as_mut().unwrap()
-    }
-
     pub fn mv(&mut self, y: i32, x: i32) {
         self.current_y = y + self.top;
         self.current_x = x + self.left;
@@ -353,11 +345,6 @@ impl Curses {
         self.stdout_buffer.push_str(format!("{}", termion::clear::UntilNewline).as_str());
     }
 
-    pub fn endwin(&mut self) {
-        //self.refresh();
-        //endwin();
-    }
-
     fn height(&self) -> i32 {
         let (max_y, _) = Curses::terminal_size();
         match self.height {
@@ -376,7 +363,6 @@ impl Curses {
     }
 
     pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
-        //println_stderr!("cprint: {:?}", text);
         self.attron(pair);
         self.current_x += text.width_cjk() as i32;
         self.stdout_buffer.push_str(format!("{}", text).as_str());
@@ -440,7 +426,7 @@ impl Curses {
         //self.get_term().flush().unwrap();
         {
             let mut term = self.term.as_mut().unwrap();
-            write!(term, "{}", &self.stdout_buffer);
+            write!(term, "{}", &self.stdout_buffer).unwrap();
             term.flush().unwrap();
         }
         //debug!("refresh:\n{}\n", &self.stdout_buffer);

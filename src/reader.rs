@@ -5,7 +5,7 @@ use std::error::Error;
 use item::Item;
 use std::sync::{Arc, RwLock};
 use std::process::{Command, Stdio, Child};
-use std::io::{stdin, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use event::{Event, EventArg};
 use std::thread::JoinHandle;
 use std::thread;
@@ -14,18 +14,9 @@ use std::collections::HashMap;
 use std::mem;
 use std::fs::File;
 
-use std::os::unix::io::{FromRawFd, IntoRawFd};
-
 use getopts;
 use regex::Regex;
 use sender::CachedSender;
-
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
 
 struct ReaderOption {
     pub use_ansi_color: bool,
