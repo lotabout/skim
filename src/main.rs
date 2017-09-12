@@ -72,6 +72,7 @@ Usage: sk [options]
     --color [BASE][,COLOR:ANSI]
                          change color theme
     --reverse            Reverse orientation
+    --height=HEIGHT      Height of skim's window (--height 40%)
     --margin=MARGIN      Screen Margin (TRBL / TB,RL / T,RL,B / T,R,B,L)
                          e.g. (sk --margin 1,10%)
 
