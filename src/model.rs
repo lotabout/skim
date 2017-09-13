@@ -297,7 +297,8 @@ impl Model {
         // screen-line: (h-l-1)   <--->   item-line: l
 
         let lower = self.item_cursor;
-        let upper = min(self.item_cursor + h-2, self.items.len());
+        let max_upper = self.item_cursor + h-2;
+        let upper = min(max_upper, self.items.len());
 
         for i in lower..upper {
             let l = i - lower;
@@ -308,6 +309,15 @@ impl Model {
 
             let item = self.items.get(i).unwrap().clone();
             self.draw_item(curses, &item, l == self.line_cursor);
+            curses.clrtoeol();
+        }
+
+        // clear rest of lines
+        // It is an optimization to avoid flickering by avoid erasing contents and then draw new
+        // ones
+        for i in upper..max_upper {
+            let l = i - lower;
+            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as i32, 0);
             curses.clrtoeol();
         }
 
