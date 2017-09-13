@@ -9,6 +9,9 @@ use std::collections::HashMap;
 use unicode_width::UnicodeWidthChar;
 use curses::*;
 use getopts;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::error::Error;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -36,6 +39,9 @@ pub struct Model {
     num_processed: usize,
     matcher_mode: String,
     timer: Instant,
+
+    // preview related
+    preview_cmd: Option<String>,
 }
 
 impl Model {
@@ -61,6 +67,8 @@ impl Model {
             matcher_stopped: false,
             timer: Instant::now(),
             matcher_mode: "".to_string(),
+
+            preview_cmd: None,
         }
     }
 
@@ -75,6 +83,10 @@ impl Model {
 
         if options.opt_present("reverse") {
             self.reverse = true;
+        }
+
+        if let Some(preview_cmd) = options.opt_str("preview") {
+            self.preview_cmd = Some(preview_cmd.clone());
         }
     }
 
@@ -273,7 +285,7 @@ impl Model {
     fn draw_items(&mut self, curses: &mut Window) {
         //debug!("model:draw_items");
         // cursor should be placed on query, so store cursor before printing
-        let (y, x) = curses.getyx();
+        let (old_y, old_x) = curses.getyx();
 
         // clear all lines
         let (h, w) = curses.get_maxyx();
@@ -300,7 +312,7 @@ impl Model {
         }
 
         // restore cursor
-        curses.mv(y, x);
+        curses.mv(old_y, old_x);
     }
 
     fn draw_status(&self, curses: &mut Window) {
@@ -461,13 +473,22 @@ impl Model {
     }
 
     fn draw_preview(&mut self, curses: &mut Window) {
+        if self.preview_cmd.is_none() {
+            return;
+        }
+
         // cursor should be placed on query, so store cursor before printing
+        let (lines, cols) = curses.get_maxyx();
 
         let current_idx = self.item_cursor + self.line_cursor;
         if current_idx < self.items.len() {
-            curses.mv(0, 0);
             let item = self.items.get(current_idx).unwrap().clone();
-            curses.printw(item.item.get_text());
+            let highlighted_content = item.item.get_text();
+            debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
+            let cmd = self.preview_cmd.as_ref().unwrap().replace(&"{}", highlighted_content);
+            let output = get_command_output(&cmd, lines, cols).unwrap_or("command execute failed".to_string());
+            curses.mv(0, 0);
+            curses.printw(&output);
             curses.clrtoeol();
         }
 
@@ -588,6 +609,22 @@ impl Model {
         curses.refresh();
     }
 
+}
+
+
+fn get_command_output(cmd: &str, lines: i32, cols: i32) -> Result<String, Box<Error>> {
+    let mut command = Command::new("sh")
+                       .env("LINES", lines.to_string())
+                       .env("COLUMNS", cols.to_string())
+                       .arg("-c")
+                       .arg(cmd)
+                       .stdout(Stdio::piped())
+                       .stderr(Stdio::null())
+                       .spawn()?;
+    let mut stdout = command.stdout.take().ok_or("command output: unwrap failed".to_owned())?;
+    let mut output = String::new();
+    let _ = stdout.read_to_string(&mut output);
+    Ok(output)
 }
 
 struct LinePrinter {

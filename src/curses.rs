@@ -238,13 +238,25 @@ impl Window {
     }
 
     fn add_char(&mut self, ch: char) {
-        if ch != '\t' {
-            self.add_char_raw(ch);
-        } else {
-            let tabstop = 8;
-            let rest = 8 - self.current_x % tabstop;
-            for _ in 0..rest {
-                self.add_char_raw(' ');
+        match ch {
+            '\t' => {
+                let tabstop = 8;
+                let rest = 8 - self.current_x % tabstop;
+                for _ in 0..rest {
+                    self.add_char_raw(' ');
+                }
+            }
+            '\r' => {
+                let (y, x) = self.getyx();
+                self.mv(y, 0);
+            }
+            '\n' => {
+                let (y, x) = self.getyx();
+                self.clrtoeol();
+                self.mv(y+1, 0);
+            }
+            ch => {
+                self.add_char_raw(ch);
             }
         }
     }

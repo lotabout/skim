@@ -76,6 +76,7 @@ Usage: sk [options]
                          e.g. (sk --margin 1,10%)
 
   Preview
+    --preview=COMMAND    command to preview current highlighted line ({})
     --preview-window=OPT Preview window layout (default: right:50%)
                          [up|down|left|right][:SIZE[%]][:hidden]
 
@@ -148,6 +149,7 @@ fn real_main() -> i32 {
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
     opts.optopt("", "margin", "margin around the finder", "");
     opts.optopt("", "height", "height", "");
+    opts.optopt("", "preview", "command to preview current highlighted line", "");
     opts.optopt("", "preview-window", "layout of preview window", "");
     opts.optflag("", "reverse", "reverse orientation");
     opts.optflag("", "version", "print out the current version of skim");
