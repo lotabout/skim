@@ -132,7 +132,7 @@ pub enum Margin {
 // |
 // |
 
-struct Window {
+pub struct Window {
     top: i32,
     bottom: i32,
     left: i32,
@@ -143,6 +143,20 @@ struct Window {
     current_x: i32,
 }
 
+impl Default for Window {
+    fn default() -> Self {
+        Window {
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            stdout_buffer: String::new(),
+            current_x: 0,
+            current_y: 0,
+        }
+    }
+}
+
 impl Window {
     pub fn new(top: i32, right: i32, bottom: i32, left: i32) -> Self {
         Window {
@@ -150,10 +164,17 @@ impl Window {
             bottom,
             left,
             right,
-            stdout_buffer: String::with_capacity(CURSES_BUF_SIZE);
+            stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
             current_x: 0,
             current_y: 0,
         }
+    }
+
+    pub fn reshape(&mut self, top: i32, right: i32, bottom: i32, left: i32) {
+        self.top = top;
+        self.right = right;
+        self.bottom = bottom;
+        self.left = left;
     }
 
     pub fn mv(&mut self, y: i32, x: i32) {
@@ -175,42 +196,61 @@ impl Window {
     pub fn clrtoeol(&mut self) {
         let (y, x) = self.getyx();
         let (_, max_x) = self.get_maxyx();
-        self.stdout_buffer.push_str(&" ".repeat(self.max_x - x));
+        self.stdout_buffer.push_str(&" ".repeat((max_x - x) as usize));
         self.mv(y, x);
     }
 
     pub fn erase(&mut self) {
-        for row in (0..self.height()).rev() {
+        let (max_y, _) = self.get_maxyx();
+        for row in (0..max_y).rev() {
             self.mv(row, 0);
             self.clrtoeol();
         }
     }
 
+    pub fn printw(&mut self, text: &str) {
+        for ch in text.chars() {
+            self.add_char(ch);
+        }
+    }
+
     pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
         self.attron(pair);
-        let (_, max_x) = 
-        let text_width = text.width_cjk() as i32;
-        self.current_x = 
-        self.stdout_buffer.push_str(format!("{}", text).as_str());
+        self.printw(text);
         self.attroff(pair);
     }
 
     pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
         self.attron(pair);
-        self.current_x += ch.width_cjk().unwrap() as i32;
-        self.stdout_buffer.push_str(format!("{}", ch).as_str());
+        self.add_char(ch);
         self.attroff(pair);
     }
 
-    pub fn printw(&mut self, text: &str) {
-        self.current_x += text.width_cjk() as i32;
-        self.stdout_buffer.push_str(format!("{}", text).as_str());
+    fn add_char(&mut self, ch: char) {
+        if ch != '\t' {
+            self.add_char_raw(ch);
+        } else {
+            let tabstop = 8;
+            let rest = 8 - self.current_x % tabstop;
+            for _ in 0..rest {
+                self.add_char_raw(' ');
+            }
+        }
     }
 
-    pub fn close(&mut self) {
-        self.erase();
-        self.refresh();
-        self.term.take();
+    fn add_char_raw(&mut self, ch: char) {
+        let (_, max_x) = self.get_maxyx();
+        let (y, x) = self.getyx();
+        let text_width = ch.width_cjk().unwrap() as i32;
+
+        if x + text_width > max_x {
+            self.mv(y+1, 0);
+        }
+
+        self.stdout_buffer.push(ch);
+
+        self.current_x = (x + text_width) % max_x;
+        self.current_y += (x + text_width) / max_x;
     }
 
     pub fn attr_on(&mut self, attr: attr_t) {
@@ -234,12 +274,8 @@ impl Window {
         self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
     }
 
-    pub fn refresh(&mut self) {
-        {
-            let mut term = self.term.as_mut().unwrap();
-            write!(term, "{}", &self.stdout_buffer).unwrap();
-            term.flush().unwrap();
-        }
+    pub fn write_to_term(&mut self, term: &mut Write) {
+        write!(term, "{}", &self.stdout_buffer).unwrap();
         self.stdout_buffer.clear();
     }
 
@@ -265,9 +301,12 @@ pub struct Curses {
     margin_left: Margin,
     margin_right: Margin,
 
-    stdout_buffer: String,
     current_y: i32,
     current_x: i32,
+
+    preview_shown: bool,
+    pub win_main: Window,
+    pub win_preview: Window,
 }
 
 unsafe impl Send for Curses {}
@@ -323,9 +362,12 @@ impl Curses {
             margin_bottom,
             margin_left,
             margin_right,
-            stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
             current_y: 0,
             current_x: 0,
+
+            preview_shown: true,
+            win_main: Default::default(),
+            win_preview: Default::default(),
         };
         ret.resize();
         ret
@@ -432,34 +474,15 @@ impl Curses {
             Margin::Fixed(num) => num,
             Margin::Percent(per) => per * max_x / 100,
         };
-    }
 
-    pub fn mv(&mut self, y: i32, x: i32) {
-        self.current_y = y + self.top;
-        self.current_x = x + self.left;
-        let target_y = (y+self.top+1) as u16;
-        let target_x = (x+self.left+1) as u16;
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(target_x, target_y)).as_str());
-        //debug!("curses:mv: {}/{}", y, x);
-    }
-
-    pub fn get_maxyx(&self) -> (i32, i32) {
-        (self.bottom-self.top, self.right-self.left)
-    }
-
-    pub fn getyx(&mut self) -> (i32, i32) {
-        //debug!("curses:getyx: {}/{}", self.current_y - self.top, self.current_x - self.left);
-        (self.current_y - self.top, self.current_x - self.left)
+        // omit calculate for now
+        self.win_main.reshape(self.top, self.right*7/10 , self.bottom, self.left);
+        self.win_preview.reshape(self.top, self.right, self.bottom, self.left + self.right*7/10);
     }
 
     fn terminal_size() -> (i32, i32) {
         let (max_x, max_y) = termion::terminal_size().unwrap();
         (max_y as i32, max_x as i32)
-    }
-
-    pub fn clrtoeol(&mut self) {
-        //debug!("curses:clrtoeol");
-        self.stdout_buffer.push_str(format!("{}", termion::clear::UntilNewline).as_str());
     }
 
     fn height(&self) -> i32 {
@@ -471,74 +494,18 @@ impl Curses {
         }
     }
 
-    pub fn erase(&mut self) {
-        //println_stderr!("erase");
-        for row in (0..self.height()).rev() {
-            self.mv(row, 0);
-            self.stdout_buffer.push_str(format!("{}", termion::clear::CurrentLine).as_str());
-        }
-    }
-
-    pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
-        self.attron(pair);
-        self.current_x += text.width_cjk() as i32;
-        self.stdout_buffer.push_str(format!("{}", text).as_str());
-        self.attroff(pair);
-    }
-
-    pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
-        self.attron(pair);
-        self.current_x += ch.width_cjk().unwrap() as i32;
-        self.stdout_buffer.push_str(format!("{}", ch).as_str());
-        self.attroff(pair);
-    }
-
-    pub fn printw(&mut self, text: &str) {
-        self.current_x += text.width_cjk() as i32;
-        self.stdout_buffer.push_str(format!("{}", text).as_str());
-    }
-
     pub fn close(&mut self) {
-        self.erase();
+        self.win_preview.erase();
+        self.win_main.erase();
         self.refresh();
         self.term.take();
     }
 
-    pub fn attr_on(&mut self, attr: attr_t) {
-        if attr == 0 {
-            self.attrclear();
-        } else {
-            self.attron(attr);
-        }
-    }
-
-    fn attron(&mut self, key: attr_t) {
-        let resource_map = RESOURCE_MAP.read().unwrap();
-        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
-    }
-
-    fn attroff(&mut self, _: attr_t) {
-        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
-    }
-
-    fn attrclear(&mut self) {
-        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
-    }
-
     pub fn refresh(&mut self) {
-        {
-            let mut term = self.term.as_mut().unwrap();
-            write!(term, "{}", &self.stdout_buffer).unwrap();
-            term.flush().unwrap();
-        }
-        self.stdout_buffer.clear();
-    }
-
-    pub fn hide_cursor(&mut self) {
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Hide).as_str());
-    }
-    pub fn show_cursor(&mut self) {
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
+        let mut term = self.term.as_mut().unwrap();
+        self.win_preview.write_to_term(term);
+        self.win_main.write_to_term(term);
+        term.flush().unwrap();
     }
 }
 

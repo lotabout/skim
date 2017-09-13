@@ -10,7 +10,7 @@ use unicode_width::UnicodeWidthChar;
 use curses::*;
 use getopts;
 
-pub type ClosureType = Box<Fn(&mut Curses) + Send>;
+pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -100,12 +100,12 @@ impl Model {
                     Event::EvModelDrawQuery => {
                         //debug!("model:EvModelDrawQuery:query");
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
-                        self.draw_query(&mut curses, print_query_func);
+                        self.draw_query(&mut curses.win_main, print_query_func);
                         curses.refresh();
                     }
                     Event::EvModelDrawInfo => {
                         //debug!("model:EvModelDrawInfo:status");
-                        self.draw_status(&mut curses);
+                        self.draw_status(&mut curses.win_main);
                         curses.refresh();
                     }
 
@@ -257,9 +257,8 @@ impl Model {
         }
     }
 
-    fn update_size(&mut self, curses: &mut Curses) {
+    fn update_size(&mut self, curses: &mut Window) {
         // update the (height, width)
-        curses.resize();
         let (h, w) = curses.get_maxyx();
         self.height = h-2;
         self.width = w-2;
@@ -271,7 +270,7 @@ impl Model {
         }
     }
 
-    fn draw_items(&mut self, curses: &mut Curses) {
+    fn draw_items(&mut self, curses: &mut Window) {
         //debug!("model:draw_items");
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
@@ -304,7 +303,7 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_status(&self, curses: &mut Curses) {
+    fn draw_status(&self, curses: &mut Window) {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
@@ -348,7 +347,7 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_query(&self, curses: &mut Curses, print_query_func: ClosureType) {
+    fn draw_query(&self, curses: &mut Window, print_query_func: ClosureType) {
         let (h, w) = curses.get_maxyx();
         let (h, _) = (h as usize, w as usize);
 
@@ -360,7 +359,7 @@ impl Model {
         print_query_func(curses);
     }
 
-    fn draw_item(&self, curses: &mut Curses, matched_item: &MatchedItem, is_current: bool) {
+    fn draw_item(&self, curses: &mut Window, matched_item: &MatchedItem, is_current: bool) {
         let index = matched_item.item.get_full_index();
 
         if self.selected.contains_key(&index) {
@@ -461,7 +460,7 @@ impl Model {
         }
     }
 
-    fn print_char(&self, curses: &mut Curses, ch: char, color: i16, is_bold: bool) {
+    fn print_char(&self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
         if ch != '\t' {
             curses.caddch(ch, color, is_bold);
         } else {
@@ -557,19 +556,19 @@ impl Model {
     }
 
     pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: ClosureType) {
-        self.update_size(curses);
-        curses.erase();
-        self.draw_items(curses);
-        self.draw_status(curses);
-        self.draw_query(curses, print_query_func);
+        curses.resize();
+        self.update_size(&mut curses.win_main);
+        self.draw_items(&mut curses.win_main);
+        self.draw_status(&mut curses.win_main);
+        self.draw_query(&mut curses.win_main, print_query_func);
         curses.refresh();
     }
 
     fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
-        curses.hide_cursor();
-        self.draw_items(curses);
-        self.draw_status(curses);
-        curses.show_cursor();
+        curses.win_main.hide_cursor();
+        self.draw_items(&mut curses.win_main);
+        self.draw_status(&mut curses.win_main);
+        curses.win_main.show_cursor();
         curses.refresh();
     }
 
@@ -634,7 +633,7 @@ impl LinePrinter {
     }
 
 
-    fn print_char_raw(&mut self, curses: &mut Curses, ch: char, color: i16, is_bold: bool) {
+    fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
         // the hidden chracter
         let w = ch.width_cjk().unwrap();
 
@@ -659,7 +658,7 @@ impl LinePrinter {
         }
     }
 
-    pub fn print_char(&mut self, curses: &mut Curses, ch: char, color: i16, is_bold: bool) {
+    pub fn print_char(&mut self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
         if ch != '\t' {
             self.print_char_raw(curses, ch, color, is_bold);
         } else {
