@@ -287,7 +287,6 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (old_y, old_x) = curses.getyx();
 
-        // clear all lines
         let (h, w) = curses.get_maxyx();
         let h = h as usize;
 
@@ -603,7 +602,7 @@ impl Model {
     pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: ClosureType) {
         curses.resize();
         self.update_size(&mut curses.win_main);
-        self.draw_preview(&mut curses.win_main);
+        self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
         self.draw_query(&mut curses.win_main, print_query_func);

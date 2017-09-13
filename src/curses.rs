@@ -138,6 +138,7 @@ pub struct Window {
     left: i32,
     right: i32,
 
+    wrap: bool,
     stdout_buffer: String,
     current_y: i32,
     current_x: i32,
@@ -150,6 +151,7 @@ impl Default for Window {
             bottom: 0,
             left: 0,
             right: 0,
+            wrap: false,
             stdout_buffer: String::new(),
             current_x: 0,
             current_y: 0,
@@ -158,12 +160,13 @@ impl Default for Window {
 }
 
 impl Window {
-    pub fn new(top: i32, right: i32, bottom: i32, left: i32) -> Self {
+    pub fn new(top: i32, right: i32, bottom: i32, left: i32, wrap: bool) -> Self {
         Window {
             top,
             bottom,
             left,
             right,
+            wrap,
             stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
             current_x: 0,
             current_y: 0,
@@ -238,6 +241,12 @@ impl Window {
     }
 
     fn add_char(&mut self, ch: char) {
+        let (max_y, max_x) = self.get_maxyx();
+        let (y, x) = self.getyx();
+        if y >= max_y {
+            return;
+        }
+
         match ch {
             '\t' => {
                 let tabstop = 8;
@@ -265,20 +274,27 @@ impl Window {
         let (max_y, max_x) = self.get_maxyx();
         let (y, x) = self.getyx();
         let text_width = ch.width_cjk().unwrap() as i32;
+        let target_x = x + text_width;
 
         // no enough space to print
-        if x + text_width >= max_x && y >= max_y {
+        if y >= max_y || target_x > max_x && y == max_y-1 {
             return;
         }
 
-        if x + text_width >= max_x {
+        if !self.wrap && target_x > max_x {
+            return;
+        } else if target_x > max_x {
             self.mv(y+1, 0);
         }
 
         self.stdout_buffer.push(ch);
 
-        self.current_x = (x + text_width) % max_x;
-        self.current_y += (x + text_width) / max_x;
+        if self.wrap {
+            self.current_x = target_x % max_x;
+            self.current_y += target_x / max_x;
+        } else {
+            self.current_x = target_x;
+        }
     }
 
     pub fn attr_on(&mut self, attr: attr_t) {
@@ -418,8 +434,8 @@ impl Curses {
             preview_size,
             preview_shown,
 
-            win_main: Default::default(),
-            win_preview: Default::default(),
+            win_main: Window::new(0,0,0,0, false),
+            win_preview: Window::new(0,0,0,0, true),
         };
         ret.resize();
         ret
@@ -563,6 +579,8 @@ impl Curses {
             Margin::Percent(per) => per * max_x / 100,
         };
 
+        debug!("curses:resize, TRBL: {}/{}/{}/{}", self.top, self.right, self.bottom, self.left);
+
         let height = self.bottom - self.top;
         let width = self.right - self.left;
 
@@ -578,25 +596,25 @@ impl Curses {
 
 
         if !self.preview_shown {
-            self.win_main.reshape(self.top, self.right*7/10 , self.bottom, self.left);
+            self.win_main.reshape(self.top, self.right, self.bottom, self.left);
             self.win_preview.reshape(0, 0, 0, 0);
         } else {
             match self.preview_direction {
                 Direction::Up => {
                     self.win_preview.reshape(self.top, self.right, self.top+preview_height, self.left);
-                    self.win_main.reshape(self.top+preview_height+1, self.right, self.bottom, self.left);
+                    self.win_main.reshape(self.top+preview_height, self.right, self.bottom, self.left);
                 }
                 Direction::Down => {
                     self.win_preview.reshape(self.bottom-preview_height, self.right, self.bottom, self.left);
-                    self.win_main.reshape(self.top, self.right, self.bottom-preview_height-1, self.left);
+                    self.win_main.reshape(self.top, self.right, self.bottom-preview_height, self.left);
                 }
                 Direction::Left => {
                     self.win_preview.reshape(self.top, self.left+preview_width, self.bottom, self.left);
-                    self.win_main.reshape(self.top, self.right, self.bottom, self.left+preview_width+1);
+                    self.win_main.reshape(self.top, self.right, self.bottom, self.left+preview_width);
                 }
                 Direction::Right => {
                     self.win_preview.reshape(self.top, self.right, self.bottom, self.right-preview_width);
-                    self.win_main.reshape(self.top, self.right-preview_width-1, self.bottom, self.left);
+                    self.win_main.reshape(self.top, self.right-preview_width, self.bottom, self.left);
                 }
             }
         }
