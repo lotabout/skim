@@ -482,6 +482,7 @@ impl Model {
     }
 
     fn draw_preview(&mut self, curses: &mut Window) {
+        curses.draw_border();
         if self.preview_cmd.is_none() {
             return;
         }

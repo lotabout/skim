@@ -139,6 +139,7 @@ pub struct Window {
     right: i32,
 
     wrap: bool,
+    border: Option<Direction>,
     stdout_buffer: String,
     current_y: i32,
     current_x: i32,
@@ -152,6 +153,7 @@ impl Default for Window {
             left: 0,
             right: 0,
             wrap: false,
+            border: None,
             stdout_buffer: String::new(),
             current_x: 0,
             current_y: 0,
@@ -160,12 +162,13 @@ impl Default for Window {
 }
 
 impl Window {
-    pub fn new(top: i32, right: i32, bottom: i32, left: i32, wrap: bool) -> Self {
+    pub fn new(top: i32, right: i32, bottom: i32, left: i32, wrap: bool, border: Option<Direction>) -> Self {
         Window {
             top,
             bottom,
             left,
             right,
+            border,
             wrap,
             stdout_buffer: String::with_capacity(CURSES_BUF_SIZE),
             current_x: 0,
@@ -180,16 +183,60 @@ impl Window {
         self.left = left;
     }
 
+    pub fn set_border(&mut self, border: Option<Direction>) {
+        self.border = border;
+    }
+
+    pub fn draw_border(&mut self) {
+        let (y, x) = self.getyx();
+        debug!("curses:window:draw_border: {:?}", self.border);
+        match self.border {
+            Some(Direction::Up) => {
+                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.top as u16 +1)).as_str());
+                self.stdout_buffer.push_str(&"-".repeat((self.right-self.left) as usize));
+            }
+            Some(Direction::Down) => {
+                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.bottom as u16)).as_str());
+                self.stdout_buffer.push_str(&"-".repeat((self.right-self.left) as usize));
+            }
+            Some(Direction::Left) => {
+                for i in self.top..self.bottom {
+                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, i as u16)).as_str());
+                    self.stdout_buffer.push_str("|");
+                }
+            }
+            Some(Direction::Right) => {
+                for i in self.top..self.bottom {
+                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right as u16, i as u16)).as_str());
+                    self.stdout_buffer.push_str("|");
+                }
+            }
+            _ => {}
+        }
+        self.mv(y, x);
+    }
+
     pub fn mv(&mut self, y: i32, x: i32) {
         self.current_y = y;
         self.current_x = x;
-        let target_y = (y+self.top+1) as u16;
-        let target_x = (x+self.left+1) as u16;
+        let (target_y, target_x) = match self.border {
+            Some(Direction::Up)    => ((y+self.top+1+1) as u16, (x+self.left+1)   as u16),
+            Some(Direction::Down)  => ((y+self.top+1)   as u16, (x+self.left+1)   as u16),
+            Some(Direction::Left)  => ((y+self.top+1)   as u16, (x+self.left+1+1) as u16),
+            Some(Direction::Right) => ((y+self.top+1)   as u16, (x+self.left+1)   as u16),
+            _                      => ((y+self.top+1)   as u16, (x+self.left+1)   as u16),
+        };
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(target_x, target_y)).as_str());
     }
 
     pub fn get_maxyx(&self) -> (i32, i32) {
-        (self.bottom-self.top, self.right-self.left)
+        let (max_y, max_x) = (self.bottom-self.top, self.right-self.left);
+
+        match self.border {
+            Some(Direction::Up) | Some(Direction::Down) => (max_y-1, max_x),
+            Some(Direction::Left) | Some(Direction::Right) => (max_y, max_x-1),
+            _ => (max_y, max_x),
+        }
     }
 
     pub fn getyx(&mut self) -> (i32, i32) {
@@ -333,7 +380,7 @@ impl Window {
 
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
-enum Direction {
+pub enum Direction {
     Up,
     Down,
     Left,
@@ -434,8 +481,8 @@ impl Curses {
             preview_size,
             preview_shown,
 
-            win_main: Window::new(0,0,0,0, false),
-            win_preview: Window::new(0,0,0,0, true),
+            win_main: Window::new(0,0,0,0, false, None),
+            win_preview: Window::new(0,0,0,0, true, None),
         };
         ret.resize();
         ret
@@ -603,18 +650,22 @@ impl Curses {
                 Direction::Up => {
                     self.win_preview.reshape(self.top, self.right, self.top+preview_height, self.left);
                     self.win_main.reshape(self.top+preview_height, self.right, self.bottom, self.left);
+                    self.win_preview.set_border(Some(Direction::Down));
                 }
                 Direction::Down => {
                     self.win_preview.reshape(self.bottom-preview_height, self.right, self.bottom, self.left);
                     self.win_main.reshape(self.top, self.right, self.bottom-preview_height, self.left);
+                    self.win_preview.set_border(Some(Direction::Up));
                 }
                 Direction::Left => {
                     self.win_preview.reshape(self.top, self.left+preview_width, self.bottom, self.left);
                     self.win_main.reshape(self.top, self.right, self.bottom, self.left+preview_width);
+                    self.win_preview.set_border(Some(Direction::Right));
                 }
                 Direction::Right => {
                     self.win_preview.reshape(self.top, self.right, self.bottom, self.right-preview_width);
                     self.win_main.reshape(self.top, self.right-preview_width, self.bottom, self.left);
+                    self.win_preview.set_border(Some(Direction::Left));
                 }
             }
         }
