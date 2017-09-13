@@ -208,7 +208,19 @@ impl Window {
         }
     }
 
+    pub fn clrtoend(&mut self) {
+        let (y, _) = self.getyx();
+        let (max_y, _) = self.get_maxyx();
+
+        self.clrtoeol();
+        for row in y+1..max_y {
+            self.mv(row, 0);
+            self.clrtoeol();
+        }
+    }
+
     pub fn printw(&mut self, text: &str) {
+        debug!("curses:window:printw: '{:?}'", text);
         for ch in text.chars() {
             self.add_char(ch);
         }
@@ -243,7 +255,7 @@ impl Window {
         let (y, x) = self.getyx();
         let text_width = ch.width_cjk().unwrap() as i32;
 
-        if x + text_width > max_x {
+        if x + text_width >= max_x {
             self.mv(y+1, 0);
         }
 

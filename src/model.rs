@@ -460,6 +460,20 @@ impl Model {
         }
     }
 
+    fn draw_preview(&mut self, curses: &mut Window) {
+        // cursor should be placed on query, so store cursor before printing
+
+        let current_idx = self.item_cursor + self.line_cursor;
+        if current_idx < self.items.len() {
+            curses.mv(0, 0);
+            let item = self.items.get(current_idx).unwrap().clone();
+            curses.printw(item.item.get_text());
+            curses.clrtoeol();
+        }
+
+        curses.clrtoend();
+    }
+
     fn print_char(&self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
         if ch != '\t' {
             curses.caddch(ch, color, is_bold);
@@ -558,6 +572,7 @@ impl Model {
     pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: ClosureType) {
         curses.resize();
         self.update_size(&mut curses.win_main);
+        self.draw_preview(&mut curses.win_main);
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
         self.draw_query(&mut curses.win_main, print_query_func);
@@ -566,6 +581,7 @@ impl Model {
 
     fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
         curses.win_main.hide_cursor();
+        self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
         curses.win_main.show_cursor();
