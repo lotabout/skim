@@ -499,7 +499,6 @@ impl Model {
             let output = get_command_output(&cmd, lines, cols).unwrap_or("command execute failed".to_string());
             curses.mv(0, 0);
             curses.printw(&output);
-            curses.clrtoeol();
         }
 
         curses.clrtoend();
@@ -698,7 +697,7 @@ impl LinePrinter {
 
     fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
         // the hidden chracter
-        let w = ch.width_cjk().unwrap();
+        let w = ch.width_cjk().unwrap_or(2);
 
         self.current += w as i32;
 
@@ -749,7 +748,7 @@ fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
         w += if ch == '\t' {
             tabstop - (w % tabstop)
         } else {
-            ch.width_cjk().unwrap()
+            ch.width_cjk().unwrap_or(2)
         };
         ret.push(w);
     }

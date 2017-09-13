@@ -188,8 +188,8 @@ impl Window {
     }
 
     pub fn draw_border(&mut self) {
+        debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
         let (y, x) = self.getyx();
-        debug!("curses:window:draw_border: {:?}", self.border);
         match self.border {
             Some(Direction::Up) => {
                 self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.top as u16 +1)).as_str());
@@ -201,13 +201,13 @@ impl Window {
             }
             Some(Direction::Left) => {
                 for i in self.top..self.bottom {
-                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, i as u16)).as_str());
+                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, i as u16+1)).as_str());
                     self.stdout_buffer.push_str("|");
                 }
             }
             Some(Direction::Right) => {
                 for i in self.top..self.bottom {
-                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right as u16, i as u16)).as_str());
+                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right as u16, i as u16+1)).as_str());
                     self.stdout_buffer.push_str("|");
                 }
             }
@@ -245,7 +245,11 @@ impl Window {
 
     pub fn clrtoeol(&mut self) {
         let (y, x) = self.getyx();
-        let (_, max_x) = self.get_maxyx();
+        let (max_y, max_x) = self.get_maxyx();
+        if y >= max_y || x >= max_x {
+            return;
+        }
+
         self.stdout_buffer.push_str(&" ".repeat((max_x - x) as usize));
         self.mv(y, x);
     }
@@ -259,8 +263,10 @@ impl Window {
     }
 
     pub fn clrtoend(&mut self) {
-        let (y, _) = self.getyx();
-        let (max_y, _) = self.get_maxyx();
+        let (y, x) = self.getyx();
+        let (max_y, max_x) = self.get_maxyx();
+
+        debug!("curses:window:clrtoend: y/x: {}/{}, max_y/max_x: {}/{}", y, x, max_y, max_x);
 
         self.clrtoeol();
         for row in y+1..max_y {
@@ -270,6 +276,7 @@ impl Window {
     }
 
     pub fn printw(&mut self, text: &str) {
+        debug!("curses:window:printw: {:?}", text);
         for ch in text.chars() {
             self.add_char(ch);
         }
@@ -293,6 +300,8 @@ impl Window {
         if y >= max_y {
             return;
         }
+
+        debug!("curses:window:add_char: {:?}", ch);
 
         match ch {
             '\t' => {
@@ -320,28 +329,27 @@ impl Window {
     fn add_char_raw(&mut self, ch: char) {
         let (max_y, max_x) = self.get_maxyx();
         let (y, x) = self.getyx();
-        let text_width = ch.width_cjk().unwrap() as i32;
+        let text_width = ch.width_cjk().unwrap_or(2) as i32;
         let target_x = x + text_width;
 
+
         // no enough space to print
-        if y >= max_y || target_x > max_x && y == max_y-1 {
+        if (y >= max_y) || (target_x > max_x && y == max_y-1) || (!self.wrap && target_x > max_x) {
             return;
         }
 
-        if !self.wrap && target_x > max_x {
-            return;
-        } else if target_x > max_x {
+        if target_x > max_x {
             self.mv(y+1, 0);
         }
 
         self.stdout_buffer.push(ch);
 
-        if self.wrap {
-            self.current_x = target_x % max_x;
-            self.current_y += target_x / max_x;
-        } else {
-            self.current_x = target_x;
-        }
+        let (y, x) = self.getyx();
+        let target_x = x + text_width;
+
+        let final_x = if self.wrap {target_x % max_x} else {target_x};
+        let final_y = y + if self.wrap {target_x/max_x} else {0};
+        self.mv(final_y, final_x);
     }
 
     pub fn attr_on(&mut self, attr: attr_t) {
