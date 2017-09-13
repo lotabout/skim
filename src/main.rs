@@ -75,6 +75,10 @@ Usage: sk [options]
     --margin=MARGIN      Screen Margin (TRBL / TB,RL / T,RL,B / T,R,B,L)
                          e.g. (sk --margin 1,10%)
 
+  Preview
+    --preview-window=OPT Preview window layout (default: right:50%)
+                         [up|down|left|right][:SIZE[%]][:hidden]
+
   Scripting
     -q, --query \"\"       specify the initial query
     -e, --expect KEYS    comma seperated keys that can be used to complete skim
@@ -144,6 +148,7 @@ fn real_main() -> i32 {
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
     opts.optopt("", "margin", "margin around the finder", "");
     opts.optopt("", "height", "height", "");
+    opts.optopt("", "preview-window", "layout of preview window", "");
     opts.optflag("", "reverse", "reverse orientation");
     opts.optflag("", "version", "print out the current version of skim");
 

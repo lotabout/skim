@@ -220,7 +220,6 @@ impl Window {
     }
 
     pub fn printw(&mut self, text: &str) {
-        debug!("curses:window:printw: '{:?}'", text);
         for ch in text.chars() {
             self.add_char(ch);
         }
@@ -251,9 +250,14 @@ impl Window {
     }
 
     fn add_char_raw(&mut self, ch: char) {
-        let (_, max_x) = self.get_maxyx();
+        let (max_y, max_x) = self.get_maxyx();
         let (y, x) = self.getyx();
         let text_width = ch.width_cjk().unwrap() as i32;
+
+        // no enough space to print
+        if x + text_width >= max_x && y >= max_y {
+            return;
+        }
 
         if x + text_width >= max_x {
             self.mv(y+1, 0);
@@ -299,6 +303,16 @@ impl Window {
     }
 }
 
+
+#[derive(PartialEq, Eq, Clone, Debug, Copy)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+
 pub struct Curses {
     //screen: SCREEN,
     term: Option<Box<Write>>,
@@ -316,7 +330,11 @@ pub struct Curses {
     current_y: i32,
     current_x: i32,
 
+    // preview window status
+    preview_direction: Direction,
+    preview_size: Margin,
     preview_shown: bool,
+
     pub win_main: Window,
     pub win_preview: Window,
 }
@@ -362,6 +380,13 @@ impl Curses {
             Box::new(stdout().into_raw_mode().unwrap())
         };
 
+        // parse options for preview window
+        let (preview_direction, preview_size, preview_shown) = if let Some(opts) = options.opt_str("preview-window") {
+            Curses::parse_preview(&opts)
+        } else {
+            (Direction::Right, Margin::Percent(50), true)
+        };
+
         let mut ret = Curses {
             term: Some(term),
             top: 0,
@@ -377,7 +402,10 @@ impl Curses {
             current_y: 0,
             current_x: 0,
 
-            preview_shown: true,
+            preview_direction,
+            preview_size,
+            preview_shown,
+
             win_main: Default::default(),
             win_preview: Default::default(),
         };
@@ -457,6 +485,42 @@ impl Curses {
         }
     }
 
+    // -> (direction, size, shown)
+    fn parse_preview(preview_option: &str) -> (Direction, Margin, bool) {
+        let options = preview_option
+            .split(":")
+            .collect::<Vec<&str>>();
+
+        let direction = if let Some(ref direction) = options.get(0) {
+            match direction.to_uppercase().as_str() {
+                "UP"    => Direction::Up,
+                "DOWN"  => Direction::Down,
+                "LEFT"  => Direction::Left,
+                "RIGHT" => Direction::Right,
+                _       => Direction::Right,
+            }
+        } else {
+            Direction::Right
+        };
+
+        let size = if let Some(ref size) = options.get(1) {
+            Curses::parse_margin_string(size)
+        } else {
+            Margin::Percent(50)
+        };
+
+        let shown = if let Some(ref direction) = options.get(2) {
+            match direction.to_uppercase().as_str() {
+                "HIDDEN" => false,
+                _        => true,
+            }
+        } else {
+            true
+        };
+
+        (direction, size, shown)
+    }
+
     pub fn resize(&mut self) {
         let (max_y, max_x) = Curses::terminal_size();
         let height = match self.height {
@@ -487,9 +551,43 @@ impl Curses {
             Margin::Percent(per) => per * max_x / 100,
         };
 
-        // omit calculate for now
-        self.win_main.reshape(self.top, self.right*7/10 , self.bottom, self.left);
-        self.win_preview.reshape(self.top, self.right, self.bottom, self.left + self.right*7/10);
+        let height = self.bottom - self.top;
+        let width = self.right - self.left;
+
+        let preview_height = match self.preview_size {
+            Margin::Fixed(x) => x,
+            Margin::Percent(x) => height * x / 100,
+        };
+
+        let preview_width = match self.preview_size {
+            Margin::Fixed(x) => x,
+            Margin::Percent(x) => width * x / 100,
+        };
+
+
+        if !self.preview_shown {
+            self.win_main.reshape(self.top, self.right*7/10 , self.bottom, self.left);
+            self.win_preview.reshape(0, 0, 0, 0);
+        } else {
+            match self.preview_direction {
+                Direction::Up => {
+                    self.win_preview.reshape(self.top, self.right, self.top+preview_height, self.left);
+                    self.win_main.reshape(self.top+preview_height+1, self.right, self.bottom, self.left);
+                }
+                Direction::Down => {
+                    self.win_preview.reshape(self.bottom-preview_height, self.right, self.bottom, self.left);
+                    self.win_main.reshape(self.top, self.right, self.bottom-preview_height-1, self.left);
+                }
+                Direction::Left => {
+                    self.win_preview.reshape(self.top, self.left+preview_width, self.bottom, self.left);
+                    self.win_main.reshape(self.top, self.right, self.bottom, self.left+preview_width+1);
+                }
+                Direction::Right => {
+                    self.win_preview.reshape(self.top, self.right, self.bottom, self.right-preview_width);
+                    self.win_main.reshape(self.top, self.right-preview_width-1, self.bottom, self.left);
+                }
+            }
+        }
     }
 
     fn terminal_size() -> (i32, i32) {
