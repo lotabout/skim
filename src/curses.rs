@@ -257,11 +257,11 @@ impl Window {
         self.mv(y, x);
     }
 
-    pub fn erase(&mut self) {
-        let (max_y, _) = self.get_maxyx();
-        for row in (0..max_y).rev() {
-            self.mv(row, 0);
-            self.clrtoeol();
+    pub fn close(&mut self) {
+        // to erase all contents, including border
+        let spaces = " ".repeat((self.right - self.left) as usize);
+        for row in (self.top..self.bottom).rev() {
+            self.stdout_buffer.push_str(&spaces);
         }
     }
 
@@ -705,8 +705,8 @@ impl Curses {
     }
 
     pub fn close(&mut self) {
-        self.win_preview.erase();
-        self.win_main.erase();
+        self.win_preview.close();
+        self.win_main.close();
         self.refresh();
         self.term.take();
     }
