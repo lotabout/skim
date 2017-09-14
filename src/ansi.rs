@@ -2,7 +2,6 @@
 
 use regex::Regex;
 use curses::{register_ansi, attr_t};
-use std::sync::Mutex;
 use std::default::Default;
 
 pub struct ANSIParser {

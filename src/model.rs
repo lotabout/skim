@@ -295,7 +295,7 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (old_y, old_x) = curses.getyx();
 
-        let (h, w) = curses.get_maxyx();
+        let (h, _) = curses.get_maxyx();
         let h = h as usize;
 
         // screen-line: y         <--->   item-line: (height - y - 1)

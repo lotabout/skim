@@ -13,7 +13,7 @@ use termion;
 use std::cmp::min;
 use termion::color;
 use std::fmt;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthChar;
 
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
@@ -302,8 +302,8 @@ impl Window {
     }
 
     fn add_char(&mut self, ch: char) {
-        let (max_y, max_x) = self.get_maxyx();
-        let (y, x) = self.getyx();
+        let (max_y, _) = self.get_maxyx();
+        let (y, _) = self.getyx();
         if y >= max_y {
             return;
         }
@@ -319,11 +319,11 @@ impl Window {
                 }
             }
             '\r' => {
-                let (y, x) = self.getyx();
+                let (y, _) = self.getyx();
                 self.mv(y, 0);
             }
             '\n' => {
-                let (y, x) = self.getyx();
+                let (y, _) = self.getyx();
                 self.clrtoeol();
                 self.mv(y+1, 0);
             }
@@ -616,12 +616,8 @@ impl Curses {
     }
 
     pub fn resize(&mut self) {
-        let (max_y, max_x) = Curses::terminal_size();
-        let height = match self.height {
-            Margin::Percent(100) => max_y,
-            Margin::Percent(p) => min(max_y, p*max_y/100),
-            Margin::Fixed(rows) => min(max_y, rows),
-        };
+        let (_, max_x) = Curses::terminal_size();
+        let height = self.height();
 
         let start = if self.height == Margin::Percent(100) { 0 } else { self.start_y };
 
