@@ -687,6 +687,10 @@ impl Curses {
         }
     }
 
+    pub fn toggle_preview_window(&mut self) {
+        self.preview_shown = !self.preview_shown;
+    }
+
     fn terminal_size() -> (i32, i32) {
         let (max_x, max_y) = termion::terminal_size().unwrap();
         (max_y as i32, max_x as i32)

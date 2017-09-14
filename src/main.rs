@@ -436,6 +436,11 @@ fn real_main() -> i32 {
                 let _ = tx_model.send((ev, arg));
             }
 
+            EvActTogglePreview => {
+                let _ = tx_model.send((ev, arg));
+                let _ = tx_model.send((EvActRedraw, Box::new(query.get_print_func())));
+            }
+
             EvReportCursorPos => {
                 let (y, x): (u16, u16) = *arg.downcast().unwrap();
                 debug!("main:EvReportCursorPos: {}/{}", y, x);

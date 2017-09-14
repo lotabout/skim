@@ -248,6 +248,12 @@ impl Model {
                         self.act_redraw_items_and_status(&mut curses);
                     }
 
+                    Event::EvActTogglePreview => {
+                        self.act_toggle_preview(&mut curses);
+                        // main loop will send EvActRedraw afterwards
+                        // so no need to call redraw here (besides, print_query_func is unknown)
+                    }
+
                     Event::EvActRedraw => {
                         //debug!("model:EvActRedraw:act_redraw");
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
@@ -621,6 +627,10 @@ impl Model {
         for (_, item) in output {
             println!("{}", item.item.get_output_text());
         }
+    }
+
+    pub fn act_toggle_preview(&mut self, curses: &mut Curses) {
+        curses.toggle_preview_window();
     }
 
     pub fn act_scroll(&mut self, offset: i32) {
