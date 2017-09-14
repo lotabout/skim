@@ -25,7 +25,8 @@ pub static COLOR_INFO:          i16 = 6;
 pub static COLOR_CURSOR:        i16 = 7;
 pub static COLOR_SELECTED:      i16 = 8;
 pub static COLOR_HEADER:        i16 = 9;
-static COLOR_USER:              i16 = 10;
+pub static COLOR_BORDER:        i16 = 10;
+static COLOR_USER:              i16 = 11;
 
 pub type attr_t = i16;
 
@@ -190,29 +191,31 @@ impl Window {
     pub fn draw_border(&mut self) {
         debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
         let (y, x) = self.getyx();
+        self.attron(COLOR_BORDER);
         match self.border {
             Some(Direction::Up) => {
                 self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.top as u16 +1)).as_str());
-                self.stdout_buffer.push_str(&"-".repeat((self.right-self.left) as usize));
+                self.stdout_buffer.push_str(&"─".repeat((self.right-self.left) as usize));
             }
             Some(Direction::Down) => {
                 self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.bottom as u16)).as_str());
-                self.stdout_buffer.push_str(&"-".repeat((self.right-self.left) as usize));
+                self.stdout_buffer.push_str(&"─".repeat((self.right-self.left) as usize));
             }
             Some(Direction::Left) => {
                 for i in self.top..self.bottom {
                     self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, i as u16+1)).as_str());
-                    self.stdout_buffer.push_str("|");
+                    self.stdout_buffer.push('│')
                 }
             }
             Some(Direction::Right) => {
                 for i in self.top..self.bottom {
                     self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right as u16, i as u16+1)).as_str());
-                    self.stdout_buffer.push_str("|");
+                    self.stdout_buffer.push('│')
                 }
             }
             _ => {}
         }
+        self.attroff(COLOR_BORDER);
         self.mv(y, x);
     }
 
@@ -780,6 +783,7 @@ pub struct ColorTheme {
     cursor:           ColorWrapper,
     selected:         ColorWrapper,
     header:           ColorWrapper,
+    border:           ColorWrapper,
 }
 
 
@@ -810,6 +814,7 @@ impl ColorTheme {
             cursor:           ColorWrapper(Box::new(color::Red)),
             selected:         ColorWrapper(Box::new(color::Magenta)),
             header:           ColorWrapper(Box::new(color::Cyan)),
+            border:           ColorWrapper(Box::new(color::LightBlack)),
         }
     }
 
@@ -829,13 +834,14 @@ impl ColorTheme {
             cursor:           ColorWrapper(Box::new(color::AnsiValue(161))),
             selected:         ColorWrapper(Box::new(color::AnsiValue(168))),
             header:           ColorWrapper(Box::new(color::AnsiValue(109))),
+            border:           ColorWrapper(Box::new(color::AnsiValue(59))),
         }
     }
 
-    fn monokai256() -> Self {
+    fn molokai256() -> Self {
         ColorTheme {
-            fg:               ColorWrapper(Box::new(color::AnsiValue(252))),
-            bg:               ColorWrapper(Box::new(color::AnsiValue(234))),
+            fg:               ColorWrapper(Box::new(color::Reset)),
+            bg:               ColorWrapper(Box::new(color::Reset)),
             matched:          ColorWrapper(Box::new(color::AnsiValue(234))),
             matched_bg:       ColorWrapper(Box::new(color::AnsiValue(186))),
             current:          ColorWrapper(Box::new(color::AnsiValue(254))),
@@ -848,6 +854,7 @@ impl ColorTheme {
             cursor:           ColorWrapper(Box::new(color::AnsiValue(161))),
             selected:         ColorWrapper(Box::new(color::AnsiValue(168))),
             header:           ColorWrapper(Box::new(color::AnsiValue(109))),
+            border:           ColorWrapper(Box::new(color::AnsiValue(59))),
         }
     }
 
@@ -867,6 +874,7 @@ impl ColorTheme {
             cursor:           ColorWrapper(Box::new(color::AnsiValue(161))),
             selected:         ColorWrapper(Box::new(color::AnsiValue(168))),
             header:           ColorWrapper(Box::new(color::AnsiValue(31))),
+            border:           ColorWrapper(Box::new(color::AnsiValue(145))),
         }
     }
 
@@ -876,7 +884,7 @@ impl ColorTheme {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
                 theme = match color[0] {
-                    "molokai"  => ColorTheme::monokai256(),
+                    "molokai"  => ColorTheme::molokai256(),
                     "light"    => ColorTheme::light256(),
                     "16"       => ColorTheme::default(),
                     "dark" | _ => ColorTheme::dark256(),
@@ -895,20 +903,21 @@ impl ColorTheme {
             };
 
             match color[0] {
-                "fg"               => theme.fg = new_color,
-                "bg"               => theme.bg = new_color,
-                "matched"          => theme.matched = new_color,
-                "matched_bg"       => theme.matched_bg = new_color,
-                "current"          => theme.current = new_color,
-                "current_bg"       => theme.current_bg = new_color,
-                "current_match"    => theme.current_match = new_color,
+                "fg"               => theme.fg               = new_color,
+                "bg"               => theme.bg               = new_color,
+                "matched"          => theme.matched          = new_color,
+                "matched_bg"       => theme.matched_bg       = new_color,
+                "current"          => theme.current          = new_color,
+                "current_bg"       => theme.current_bg       = new_color,
+                "current_match"    => theme.current_match    = new_color,
                 "current_match_bg" => theme.current_match_bg = new_color,
-                "spinner"          => theme.spinner = new_color,
-                "info"             => theme.info = new_color,
-                "prompt"           => theme.prompt = new_color,
-                "cursor"           => theme.cursor = new_color,
-                "selected"         => theme.selected = new_color,
-                "header"           => theme.header = new_color,
+                "spinner"          => theme.spinner          = new_color,
+                "info"             => theme.info             = new_color,
+                "prompt"           => theme.prompt           = new_color,
+                "cursor"           => theme.cursor           = new_color,
+                "selected"         => theme.selected         = new_color,
+                "header"           => theme.header           = new_color,
+                "border"           => theme.border           = new_color,
                 _ => {}
             }
         }
@@ -926,6 +935,7 @@ impl ColorTheme {
         register_resource(COLOR_CURSOR,        format!("{}{}", color::Fg(&self.cursor),        color::Bg(&self.current_bg)));
         register_resource(COLOR_SELECTED,      format!("{}{}", color::Fg(&self.selected),      color::Bg(&self.current_bg)));
         register_resource(COLOR_HEADER,        format!("{}{}", color::Fg(&self.header),        color::Bg(&self.bg)));
+        register_resource(COLOR_BORDER,        format!("{}{}", color::Fg(&self.border),        color::Bg(&self.bg)));
     }
 }
 
