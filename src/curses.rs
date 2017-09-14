@@ -10,7 +10,7 @@ use std::io::prelude::*;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion;
-use std::cmp::min;
+use std::cmp::{min, max};
 use termion::color;
 use std::fmt;
 use unicode_width::UnicodeWidthChar;
@@ -257,14 +257,6 @@ impl Window {
         self.mv(y, x);
     }
 
-    pub fn close(&mut self) {
-        // to erase all contents, including border
-        let spaces = " ".repeat((self.right - self.left) as usize);
-        for row in (self.top..self.bottom).rev() {
-            self.stdout_buffer.push_str(&spaces);
-        }
-    }
-
     pub fn clrtoend(&mut self) {
         let (y, x) = self.getyx();
         let (max_y, max_x) = self.get_maxyx();
@@ -391,6 +383,16 @@ impl Window {
     pub fn show_cursor(&mut self) {
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
     }
+
+    pub fn close(&mut self) {
+        // to erase all contents, including border
+        let spaces = " ".repeat((self.right - self.left) as usize);
+        for row in (self.top..self.bottom).rev() {
+            self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 + 1, row as u16 + 1)).as_str());
+            self.stdout_buffer.push_str(&spaces);
+        }
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 + 1, self.top as u16 + 1)).as_str());
+    }
 }
 
 
@@ -412,6 +414,7 @@ pub struct Curses {
     right: i32,
     start_y: i32,
     height: Margin,
+    min_height: i32,
     margin_top: Margin,
     margin_bottom: Margin,
     margin_left: Margin,
@@ -446,6 +449,12 @@ impl Curses {
         };
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
+        let min_height = if let Some(min_height_option) = options.opt_str("min-height") {
+            min_height_option.parse::<i32>().unwrap_or(10)
+        } else {
+            10 // default value
+        };
+
         let height = if let Some(height_option) = options.opt_str("height") {
             Curses::parse_margin_string(&height_option)
         } else {
@@ -456,11 +465,11 @@ impl Curses {
 
         // reserve the necessary lines to show skim
         let (max_y, _) = Curses::terminal_size();
-        Curses::reserve_lines(max_y, height);
+        Curses::reserve_lines(max_y, height, min_height);
 
         let start_y = match height {
             Margin::Percent(100) => 0,
-            Margin::Percent(p) => min(y, max_y- p*max_y/100),
+            Margin::Percent(p) => min(y, max_y - max(p*max_y/100, min_height)),
             Margin::Fixed(rows) => min(y, max_y - rows),
         };
 
@@ -487,6 +496,7 @@ impl Curses {
             right: 0,
             start_y,
             height,
+            min_height,
             margin_top,
             margin_bottom,
             margin_left,
@@ -505,14 +515,14 @@ impl Curses {
         ret
     }
 
-    fn reserve_lines(max_y: i32, height: Margin) {
+    fn reserve_lines(max_y: i32, height: Margin, min_height: i32) {
         let rows = match height {
             Margin::Percent(100) => {return;}
-            Margin::Percent(percent) => max_y*percent/100,
+            Margin::Percent(percent) => max(min_height, max_y*percent/100),
             Margin::Fixed(rows) => rows,
         };
 
-        print!("{}", "\n".repeat((rows-1) as usize));
+        print!("{}", "\n".repeat(max(0, rows-1) as usize));
         stdout().flush().unwrap();
     }
 
@@ -699,7 +709,7 @@ impl Curses {
         let (max_y, _) = Curses::terminal_size();
         match self.height {
             Margin::Percent(100) => max_y,
-            Margin::Percent(p) => min(max_y, p*max_y/100),
+            Margin::Percent(p) => min(max_y, max(p*max_y/100, self.min_height)),
             Margin::Fixed(rows) => min(max_y, rows),
         }
     }

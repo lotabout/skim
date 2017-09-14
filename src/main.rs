@@ -62,18 +62,21 @@ Usage: sk [options]
                          such as 'ctrl-j:accept,ctrl-k:kill-line'
     -m, --multi          Enable Multiple Selection
     --no-multi           Disable Multiple Selection
-    -p, --prompt '> '    prompt string for query mode
-    --cmd-prompt '> '    prompt string for command mode
     -c, --cmd ag         command to invoke dynamically
     -I replstr           replace `replstr` with the selected item
     -i, --interactive    Start skim in interactive(command) mode
     --ansi               parse ANSI color codes for input strings
     --color [BASE][,COLOR:ANSI]
                          change color theme
+  Layout
     --reverse            Reverse orientation
     --height=HEIGHT      Height of skim's window (--height 40%)
+    --min-height=HEIGHT  Minimum height when --height is given by percent
+                         (default: 10)
     --margin=MARGIN      Screen Margin (TRBL / TB,RL / T,RL,B / T,R,B,L)
                          e.g. (sk --margin 1,10%)
+    -p, --prompt '> '    prompt string for query mode
+    --cmd-prompt '> '    prompt string for command mode
 
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
@@ -148,6 +151,7 @@ fn real_main() -> i32 {
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
     opts.optopt("", "margin", "margin around the finder", "");
+    opts.optopt("", "min-height", "minum height when --height is given by percent", "");
     opts.optopt("", "height", "height", "");
     opts.optopt("", "preview", "command to preview current highlighted line", "");
     opts.optopt("", "preview-window", "layout of preview window", "");
