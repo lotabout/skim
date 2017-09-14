@@ -2,13 +2,14 @@
 // the internal states, such as selected or not
 
 use std::cmp::Ordering;
-use ansi::parse_ansi;
+use ansi::ANSIParser;
 use regex::Regex;
 use reader::FieldRange;
 use std::borrow::Cow;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
 use curses::attr_t;
+use std::default::Default;
 
 // An item will store everything that one line input will need to be operated and displayed.
 //
@@ -63,15 +64,17 @@ impl<'a> Item {
         //                    |                  |
         //                    +- F -> orig       | orig
 
+        let mut ansi_parser: ANSIParser = Default::default();
+
         let (text, states_text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
-            parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
+            ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
             (parse_transform_fields(delimiter, &orig_text, trans_fields), Vec::new())
         } else if ansi_enabled {
             // not transformed, ansi
-            parse_ansi(&orig_text)
+            ansi_parser.parse_ansi(&orig_text)
         } else {
             // normal case
             ("".to_string(), Vec::new())
@@ -110,7 +113,8 @@ impl<'a> Item {
 
     pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
-            let (text, _) = parse_ansi(&self.output_text);
+            let mut ansi_parser: ANSIParser = Default::default();
+            let (text, _) = ansi_parser.parse_ansi(&self.output_text);
             Cow::Owned(text)
         } else if !self.using_transform_fields && self.ansi_enabled {
             Cow::Borrowed(&self.text)

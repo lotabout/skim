@@ -294,6 +294,10 @@ impl Window {
         self.attroff(pair);
     }
 
+    pub fn addch(&mut self, ch: char) {
+        self.add_char(ch);
+    }
+
     fn add_char(&mut self, ch: char) {
         let (max_y, max_x) = self.get_maxyx();
         let (y, x) = self.getyx();

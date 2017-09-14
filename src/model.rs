@@ -12,6 +12,8 @@ use getopts;
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::error::Error;
+use ansi::ANSIParser;
+use std::default::Default;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -491,15 +493,44 @@ impl Model {
         let (lines, cols) = curses.get_maxyx();
 
         let current_idx = self.item_cursor + self.line_cursor;
-        if current_idx < self.items.len() {
-            let item = self.items.get(current_idx).unwrap().clone();
-            let highlighted_content = item.item.get_text();
-            debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
-            let cmd = self.preview_cmd.as_ref().unwrap().replace(&"{}", highlighted_content);
-            let output = get_command_output(&cmd, lines, cols).unwrap_or("command execute failed".to_string());
-            curses.mv(0, 0);
-            curses.printw(&output);
+        if current_idx >= self.items.len() {
+            curses.clrtoend();
+            return;
         }
+
+        let item = self.items.get(current_idx).unwrap().clone();
+        let highlighted_content = item.item.get_text();
+
+        debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
+
+        let cmd = self.preview_cmd.as_ref().unwrap().replace(&"{}", highlighted_content);
+        let output = get_command_output(&cmd, lines, cols).unwrap_or("command execute failed".to_string());
+
+        let mut ansi_parser: ANSIParser = Default::default();
+        let (strip_string, ansi_states) = ansi_parser.parse_ansi(&output);
+
+        debug!("model:draw_preview: output = {:?}", &output);
+        debug!("model:draw_preview: strip_string: {:?}\nansi_states: {:?}", strip_string, ansi_states);
+
+        let mut ansi_states = ansi_states.iter().peekable();
+
+        curses.mv(0,0);
+        for (ch_idx, ch) in strip_string.chars().enumerate() {
+            // print ansi color codes.
+            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
+                if ch_idx == ansi_idx {
+                    curses.attr_on(attr);
+                    let _ = ansi_states.next();
+                } else if ch_idx > ansi_idx {
+                    let _ = ansi_states.next();
+                } else {
+                    break;
+                }
+            }
+            curses.addch(ch);
+
+        }
+        curses.attr_on(0);
 
         curses.clrtoend();
     }
