@@ -467,11 +467,13 @@ impl Curses {
             Box::new(stdout().into_raw_mode().unwrap())
         };
 
+        let preview_cmd_exist = options.opt_present("preview");
+
         // parse options for preview window
-        let (preview_direction, preview_size, preview_shown) = if let Some(opts) = options.opt_str("preview-window") {
+        let (preview_direction, preview_size, preview_wrap, preview_shown) = if let Some(opts) = options.opt_str("preview-window") {
             Curses::parse_preview(&opts)
         } else {
-            (Direction::Right, Margin::Percent(50), true)
+            (Direction::Right, Margin::Percent(50), false, true)
         };
 
         let mut ret = Curses {
@@ -491,10 +493,10 @@ impl Curses {
 
             preview_direction,
             preview_size,
-            preview_shown,
+            preview_shown: preview_cmd_exist && preview_shown,
 
             win_main: Window::new(0,0,0,0, false, None),
-            win_preview: Window::new(0,0,0,0, true, None),
+            win_preview: Window::new(0,0,0,0, preview_wrap, None),
         };
         ret.resize();
         ret
@@ -572,40 +574,42 @@ impl Curses {
         }
     }
 
-    // -> (direction, size, shown)
-    fn parse_preview(preview_option: &str) -> (Direction, Margin, bool) {
+    // -> (direction, size, wrap, shown)
+    fn parse_preview(preview_option: &str) -> (Direction, Margin, bool, bool) {
         let options = preview_option
             .split(":")
             .collect::<Vec<&str>>();
 
-        let direction = if let Some(ref direction) = options.get(0) {
-            match direction.to_uppercase().as_str() {
-                "UP"    => Direction::Up,
-                "DOWN"  => Direction::Down,
-                "LEFT"  => Direction::Left,
-                "RIGHT" => Direction::Right,
-                _       => Direction::Right,
+        let mut direction = Direction::Right;
+        let mut shown = true;
+        let mut wrap = false;
+        let mut size = Margin::Percent(50);
+
+        for option in options {
+            // mistake
+            if option.len() <= 0 {
+                continue;
             }
-        } else {
-            Direction::Right
-        };
 
-        let size = if let Some(ref size) = options.get(1) {
-            Curses::parse_margin_string(size)
-        } else {
-            Margin::Percent(50)
-        };
+            let first_char = option.chars().next().unwrap_or('A');
 
-        let shown = if let Some(ref direction) = options.get(2) {
-            match direction.to_uppercase().as_str() {
-                "HIDDEN" => false,
-                _        => true,
+            // raw string
+            if first_char.is_digit(10) {
+                size = Curses::parse_margin_string(option);
+            } else {
+                match option.to_uppercase().as_str() {
+                    "UP"     => {direction = Direction::Up}
+                    "DOWN"   => {direction = Direction::Down}
+                    "LEFT"   => {direction = Direction::Left}
+                    "RIGHT"  => {direction = Direction::Right}
+                    "HIDDEN" => {shown = false}
+                    "WRAP"   => {wrap = true}
+                    _        => {}
+                }
             }
-        } else {
-            true
-        };
+        }
 
-        (direction, size, shown)
+        (direction, size, wrap, shown)
     }
 
     pub fn resize(&mut self) {
