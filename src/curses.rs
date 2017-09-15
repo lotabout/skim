@@ -474,18 +474,18 @@ impl Curses {
             None
         };
 
-        let (y, _) = Curses::get_cursor_pos();
-
-        // reserve the necessary lines to show skim (in case current cursor is at the bottom of
-        // the screen)
         let (max_y, _) = Curses::terminal_size();
-        Curses::reserve_lines(max_y, height, min_height);
 
-
-        let term: Box<Write> = if Margin::Percent(100) == height {
-            Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap()))
+        let (term, y): (Box<Write>, u16) = if Margin::Percent(100) == height {
+            (Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap())), 0)
         } else {
-            Box::new(stdout().into_raw_mode().unwrap())
+            let term = Box::new(stdout().into_raw_mode().unwrap());
+            let (y, _) = Curses::get_cursor_pos();
+
+            // reserve the necessary lines to show skim (in case current cursor is at the bottom
+            // of the screen)
+            Curses::reserve_lines(max_y, height, min_height);
+            (term, y)
         };
 
         // keep the start position on the screen
