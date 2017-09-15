@@ -5,24 +5,18 @@ use std::error::Error;
 use item::Item;
 use std::sync::{Arc, RwLock};
 use std::process::{Command, Stdio, Child};
-use std::io::{stdin, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use event::{Event, EventArg};
 use std::thread::JoinHandle;
 use std::thread;
 use std::time::Duration;
 use std::collections::HashMap;
 use std::mem;
+use std::fs::File;
 
 use getopts;
 use regex::Regex;
 use sender::CachedSender;
-
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -77,14 +71,18 @@ pub struct Reader {
     rx_cmd: Receiver<(Event, EventArg)>,
     tx_item: SyncSender<(Event, EventArg)>,
     option: Arc<RwLock<ReaderOption>>,
+    real_stdin: Option<File>,  // used to support piped output
 }
 
 impl Reader {
-    pub fn new(rx_cmd: Receiver<(Event, EventArg)>, tx_item: SyncSender<(Event, EventArg)>) -> Self {
+    pub fn new(rx_cmd: Receiver<(Event, EventArg)>,
+               tx_item: SyncSender<(Event, EventArg)>,
+               real_stdin: Option<File>) -> Self {
         Reader {
             rx_cmd: rx_cmd,
             tx_item: tx_item,
-            option: Arc::new(RwLock::new(ReaderOption::new()))
+            option: Arc::new(RwLock::new(ReaderOption::new())),
+            real_stdin,
         }
     }
 
@@ -129,13 +127,14 @@ impl Reader {
                         let option_clone = self.option.clone();
                         let tx_sender_clone = tx_sender.clone();
                         let query_clone = query.clone();
+                        let real_stdin = self.real_stdin.take();
 
                         // start the new command
                         thread_reader = Some(thread::spawn(move || {
                             let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
                             let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
 
-                            reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone);
+                            reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone, real_stdin);
 
                             let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
                         }));
@@ -188,13 +187,13 @@ lazy_static! {
 fn reader(cmd: &str,
           rx_cmd: Receiver<bool>,
           tx_sender: &Sender<(Event, EventArg)>,
-          option: Arc<RwLock<ReaderOption>>) {
-    let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
+          option: Arc<RwLock<ReaderOption>>,
+          source_file: Option<File>) {
 
-    let (command, mut source): (Option<Child>, Box<BufRead>) = if istty {
-        get_command_output(cmd).expect("command not found")
+    let (command, mut source): (Option<Child>, Box<BufRead>) = if source_file.is_some() {
+        (None, Box::new(BufReader::new(source_file.unwrap())))
     } else {
-        (None, Box::new(BufReader::new(stdin())))
+        get_command_output(cmd).expect("command not found")
     };
 
     let (tx_control, rx_control) = channel();
@@ -275,10 +274,10 @@ fn reader(cmd: &str,
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum FieldRange {
-    Single(i64),
-    LeftInf(i64),
-    RightInf(i64),
-    Both(i64, i64),
+    Single(usize),
+    LeftInf(usize),
+    RightInf(usize),
+    Both(usize, usize),
 }
 
 // range: "start..end", end is excluded.
@@ -295,8 +294,8 @@ fn parse_range(range: &str) -> Option<FieldRange> {
         return None;
     }
 
-    let start = range_string.get(0).and_then(|x| x.parse::<i64>().ok());
-    let end = range_string.get(1).and_then(|x| x.parse::<i64>().ok());
+    let start = range_string.get(0).and_then(|x| x.parse::<usize>().ok());
+    let end = range_string.get(1).and_then(|x| x.parse::<usize>().ok());
 
     if range_string.len() == 1 {
         return if start.is_none() {None} else {Some(Single(start.unwrap()))};

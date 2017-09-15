@@ -113,7 +113,7 @@ impl Query {
         let cmd_prompt = self.cmd_prompt.clone();
         let query_prompt = self.query_prompt.clone();
 
-        Box::new(move |curses| {
+        Box::new(move |mut curses| {
             match mode {
                 QueryMode::CMD   => {
                     curses.cprint(&cmd_prompt, COLOR_PROMPT, false);

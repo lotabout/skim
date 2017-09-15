@@ -2,20 +2,14 @@
 // the internal states, such as selected or not
 
 use std::cmp::Ordering;
-use ncurses::*;
-use ansi::parse_ansi;
+use ansi::ANSIParser;
 use regex::Regex;
 use reader::FieldRange;
 use std::borrow::Cow;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
-
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
+use curses::attr_t;
+use std::default::Default;
 
 // An item will store everything that one line input will need to be operated and displayed.
 //
@@ -70,15 +64,17 @@ impl<'a> Item {
         //                    |                  |
         //                    +- F -> orig       | orig
 
+        let mut ansi_parser: ANSIParser = Default::default();
+
         let (text, states_text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
-            parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
+            ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
             (parse_transform_fields(delimiter, &orig_text, trans_fields), Vec::new())
         } else if ansi_enabled {
             // not transformed, ansi
-            parse_ansi(&orig_text)
+            ansi_parser.parse_ansi(&orig_text)
         } else {
             // normal case
             ("".to_string(), Vec::new())
@@ -117,7 +113,8 @@ impl<'a> Item {
 
     pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
-            let (text, _) = parse_ansi(&self.output_text);
+            let mut ansi_parser: ANSIParser = Default::default();
+            let (text, _) = ansi_parser.parse_ansi(&self.output_text);
             Cow::Owned(text)
         } else if !self.using_transform_fields && self.ansi_enabled {
             Cow::Borrowed(&self.text)
@@ -201,14 +198,13 @@ fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -
 }
 
 fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)> {
-    let length = length as i64;
     match *range {
         FieldRange::Single(index) => {
             let index = if index >= 0 {index} else {length + index};
             if index < 0 || index >= length {
                 None
             } else {
-                Some((index as usize, (index + 1) as usize))
+                Some((index, (index + 1)))
             }
         }
         FieldRange::LeftInf(right) => {
@@ -216,15 +212,15 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
             if right <= 0 {
                 None
             } else {
-                Some((0, if right > length {length as usize} else {right as usize}))
+                Some((0, if right > length {length} else {right}))
             }
         }
         FieldRange::RightInf(left) => {
-            let left = if left >= 0 {left} else {length as i64 + left};
+            let left = if left >= 0 {left} else {length + left};
             if left >= length {
                 None
             } else {
-                Some((if left < 0 {0} else {left} as usize, length as usize))
+                Some((if left < 0 {0} else {left}, length))
             }
         }
         FieldRange::Both(left, right) => {
@@ -233,8 +229,8 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
             if left >= right || left >= length || right < 0 {
                 None
             } else {
-                Some((if left < 0 {0} else {left as usize},
-                      if right > length {length as usize} else {right as usize}))
+                Some((if left < 0 {0} else {left},
+                      if right > length {length} else {right}))
             }
         }
     }

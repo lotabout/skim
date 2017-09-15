@@ -4,13 +4,6 @@ use event::{Event, EventArg};
 use std::thread;
 use std::time::Duration;
 
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
-
 // sender is a cache of reader
 pub struct CachedSender {
     items: Vec<ItemGroup>, // cache

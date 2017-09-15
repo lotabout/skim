@@ -1,12 +1,16 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 extern crate libc;
-extern crate ncurses;
 extern crate getopts;
 extern crate regex;
 extern crate shlex;
 extern crate utf8parse;
 extern crate unicode_width;
+extern crate termion;
+#[macro_use] extern crate log;
+extern crate env_logger;
+extern crate time;
+
 #[macro_use] extern crate lazy_static;
 mod item;
 mod reader;
@@ -32,13 +36,8 @@ use std::mem;
 use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::Curses;
-
-macro_rules! println_stderr(
-    ($($arg:tt)*) => { {
-        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
-        r.expect("failed printing to stderr");
-    } }
-);
+use std::fs::File;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 
 const REFRESH_DURATION: u64 = 200;
 
@@ -63,17 +62,26 @@ Usage: sk [options]
                          such as 'ctrl-j:accept,ctrl-k:kill-line'
     -m, --multi          Enable Multiple Selection
     --no-multi           Disable Multiple Selection
-    -p, --prompt '> '    prompt string for query mode
-    --cmd-prompt '> '    prompt string for command mode
     -c, --cmd ag         command to invoke dynamically
     -I replstr           replace `replstr` with the selected item
     -i, --interactive    Start skim in interactive(command) mode
     --ansi               parse ANSI color codes for input strings
     --color [BASE][,COLOR:ANSI]
                          change color theme
+  Layout
     --reverse            Reverse orientation
+    --height=HEIGHT      Height of skim's window (--height 40%)
+    --min-height=HEIGHT  Minimum height when --height is given by percent
+                         (default: 10)
     --margin=MARGIN      Screen Margin (TRBL / TB,RL / T,RL,B / T,R,B,L)
                          e.g. (sk --margin 1,10%)
+    -p, --prompt '> '    prompt string for query mode
+    --cmd-prompt '> '    prompt string for command mode
+
+  Preview
+    --preview=COMMAND    command to preview current highlighted line ({})
+    --preview-window=OPT Preview window layout (default: right:50%)
+                         [up|down|left|right][:SIZE[%]][:hidden]
 
   Scripting
     -q, --query \"\"       specify the initial query
@@ -87,6 +95,28 @@ Usage: sk [options]
 ";
 
 fn main() {
+    use log::{LogRecord, LogLevelFilter};
+    use env_logger::LogBuilder;
+
+    let format = |record: &LogRecord| {
+        let t = time::now();
+        format!("{},{:03} - {} - {}",
+                time::strftime("%Y-%m-%d %H:%M:%S", &t).unwrap(),
+                t.tm_nsec / 1000_000,
+                record.level(),
+                record.args()
+               )
+    };
+
+    let mut builder = LogBuilder::new();
+    builder.format(format).filter(None, LogLevelFilter::Info);
+
+    if env::var("RUST_LOG").is_ok() {
+        builder.parse(&env::var("RUST_LOG").unwrap());
+    }
+
+    builder.init().unwrap();
+
     let exit_code = real_main();
     std::process::exit(exit_code);
 }
@@ -121,6 +151,10 @@ fn real_main() -> i32 {
     opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
     opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
     opts.optopt("", "margin", "margin around the finder", "");
+    opts.optopt("", "min-height", "minum height when --height is given by percent", "");
+    opts.optopt("", "height", "height", "");
+    opts.optopt("", "preview", "command to preview current highlighted line", "");
+    opts.optopt("", "preview-window", "layout of preview window", "");
     opts.optflag("", "reverse", "reverse orientation");
     opts.optflag("", "version", "print out the current version of skim");
 
@@ -172,18 +206,25 @@ fn real_main() -> i32 {
         }
     });
 
-    let mut curses = Curses::new();
-    curses.parse_options(&options);
-
     //------------------------------------------------------------------------------
-    // input
-    let tx_input_clone = tx_input.clone();
-    let mut input = input::Input::new(tx_input_clone);
-    input.parse_keymap(options.opt_str("b"));
-    input.parse_expect_keys(options.opt_str("e"));
-    thread::spawn(move || {
-        input.run();
-    });
+    // curses
+
+    // termion require the stdin to be terminal file
+    // see: https://github.com/ticki/termion/issues/64
+    // Here is a workaround. But reader will need to know the real stdin.
+    let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
+    let real_stdin = if !istty {
+        unsafe {
+            let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
+            let tty = File::open("/dev/tty").unwrap();
+            libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
+            Some(stdin)
+        }
+    } else {
+        None
+    };
+
+    let curses = Curses::new(&options);
 
     //------------------------------------------------------------------------------
     // query
@@ -197,23 +238,35 @@ fn real_main() -> i32 {
     query.parse_options(&options);
 
     //------------------------------------------------------------------------------
-    // model
-    let (tx_model, rx_model) = channel();
-    let mut model = model::Model::new(rx_model);
-    model.parse_options(&options);
-    model.init();
-    thread::spawn(move || {
-        model.run(curses);
-    });
+    // reader -- read items from stdin or output of comment
 
-    //------------------------------------------------------------------------------
-    // reader
+    debug!("reader start");
     let (tx_reader, rx_reader) = channel();
     let (tx_item, rx_item) = sync_channel(128);
-    let mut reader = reader::Reader::new(rx_reader, tx_item.clone());
+    let mut reader = reader::Reader::new(rx_reader, tx_item.clone(), real_stdin);
     reader.parse_options(&options);
     thread::spawn(move || {
         reader.run();
+    });
+
+    //------------------------------------------------------------------------------
+    // input
+    let tx_input_clone = tx_input.clone();
+    let mut input = input::Input::new(tx_input_clone);
+    input.parse_keymap(options.opt_str("b"));
+    input.parse_expect_keys(options.opt_str("e"));
+    thread::spawn(move || {
+        input.run();
+    });
+
+    //------------------------------------------------------------------------------
+    // model
+    let (tx_model, rx_model) = channel();
+    let mut model = model::Model::new(rx_model);
+
+    model.parse_options(&options);
+    thread::spawn(move || {
+        model.run(curses);
     });
 
     //------------------------------------------------------------------------------
@@ -387,6 +440,15 @@ fn real_main() -> i32 {
                 let _ = tx_model.send((ev, arg));
             }
 
+            EvActTogglePreview => {
+                let _ = tx_model.send((ev, arg));
+                let _ = tx_model.send((EvActRedraw, Box::new(query.get_print_func())));
+            }
+
+            EvReportCursorPos => {
+                let (y, x): (u16, u16) = *arg.downcast().unwrap();
+                debug!("main:EvReportCursorPos: {}/{}", y, x);
+            }
             _ => {}
         }
     }
