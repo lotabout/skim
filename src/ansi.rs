@@ -12,7 +12,7 @@ pub struct ANSIParser {
 impl Default for ANSIParser {
     fn default() -> Self {
         ANSIParser {
-            re: Regex::new(r"\x1B\[(?:([0-9]+;[0-9]+[Hf])|([0-9]+[ABCD])|(s|u|2J|K)|([0-9;]+m)|(=[0-9]+[hI]))").unwrap(),
+            re: Regex::new(r"\x1B\[(?:([0-9]+;[0-9]+[Hf])|([0-9]+[ABCD])|(s|u|2J|K)|([0-9;]*m)|(=[0-9]+[hI]))").unwrap(),
             last_attr: None,
         }
     }
