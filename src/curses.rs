@@ -655,6 +655,7 @@ impl Curses {
         let height = self.height();
 
         let start = if self.height == Margin::Percent(100) { 0 } else { self.start_y };
+        debug!("curses:resize: start = {}", start);
 
         self.top = start + match self.margin_top {
             Margin::Fixed(num) => num,

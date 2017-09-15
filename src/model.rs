@@ -397,6 +397,7 @@ impl Model {
             curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
         }
 
+        debug!("model:draw_item: {:?}", matched_item);
         match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
                 let (match_start, match_end) = if !matched_indics.is_empty() {
@@ -806,6 +807,9 @@ fn reshape_string(text: &[char],
                   match_start: usize,
                   match_end: usize,
                   tabstop: usize) -> (usize, usize) {
+    if text.len() <= 0 {
+        return (0, 0);
+    }
 
     let acc_width = accumulate_text_width(text, tabstop);
     let full_width = acc_width[acc_width.len()-1];
