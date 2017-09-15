@@ -29,8 +29,8 @@ pub struct Model {
     line_cursor: usize, // line No.
     hscroll_offset: usize,
     reverse: bool,
-    height: i32,
-    width: i32,
+    height: u16,
+    width: u16,
 
     multi_selection: bool,
     pub tabstop: usize,
@@ -227,13 +227,13 @@ impl Model {
                     }
                     Event::EvActPageDown => {
                         //debug!("model:redraw_items_and_status");
-                        let height = 1-self.height;
+                        let height = 1- (self.height as i32);
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageUp => {
                         //debug!("model:redraw_items_and_status");
-                        let height = self.height-1;
+                        let height = (self.height as i32) - 1;
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
@@ -309,7 +309,7 @@ impl Model {
 
         for i in lower..upper {
             let l = i - lower;
-            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as i32, 0);
+            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as u16, 0);
             // print the cursor label
             let label = if l == self.line_cursor {">"} else {" "};
             curses.cprint(label, COLOR_CURSOR, true);
@@ -324,7 +324,7 @@ impl Model {
         // ones
         for i in upper..max_upper {
             let l = i - lower;
-            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as i32, 0);
+            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as u16, 0);
             curses.clrtoeol();
         }
 
@@ -369,7 +369,7 @@ impl Model {
 
         // item cursor
         let line_num_str = format!(" {} ", self.item_cursor+self.line_cursor);
-        curses.mv(if self.reverse {1} else {self.height}, self.width - (line_num_str.len() as i32));
+        curses.mv(if self.reverse {1} else {self.height}, self.width - (line_num_str.len() as u16));
         curses.cprint(&line_num_str, COLOR_INFO, true);
 
         // restore cursor
@@ -383,7 +383,7 @@ impl Model {
         //debug!("model:draw_query");
 
         // print query
-        curses.mv((if self.reverse {0} else {h-1}) as i32, 0);
+        curses.mv((if self.reverse {0} else {h-1}) as u16, 0);
         curses.clrtoeol();
         print_query_func(curses);
     }
@@ -541,13 +541,13 @@ impl Model {
         curses.clrtoend();
     }
 
-    fn print_char(&self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
+    fn print_char(&self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
         if ch != '\t' {
             curses.caddch(ch, color, is_bold);
         } else {
             // handle tabstop
             let (_, x) = curses.getyx();
-            let rest = (self.tabstop as i32) - (x-2)%(self.tabstop as i32);
+            let rest = self.tabstop - (x as usize -2)%self.tabstop;
             for _ in 0..rest {
                 curses.caddch(' ', color, is_bold);
             }
@@ -563,11 +563,13 @@ impl Model {
         let mut item_cursor = self.item_cursor as i32;
         let item_len = self.items.len() as i32;
 
+        let height = self.height as i32;
+
         line_cursor += diff;
-        if line_cursor >= self.height {
-            item_cursor += line_cursor - self.height + 1;
-            item_cursor = max(0, min(item_cursor, item_len - self.height));
-            line_cursor = min(self.height-1, item_len - item_cursor);
+        if line_cursor >= height {
+            item_cursor += line_cursor - height + 1;
+            item_cursor = max(0, min(item_cursor, item_len - height));
+            line_cursor = min(height-1, item_len - item_cursor);
         } else if line_cursor < 0 {
             item_cursor += line_cursor;
             item_cursor = max(item_cursor, 0);
@@ -662,7 +664,7 @@ impl Model {
 }
 
 
-fn get_command_output(cmd: &str, lines: i32, cols: i32) -> Result<String, Box<Error>> {
+fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Error>> {
     let mut command = Command::new("sh")
                        .env("LINES", lines.to_string())
                        .env("COLUMNS", cols.to_string())
@@ -679,8 +681,8 @@ fn get_command_output(cmd: &str, lines: i32, cols: i32) -> Result<String, Box<Er
 
 struct LinePrinter {
     tabstop: usize,
-    start: i32,
-    end: i32,
+    start: usize,
+    end: usize,
     current: i32,
 
     shift: usize,
@@ -730,30 +732,32 @@ impl LinePrinter {
     }
 
     pub fn build(mut self) -> Self {
-        self.start = (self.shift + self.hscroll_offset) as i32;
-        self.end = self.start + self.container_width as i32;
+        self.start = self.shift + self.hscroll_offset;
+        self.end = self.start + self.container_width;
         self
     }
 
 
-    fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
+    fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
         // the hidden chracter
         let w = ch.width_cjk().unwrap_or(2);
 
         self.current += w as i32;
+        assert!(self.current >= 0);
+        let current = self.current as usize;
 
-        if self.current < self.start {
+        if current < self.start {
             // pass if it is hidden
-        } else if self.current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
+        } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
             // print left ".."
-            for _ in 0..min(w as i32, self.current - self.start + 1) {
+            for _ in 0..min(w, current - self.start + 1) {
                 curses.caddch('.', color, is_bold);
             }
-        } else if self.current >= self.end {
+        } else if current >= self.end {
             // overflow the line
-        } else if self.end - self.current <= 2 && (self.text_width as i32 >= self.end) {
+        } else if self.end - current <= 2 && (self.text_width >= self.end) {
             // print right ".."
-            for _ in 0..min(w as i32, self.end - self.current) {
+            for _ in 0..min(w, self.end - current) {
                 curses.caddch('.', color, is_bold);
             }
         } else {
@@ -761,7 +765,7 @@ impl LinePrinter {
         }
     }
 
-    pub fn print_char(&mut self, curses: &mut Window, ch: char, color: i16, is_bold: bool) {
+    pub fn print_char(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
         if ch != '\t' {
             self.print_char_raw(curses, ch, color, is_bold);
         } else {

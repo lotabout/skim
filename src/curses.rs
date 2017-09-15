@@ -18,20 +18,20 @@ use std::fs::{File, OpenOptions};
 use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 use libc;
 
-pub static COLOR_NORMAL:        i16 = 0;
-pub static COLOR_PROMPT:        i16 = 1;
-pub static COLOR_MATCHED:       i16 = 2;
-pub static COLOR_CURRENT:       i16 = 3;
-pub static COLOR_CURRENT_MATCH: i16 = 4;
-pub static COLOR_SPINNER:       i16 = 5;
-pub static COLOR_INFO:          i16 = 6;
-pub static COLOR_CURSOR:        i16 = 7;
-pub static COLOR_SELECTED:      i16 = 8;
-pub static COLOR_HEADER:        i16 = 9;
-pub static COLOR_BORDER:        i16 = 10;
-static COLOR_USER:              i16 = 11;
+pub static COLOR_NORMAL:        u16 = 0;
+pub static COLOR_PROMPT:        u16 = 1;
+pub static COLOR_MATCHED:       u16 = 2;
+pub static COLOR_CURRENT:       u16 = 3;
+pub static COLOR_CURRENT_MATCH: u16 = 4;
+pub static COLOR_SPINNER:       u16 = 5;
+pub static COLOR_INFO:          u16 = 6;
+pub static COLOR_CURSOR:        u16 = 7;
+pub static COLOR_SELECTED:      u16 = 8;
+pub static COLOR_HEADER:        u16 = 9;
+pub static COLOR_BORDER:        u16 = 10;
+static COLOR_USER:              u16 = 11;
 
-pub type attr_t = i16;
+pub type attr_t = u16;
 
 lazy_static! {
     // all colors are refered by the pair number
@@ -52,7 +52,7 @@ pub fn register_ansi(ansi: String) -> attr_t {
     //let bg = if bg == -1 { *BG.read().unwrap() } else {bg};
 
     let mut color_map = COLOR_MAP.write().unwrap();
-    let pair_num = color_map.len() as i16;
+    let pair_num = color_map.len() as u16;
     if color_map.contains_key(&ansi) {
         *color_map.get(&ansi).unwrap()
     } else {
@@ -118,8 +118,8 @@ pub fn register_ansi(ansi: String) -> attr_t {
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 pub enum Margin {
-    Fixed(i32),
-    Percent(i32),
+    Fixed(u16),
+    Percent(u16),
 }
 
 // A curse object is an abstraction of the screen to be draw on
@@ -137,16 +137,16 @@ pub enum Margin {
 // |
 
 pub struct Window {
-    top: i32,
-    bottom: i32,
-    left: i32,
-    right: i32,
+    top: u16,
+    bottom: u16,
+    left: u16,
+    right: u16,
 
     wrap: bool,
     border: Option<Direction>,
     stdout_buffer: String,
-    current_y: i32,
-    current_x: i32,
+    current_y: u16,
+    current_x: u16,
 }
 
 impl Default for Window {
@@ -166,7 +166,7 @@ impl Default for Window {
 }
 
 impl Window {
-    pub fn new(top: i32, right: i32, bottom: i32, left: i32, wrap: bool, border: Option<Direction>) -> Self {
+    pub fn new(top: u16, right: u16, bottom: u16, left: u16, wrap: bool, border: Option<Direction>) -> Self {
         Window {
             top,
             bottom,
@@ -180,7 +180,7 @@ impl Window {
         }
     }
 
-    pub fn reshape(&mut self, top: i32, right: i32, bottom: i32, left: i32) {
+    pub fn reshape(&mut self, top: u16, right: u16, bottom: u16, left: u16) {
         self.top = top;
         self.right = right;
         self.bottom = bottom;
@@ -197,22 +197,22 @@ impl Window {
         self.attron(COLOR_BORDER);
         match self.border {
             Some(Direction::Up) => {
-                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.top as u16 +1)).as_str());
+                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left +1, self.top +1)).as_str());
                 self.stdout_buffer.push_str(&"─".repeat((self.right-self.left) as usize));
             }
             Some(Direction::Down) => {
-                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, self.bottom as u16)).as_str());
+                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left +1, self.bottom)).as_str());
                 self.stdout_buffer.push_str(&"─".repeat((self.right-self.left) as usize));
             }
             Some(Direction::Left) => {
                 for i in self.top..self.bottom {
-                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 +1, i as u16+1)).as_str());
+                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left +1, i+1)).as_str());
                     self.stdout_buffer.push('│')
                 }
             }
             Some(Direction::Right) => {
                 for i in self.top..self.bottom {
-                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right as u16, i as u16+1)).as_str());
+                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right, i+1)).as_str());
                     self.stdout_buffer.push('│')
                 }
             }
@@ -222,20 +222,20 @@ impl Window {
         self.mv(y, x);
     }
 
-    pub fn mv(&mut self, y: i32, x: i32) {
+    pub fn mv(&mut self, y: u16, x: u16) {
         self.current_y = y;
         self.current_x = x;
         let (target_y, target_x) = match self.border {
-            Some(Direction::Up)    => ((y+self.top+1+1) as u16, (x+self.left+1)   as u16),
-            Some(Direction::Down)  => ((y+self.top+1)   as u16, (x+self.left+1)   as u16),
-            Some(Direction::Left)  => ((y+self.top+1)   as u16, (x+self.left+1+1) as u16),
-            Some(Direction::Right) => ((y+self.top+1)   as u16, (x+self.left+1)   as u16),
-            _                      => ((y+self.top+1)   as u16, (x+self.left+1)   as u16),
+            Some(Direction::Up)    => ((y+self.top+1+1), (x+self.left+1)),
+            Some(Direction::Down)  => ((y+self.top+1),   (x+self.left+1)),
+            Some(Direction::Left)  => ((y+self.top+1),   (x+self.left+1+1)),
+            Some(Direction::Right) => ((y+self.top+1),   (x+self.left+1)),
+            _                      => ((y+self.top+1),   (x+self.left+1)),
         };
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(target_x, target_y)).as_str());
     }
 
-    pub fn get_maxyx(&self) -> (i32, i32) {
+    pub fn get_maxyx(&self) -> (u16, u16) {
         let (max_y, max_x) = (self.bottom-self.top, self.right-self.left);
 
         match self.border {
@@ -245,7 +245,7 @@ impl Window {
         }
     }
 
-    pub fn getyx(&mut self) -> (i32, i32) {
+    pub fn getyx(&mut self) -> (u16, u16) {
         (self.current_y, self.current_x)
     }
 
@@ -280,13 +280,13 @@ impl Window {
         }
     }
 
-    pub fn cprint(&mut self, text: &str, pair: i16, is_bold: bool) {
+    pub fn cprint(&mut self, text: &str, pair: u16, is_bold: bool) {
         self.attron(pair);
         self.printw(text);
         self.attroff(pair);
     }
 
-    pub fn caddch(&mut self, ch: char, pair: i16, is_bold: bool) {
+    pub fn caddch(&mut self, ch: char, pair: u16, is_bold: bool) {
         self.attron(pair);
         self.add_char(ch);
         self.attroff(pair);
@@ -331,7 +331,7 @@ impl Window {
     fn add_char_raw(&mut self, ch: char) {
         let (max_y, max_x) = self.get_maxyx();
         let (y, x) = self.getyx();
-        let text_width = ch.width_cjk().unwrap_or(2) as i32;
+        let text_width = ch.width_cjk().unwrap_or(2) as u16;
         let target_x = x + text_width;
 
 
@@ -391,10 +391,10 @@ impl Window {
         // to erase all contents, including border
         let spaces = " ".repeat((self.right - self.left) as usize);
         for row in (self.top..self.bottom).rev() {
-            self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 + 1, row as u16 + 1)).as_str());
+            self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left + 1, row + 1)).as_str());
             self.stdout_buffer.push_str(&spaces);
         }
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left as u16 + 1, self.top as u16 + 1)).as_str());
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left + 1, self.top + 1)).as_str());
     }
 }
 
@@ -411,20 +411,20 @@ pub enum Direction {
 pub struct Curses {
     //screen: SCREEN,
     term: Option<Box<Write>>,
-    top: i32,
-    bottom: i32,
-    left: i32,
-    right: i32,
-    start_y: i32,
+    top: u16,
+    bottom: u16,
+    left: u16,
+    right: u16,
+    start_y: u16,
     height: Margin,
-    min_height: i32,
+    min_height: u16,
     margin_top: Margin,
     margin_bottom: Margin,
     margin_left: Margin,
     margin_right: Margin,
 
-    current_y: i32,
-    current_x: i32,
+    current_y: u16,
+    current_x: u16,
 
     // preview window status
     preview_direction: Direction,
@@ -448,7 +448,7 @@ impl Curses {
 
         // parse the option of window height of skim
         let min_height = if let Some(min_height_option) = options.opt_str("min-height") {
-            min_height_option.parse::<i32>().unwrap_or(10)
+            min_height_option.parse::<u16>().unwrap_or(10)
         } else {
             10 // default value
         };
@@ -539,7 +539,7 @@ impl Curses {
         ret
     }
 
-    fn reserve_lines(max_y: i32, height: Margin, min_height: i32) {
+    fn reserve_lines(max_y: u16, height: Margin, min_height: u16) {
         let rows = match height {
             Margin::Percent(100) => {return;}
             Margin::Percent(percent) => max(min_height, max_y*percent/100),
@@ -550,7 +550,7 @@ impl Curses {
         stdout().flush().unwrap();
     }
 
-    fn get_cursor_pos() -> (i32, i32) {
+    fn get_cursor_pos() -> (u16, u16) {
         let mut stdout = stdout().into_raw_mode().unwrap();
         let mut f = stdin();
         write!(stdout, "\x1B[6n").unwrap();
@@ -568,14 +568,14 @@ impl Curses {
         let s = String::from_utf8(read_chars).unwrap();
         let t: Vec<&str> = s[2..s.len()-1].split(';').collect();
         stdout.flush().unwrap();
-        (t[0].parse::<i32>().unwrap() - 1, t[1].parse::<i32>().unwrap() - 1)
+        (t[0].parse::<u16>().unwrap() - 1, t[1].parse::<u16>().unwrap() - 1)
     }
 
     fn parse_margin_string(margin: &str) -> Margin {
         if margin.ends_with("%") {
-            Margin::Percent(min(100, margin[0..margin.len()-1].parse::<i32>().unwrap_or(100)))
+            Margin::Percent(min(100, margin[0..margin.len()-1].parse::<u16>().unwrap_or(100)))
         } else {
-            Margin::Fixed(margin.parse::<i32>().unwrap_or(0))
+            Margin::Fixed(margin.parse::<u16>().unwrap_or(0))
         }
     }
 
@@ -724,12 +724,12 @@ impl Curses {
         self.preview_shown = !self.preview_shown;
     }
 
-    fn terminal_size() -> (i32, i32) {
+    fn terminal_size() -> (u16, u16) {
         let (max_x, max_y) = termion::terminal_size().unwrap();
-        (max_y as i32, max_x as i32)
+        (max_y, max_x)
     }
 
-    fn height(&self) -> i32 {
+    fn height(&self) -> u16 {
         let (max_y, _) = Curses::terminal_size();
         match self.height {
             Margin::Percent(100) => max_y,
@@ -760,13 +760,13 @@ impl Curses {
     }
 }
 
-//fn attr_color(pair: i16, is_bold: bool) -> attr_t {
+//fn attr_color(pair: u16, is_bold: bool) -> attr_t {
     //let attr = if pair > COLOR_NORMAL {COLOR_PAIR(pair)} else {0};
 
     //attr | if is_bold {A_BOLD()} else {0}
 //}
 
-//fn attr_mono(pair: i16, is_bold: bool) -> attr_t {
+//fn attr_mono(pair: u16, is_bold: bool) -> attr_t {
     //let mut attr = 0;
     //match pair {
         //x if x == COLOR_NORMAL => {
