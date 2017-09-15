@@ -14,6 +14,9 @@ use std::cmp::{min, max};
 use termion::color;
 use std::fmt;
 use unicode_width::UnicodeWidthChar;
+use std::fs::{File, OpenOptions};
+use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
+use libc;
 
 pub static COLOR_NORMAL:        i16 = 0;
 pub static COLOR_PROMPT:        i16 = 1;
@@ -430,6 +433,9 @@ pub struct Curses {
 
     pub win_main: Window,
     pub win_preview: Window,
+
+    // other stuff
+    orig_stdout_fd: Option<RawFd>,
 }
 
 unsafe impl Send for Curses {}
@@ -440,15 +446,7 @@ impl Curses {
     pub fn new(options: &getopts::Matches) -> Self {
         ColorTheme::init_from_options(&options);
 
-        // reserve enough lines according to height
-
-        let margins = if let Some(margin_option) = options.opt_str("margin") {
-            Curses::parse_margin(&margin_option)
-        } else {
-            (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0))
-        };
-        let (margin_top, margin_right, margin_bottom, margin_left) = margins;
-
+        // parse the option of window height of skim
         let min_height = if let Some(min_height_option) = options.opt_str("min-height") {
             min_height_option.parse::<i32>().unwrap_or(10)
         } else {
@@ -461,17 +459,27 @@ impl Curses {
             Margin::Percent(100)
         };
 
-        let (y, _) = Curses::get_cursor_pos();
 
-        // reserve the necessary lines to show skim
+        // If skim is invoked by pipeline `echo 'abc' | sk | awk ...`
+        // The the output is redirected. We need to open /dev/tty for output.
+        let istty = unsafe { libc::isatty(libc::STDOUT_FILENO as i32) } != 0;
+        let orig_stdout_fd = if !istty {
+            unsafe {
+                let stdout_fd = libc::dup(libc::STDOUT_FILENO);
+                let tty = OpenOptions::new().write(true).open("/dev/tty").unwrap();
+                libc::dup2(tty.into_raw_fd(), libc::STDOUT_FILENO);
+                Some(stdout_fd)
+            }
+        } else {
+            None
+        };
+
+        // reserve the necessary lines to show skim (in case current cursor is at the bottom of
+        // the screen)
         let (max_y, _) = Curses::terminal_size();
         Curses::reserve_lines(max_y, height, min_height);
 
-        let start_y = match height {
-            Margin::Percent(100) => 0,
-            Margin::Percent(p) => min(y, max_y - max(p*max_y/100, min_height)),
-            Margin::Fixed(rows) => min(y, max_y - rows),
-        };
+        let (y, _) = Curses::get_cursor_pos();
 
         let term: Box<Write> = if Margin::Percent(100) == height {
             Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap()))
@@ -479,9 +487,23 @@ impl Curses {
             Box::new(stdout().into_raw_mode().unwrap())
         };
 
-        let preview_cmd_exist = options.opt_present("preview");
+        // keep the start position on the screen
+        let start_y = match height {
+            Margin::Percent(100) => 0,
+            Margin::Percent(p) => min(y, max_y - max(p*max_y/100, min_height)),
+            Margin::Fixed(rows) => min(y, max_y - rows),
+        };
+
+        // parse options for margin
+        let margins = if let Some(margin_option) = options.opt_str("margin") {
+            Curses::parse_margin(&margin_option)
+        } else {
+            (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0))
+        };
+        let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         // parse options for preview window
+        let preview_cmd_exist = options.opt_present("preview");
         let (preview_direction, preview_size, preview_wrap, preview_shown) = if let Some(opts) = options.opt_str("preview-window") {
             Curses::parse_preview(&opts)
         } else {
@@ -510,6 +532,8 @@ impl Curses {
 
             win_main: Window::new(0,0,0,0, false, None),
             win_preview: Window::new(0,0,0,0, preview_wrap, None),
+
+            orig_stdout_fd,
         };
         ret.resize();
         ret
@@ -719,6 +743,13 @@ impl Curses {
         self.win_main.close();
         self.refresh();
         self.term.take();
+
+        // restore the original fd
+        if self.orig_stdout_fd.is_some() {
+            unsafe {
+                libc::dup2(self.orig_stdout_fd.unwrap(), libc::STDOUT_FILENO);
+            }
+        }
     }
 
     pub fn refresh(&mut self) {
