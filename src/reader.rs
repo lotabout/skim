@@ -190,6 +190,7 @@ fn reader(cmd: &str,
           option: Arc<RwLock<ReaderOption>>,
           source_file: Option<File>) {
 
+    debug!("reader:reader: called");
     let (command, mut source): (Option<Child>, Box<BufRead>) = if source_file.is_some() {
         (None, Box::new(BufReader::new(source_file.unwrap())))
     } else {
@@ -241,6 +242,7 @@ fn reader(cmd: &str,
         match source.read_line(&mut input) {
             Ok(n) => {
                 if n == 0 { break; }
+                debug!("reader:reader: read a new line. index = {}", index);
 
                 if input.ends_with('\n') {
                     input.pop();
@@ -248,6 +250,7 @@ fn reader(cmd: &str,
                         input.pop();
                     }
                 }
+                debug!("reader:reader: create new item. index = {}", index);
                 let item = Item::new(input,
                                      opt.use_ansi_color,
                                      &opt.transform_fields,
@@ -255,6 +258,7 @@ fn reader(cmd: &str,
                                      &opt.delimiter,
                                      (run_num, index));
                 item_group.push(Arc::new(item));
+                debug!("reader:reader: item created. index = {}", index);
                 index += 1;
 
                 if index & 0xFFF == 0 {

@@ -65,6 +65,7 @@ impl<'a> Item {
         //                    +- F -> orig       | orig
 
         let mut ansi_parser: ANSIParser = Default::default();
+        debug!("item:new ansiparser created");
 
         let (text, states_text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
@@ -80,6 +81,7 @@ impl<'a> Item {
             ("".to_string(), Vec::new())
         };
 
+        debug!("item:new: transformed");
         let mut ret = Item {
             index: index,
             output_text: orig_text,
@@ -91,12 +93,14 @@ impl<'a> Item {
             ansi_enabled: ansi_enabled,
         };
 
+        debug!("item:new: created");
         let lower_chars: Vec<char> = ret.get_text().to_ascii_lowercase().chars().collect();
         let matching_ranges = if matching_fields.len() > 0 {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
             vec![(0, lower_chars.len())]
         };
+        debug!("item:new: parse matching fieds done");
 
         ret.text_lower_chars = lower_chars;
         ret.matching_ranges = matching_ranges;

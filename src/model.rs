@@ -99,7 +99,7 @@ impl Model {
         loop {
             // check for new item
             if let Ok((ev, arg)) = self.rx_cmd.recv() {
-                //debug!("model: got {:?}", ev);
+                debug!("model: got {:?}", ev);
                 match ev {
                     Event::EvModelNewItem => {
                         let items: MatchedItemGroup = *arg.downcast().unwrap();

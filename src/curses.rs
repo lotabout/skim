@@ -192,7 +192,7 @@ impl Window {
     }
 
     pub fn draw_border(&mut self) {
-        debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
+        //debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
         let (y, x) = self.getyx();
         self.attron(COLOR_BORDER);
         match self.border {
@@ -264,7 +264,7 @@ impl Window {
         let (y, x) = self.getyx();
         let (max_y, max_x) = self.get_maxyx();
 
-        debug!("curses:window:clrtoend: y/x: {}/{}, max_y/max_x: {}/{}", y, x, max_y, max_x);
+        //debug!("curses:window:clrtoend: y/x: {}/{}, max_y/max_x: {}/{}", y, x, max_y, max_x);
 
         self.clrtoeol();
         for row in y+1..max_y {
@@ -274,7 +274,7 @@ impl Window {
     }
 
     pub fn printw(&mut self, text: &str) {
-        debug!("curses:window:printw: {:?}", text);
+        //debug!("curses:window:printw: {:?}", text);
         for ch in text.chars() {
             self.add_char(ch);
         }
@@ -303,7 +303,7 @@ impl Window {
             return;
         }
 
-        debug!("curses:window:add_char: {:?}", ch);
+        //debug!("curses:window:add_char: {:?}", ch);
 
         match ch {
             '\t' => {
@@ -655,7 +655,7 @@ impl Curses {
         let height = self.height();
 
         let start = if self.height == Margin::Percent(100) { 0 } else { self.start_y };
-        debug!("curses:resize: start = {}", start);
+        //debug!("curses:resize: start = {}", start);
 
         self.top = start + match self.margin_top {
             Margin::Fixed(num) => num,
@@ -677,7 +677,7 @@ impl Curses {
             Margin::Percent(per) => per * max_x / 100,
         };
 
-        debug!("curses:resize, TRBL: {}/{}/{}/{}", self.top, self.right, self.bottom, self.left);
+        //debug!("curses:resize, TRBL: {}/{}/{}/{}", self.top, self.right, self.bottom, self.left);
 
         let height = self.bottom - self.top;
         let width = self.right - self.left;

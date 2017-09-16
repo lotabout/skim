@@ -324,6 +324,7 @@ fn real_main() -> i32 {
 
     let _ = tx_input.send((EvActRedraw, Box::new(true))); // trigger draw
     while let Ok((ev, arg)) = rx_input.recv() {
+        debug!("main: got event {:?}", ev);
         match ev {
             EvActAddChar =>  {
                 let ch: char = *arg.downcast().unwrap();
