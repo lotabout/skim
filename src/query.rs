@@ -1,6 +1,7 @@
 use model::ClosureType;
 use getopts;
 use curses::*;
+use std::mem;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -13,6 +14,7 @@ pub struct Query {
     cmd_after: Vec<char>,
     query_before: Vec<char>,
     query_after: Vec<char>,
+    yank: Vec<char>,
 
     mode: QueryMode,
     base_cmd: String,
@@ -28,6 +30,7 @@ impl Query {
             cmd_after: Vec::new(),
             query_before: Vec::new(),
             query_after: Vec::new(),
+            yank: Vec::new(),
             mode: QueryMode::QUERY,
             base_cmd: String::new(),
             replstr: "{}".to_string(),
@@ -137,6 +140,20 @@ impl Query {
         }
     }
 
+    fn save_yank(&mut self, mut yank: Vec<char>, reverse: bool) {
+        if yank.len() <= 0 {
+            return;
+        }
+
+        self.yank.clear();
+
+        if reverse {
+            self.yank.append(&mut yank.into_iter().rev().collect());
+        } else {
+            self.yank.append(&mut yank);
+        }
+    }
+
 //------------------------------------------------------------------------------
 // Actions
 //
@@ -177,44 +194,73 @@ impl Query {
         });
     }
 
+    pub fn act_unix_word_rubout(&mut self) {
+        let mut yank = Vec::new();
+
+        {
+            let (before, _) = self.get_ref();
+            // kill things other than whitespace
+            while !before.is_empty() && before[before.len()-1].is_whitespace() {
+                yank.push(before.pop().unwrap());
+            }
+
+            // kill word until whitespace
+            while !before.is_empty() && !before[before.len()-1].is_whitespace() {
+                yank.push(before.pop().unwrap());
+            }
+        }
+
+        self.save_yank(yank, true);
+    }
+
     pub fn act_backward_kill_word(&mut self) {
-        let (before, _) = self.get_ref();
+        let mut yank = Vec::new();
 
-        // skip whitespace
-        while !before.is_empty() && before[before.len()-1].is_whitespace() {
-            before.pop();
+        {
+            let (before, _) = self.get_ref();
+            // kill things other than alphanumeric
+            while !before.is_empty() && !before[before.len()-1].is_alphanumeric() {
+                yank.push(before.pop().unwrap());
+            }
+
+            // kill word until whitespace (not alphanumeric)
+            while !before.is_empty() && before[before.len()-1].is_alphanumeric() {
+                yank.push(before.pop().unwrap());
+            }
         }
 
-        // kill word until whitespace
-        while !before.is_empty() && !before[before.len()-1].is_whitespace() {
-            before.pop();
-        }
+        self.save_yank(yank, true);
     }
 
     pub fn act_kill_word(&mut self) {
-        let (_, after) = self.get_ref();
+        let mut yank = Vec::new();
 
-        // kill word until whitespace
-        while !after.is_empty() && !after[after.len()-1].is_whitespace() {
-            after.pop();
+        {
+            let (_, after) = self.get_ref();
+
+            // kill non alphanumeric
+            while !after.is_empty() && !after[after.len()-1].is_alphanumeric() {
+                yank.push(after.pop().unwrap());
+            }
+            // kill alphanumeric
+            while !after.is_empty() && after[after.len()-1].is_alphanumeric() {
+                yank.push(after.pop().unwrap());
+            }
         }
-        // skip whitespace
-        while !after.is_empty() && after[after.len()-1].is_whitespace() {
-            after.pop();
-        }
+        self.save_yank(yank, false);
     }
 
     pub fn act_backward_word(&mut self) {
         let (before, after) = self.get_ref();
         // skip whitespace
-        while !before.is_empty() && before[before.len()-1].is_whitespace() {
+        while !before.is_empty() && !before[before.len()-1].is_alphanumeric() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
         }
 
         // backword char until whitespace
-        while !before.is_empty() && !before[before.len()-1].is_whitespace() {
+        while !before.is_empty() && before[before.len()-1].is_alphanumeric() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
@@ -224,14 +270,14 @@ impl Query {
     pub fn act_forward_word(&mut self) {
         let (before, after) = self.get_ref();
         // backword char until whitespace
-        while !after.is_empty() && !after[after.len()-1].is_whitespace() {
+        // skip whitespace
+        while !after.is_empty() && after[after.len()-1].is_whitespace() {
             after.pop().map(|ch| {
                 before.push(ch);
             });
         }
 
-        // skip whitespace
-        while !after.is_empty() && after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && !after[after.len()-1].is_whitespace() {
             after.pop().map(|ch| {
                 before.push(ch);
             });
@@ -257,13 +303,22 @@ impl Query {
     }
 
     pub fn act_kill_line(&mut self) {
-        let (_, after) = self.get_ref();
-        after.clear();
+        let after = mem::replace(&mut self.query_after, Vec::new());
+        self.save_yank(after, false);
     }
 
     pub fn act_line_discard(&mut self) {
-        let (before, _) = self.get_ref();
-        before.clear();
+        let before = mem::replace(&mut self.query_before, Vec::new());
+        self.query_before = Vec::new();
+        self.save_yank(before, false);
+    }
+
+    pub fn act_yank(&mut self) {
+        let yank = mem::replace(&mut self.yank, Vec::new());
+        for c in yank.iter() {
+            self.act_add_char(*c);
+        }
+        let _ = mem::replace(&mut self.yank, yank);
     }
 }
 

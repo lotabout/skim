@@ -17,6 +17,7 @@ DEFAULT_TIMEOUT = 1000
 
 SCRIPT_PATH = os.path.realpath(__file__)
 BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '../'))
+os.chdir(BASE)
 SK = f"SKIM_DEFAULT_OPTIONS= SKIM_DEFAULT_COMMAND= {BASE}/target/release/sk"
 
 def wait(func):
@@ -45,7 +46,7 @@ class Key(object):
         super(Key, self).__init__()
         self.key = key
     def __repr__(self):
-        return self.key
+        return '"' + self.key + '"'
 
 class Ctrl(Key):
     """Represent a control key"""
@@ -59,7 +60,7 @@ class Alt(Key):
     def __init__(self, key):
         super(Alt, self).__init__(key)
     def __repr__(self):
-        return f'Escape {self.key.upper()}'
+        return f'M-{self.key}'
 
 class TmuxOutput(list):
     """A list that contains the output of tmux"""
@@ -138,7 +139,11 @@ class Tmux(object):
             target = self.win
 
         for key in args:
-            if key is not None:
+            if key is None:
+                continue
+            elif isinstance(key, Key):
+                self._go(f'send-keys -t {target} {key}')
+            else:
                 self._go(f'send-keys -t {target} "{key}"')
 
     def paste(self, content):
@@ -235,7 +240,6 @@ class TestSkim(TestBase):
         self.assertEqual('>',   lines[-1])
 
         # testing basic key binding
-        # note that ctrl-y does nothing for now
         self.tmux.send_keys(Key('99'), Ctrl('a'), Key('1'), Ctrl('f'), Key('3'), Ctrl('b'),
                 Ctrl('h'), Ctrl('e'), Ctrl('b'), Ctrl('k'), Key('Tab'), Key('BTab'))
 
@@ -249,6 +253,76 @@ class TestSkim(TestBase):
         self.tmux.send_keys(Key('Enter'))
         self.assertEqual('1390', self.readonce().strip())
 
+    def test_default_command(self):
+        self.tmux.send_keys(self.sk().replace('SKIM_DEFAULT_COMMAND=', "SKIM_DEFAULT_COMMAND='echo hello'"))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines[-2].startswith('  1/1'))
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('hello', self.readonce().strip())
+
+    def test_key_bindings(self):
+        self.tmux.send_keys(f"{SK} -q 'foo bar foo-bar'", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+
+        # Ctrl-A
+        self.tmux.send_keys(Ctrl('a'), Key('('))
+        self.tmux.until(lambda lines: lines[-1] == '> (foo bar foo-bar')
+
+        ## Meta-F
+        self.tmux.send_keys(Alt('f'), Key(')'))
+        self.tmux.until(lambda lines: lines[-1] == '> (foo) bar foo-bar')
+
+        # CTRL-B
+        self.tmux.send_keys(Ctrl('b'), 'var')
+        self.tmux.until(lambda lines: lines[-1] == '> (foovar) bar foo-bar')
+
+        # Left, CTRL-D
+        self.tmux.send_keys(Key('Left'), Key('Left'), Ctrl('d'))
+        self.tmux.until(lambda lines: lines[-1] == '> (foovr) bar foo-bar')
+
+        # # META-BS
+        self.tmux.send_keys(Alt('BSpace'))
+        self.tmux.until(lambda lines: lines[-1] == '> (r) bar foo-bar')
+
+        # # # CTRL-Y
+        self.tmux.send_keys(Ctrl('y'), Ctrl('y'))
+        self.tmux.until(lambda lines: lines[-1] == '> (foovfoovr) bar foo-bar')
+
+        # META-B
+        self.tmux.send_keys(Alt('b'), Key('Space'), Key('Space'))
+        self.tmux.until(lambda lines: lines[-1] == '> (  foovfoovr) bar foo-bar')
+
+        # CTRL-F / Right
+        self.tmux.send_keys( Ctrl('f'), Key('Right'), '/')
+        self.tmux.until(lambda lines: lines[-1] == '> (  fo/ovfoovr) bar foo-bar')
+
+        # CTRL-H / BS
+        self.tmux.send_keys( Ctrl('h'), Key('BSpace'))
+        self.tmux.until(lambda lines: lines[-1] == '> (  fovfoovr) bar foo-bar')
+
+        # CTRL-E
+        self.tmux.send_keys(Ctrl('e'), 'baz')
+        self.tmux.until(lambda lines: lines[-1] == '> (  fovfoovr) bar foo-barbaz')
+
+        # CTRL-U
+        self.tmux.send_keys( Ctrl('u'))
+        self.tmux.until(lambda lines: lines[-1] == '>')
+
+        # CTRL-Y
+        self.tmux.send_keys( Ctrl('y'))
+        self.tmux.until(lambda lines: lines[-1] == '> (  fovfoovr) bar foo-barbaz')
+
+        # CTRL-W
+        self.tmux.send_keys( Ctrl('w'), 'bar-foo')
+        self.tmux.until(lambda lines: lines[-1] == '> (  fovfoovr) bar bar-foo')
+
+        # # META-D
+        self.tmux.send_keys(Alt('b'), Alt('b'), Alt('d'), Ctrl('a'), Ctrl('y'))
+        self.tmux.until(lambda lines: lines[-1] == '> bar(  fovfoovr) bar -foo')
+
+        # CTRL-M
+        self.tmux.send_keys(Ctrl('m'))
+        self.tmux.until(lambda lines: not lines[-1].startswith('>'))
 
 if __name__ == '__main__':
     unittest.main()

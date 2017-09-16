@@ -353,8 +353,13 @@ fn real_main() -> i32 {
                 redraw_query(&query);
             }
 
-            EvActBackwardKillWord | EvActUnixWordRubout => {
+            EvActBackwardKillWord => {
                 query.act_backward_kill_word();
+                on_query_change(&query);
+            }
+
+            EvActUnixWordRubout => {
+                query.act_unix_word_rubout();
                 on_query_change(&query);
             }
 
@@ -390,6 +395,11 @@ fn real_main() -> i32 {
 
             EvActKillWord => {
                 query.act_kill_word();
+                on_query_change(&query);
+            }
+
+            EvActYank=> {
+                query.act_yank();
                 on_query_change(&query);
             }
 
