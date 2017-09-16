@@ -744,7 +744,14 @@ impl Curses {
         self.win_preview.close();
         self.win_main.close();
         self.refresh();
-        self.term.take();
+        {
+            // put it in a special scope so that the "smcup" will be called before stdout is
+            // restored
+            let _ = self.term.take();
+        }
+
+        // flush the previous drop, so that ToMainScreen is written before restore
+        stdout().flush().unwrap();
 
         // restore the original fd
         if self.orig_stdout_fd.is_some() {

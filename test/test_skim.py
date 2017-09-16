@@ -13,7 +13,7 @@ import re
 import inspect
 
 INPUT_RECORD_SEPARATOR = '\n'
-DEFAULT_TIMEOUT = 200
+DEFAULT_TIMEOUT = 1000
 
 SCRIPT_PATH = os.path.realpath(__file__)
 BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '../'))
@@ -201,15 +201,16 @@ class TestBase(unittest.TestCase):
             fp.writelines(lines)
 
     def readonce(self):
+        path = self.tempname()
         try:
-            wait(lambda: os.path.exists(self.tempname()))
-            with open(self.tempname()) as fp:
+            wait(lambda: os.path.exists(path))
+            with open(path) as fp:
                 return fp.read()
         finally:
             if os.path.exists(path):
                 os.remove(path)
             self._temp_suffix += 1
-            tmux.prepare
+            self.tmux.prepare()
 
     def sk(self, *opts):
         tmp = self.tempname()
@@ -232,6 +233,22 @@ class TestSkim(TestBase):
         self.assertEqual('> 1', lines[-3])
         self.assertTrue(re.match('^  100000/100000 *0', lines[-2]))
         self.assertEqual('>',   lines[-1])
+
+        # testing basic key binding
+        # note that ctrl-y does nothing for now
+        self.tmux.send_keys(Key('99'), Ctrl('a'), Key('1'), Ctrl('f'), Key('3'), Ctrl('b'),
+                Ctrl('h'), Ctrl('e'), Ctrl('b'), Ctrl('k'), Key('Tab'), Key('BTab'))
+
+        self.tmux.until(lambda ls: ls[-2].startswith('  856/100000'))
+        lines = self.tmux.capture()
+        self.assertEqual('> 1390', lines[-4])
+        self.assertEqual('  139', lines[-3])
+        self.assertTrue(lines[-2].startswith('  856/100000'))
+        self.assertEqual('> 139',   lines[-1])
+
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('1390', self.readonce().strip())
+
 
 if __name__ == '__main__':
     unittest.main()
