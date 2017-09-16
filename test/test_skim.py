@@ -13,11 +13,11 @@ import re
 import inspect
 
 INPUT_RECORD_SEPARATOR = '\n'
-DEFAULT_TIMEOUT = 20
+DEFAULT_TIMEOUT = 200
 
 SCRIPT_PATH = os.path.realpath(__file__)
 BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '../'))
-SK = f"SKIM_DEFAULT_OPTIONS= SKIM_DEFAULT_COMMAND= {BASE}/target/debug/sk"
+SK = f"SKIM_DEFAULT_OPTIONS= SKIM_DEFAULT_COMMAND= {BASE}/target/release/sk"
 
 def wait(func):
     since = datetime.now()
@@ -27,6 +27,17 @@ def wait(func):
             return
         time.sleep(0.0005)
     raise BaseException('Timeout on wait')
+
+class Shell(object):
+    """The shell configurations for tmux tests"""
+    def __init__(self):
+        super(Shell, self).__init__()
+    def unsets():
+        return 'unset SKIM_DEFAULT_COMMAND SKIM_DEFAULT_OPTIONS;'
+    def bash():
+        return 'PS1= PROMPT_COMMAND= bash --rcfile None'
+    def zsh():
+        return 'PS1= PROMPT_COMMAND= HISTSIZE=100 zsh -f'
 
 class Key(object):
     """Represent a key to send to tmux"""
@@ -93,9 +104,17 @@ class Tmux(object):
     TEMPNAME = '/tmp/skim-test.txt'
 
     """Object to manipulate tmux and get result"""
-    def __init__(self):
+    def __init__(self, shell = 'bash'):
         super(Tmux, self).__init__()
-        self.win = self._go('new-window -d -P -F "#I"')[0]
+
+        if shell == 'bash':
+            shell_cmd = Shell.unsets() + Shell.bash()
+        elif shell == 'zsh':
+            shell_cmd = Shell.unsets() + Shell.zsh()
+        else:
+            raise BaseException('unknown shell')
+
+        self.win = self._go(f"new-window -d -P -F '#I' '{shell_cmd}'")[0]
         self._go(f"set-window-option -t {self.win} pane-base-index 0")
         self.lines = int(subprocess.check_output('tput lines', shell=True).decode('utf8').strip())
 

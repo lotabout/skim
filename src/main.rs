@@ -228,9 +228,10 @@ fn real_main() -> i32 {
 
     //------------------------------------------------------------------------------
     // query
-    let default_command = match env::var("SKIM_DEFAULT_COMMAND") {
-        Ok(val) => val,
-        Err(_) => "find .".to_string(),
+    let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
+        Ok("") => "find .".to_owned(),
+        Ok(val) => val.to_owned(),
+        Err(_) => "find .".to_owned(),
     };
     let mut query = query::Query::builder()
         .base_cmd(&default_command)
