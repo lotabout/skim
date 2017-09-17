@@ -17,6 +17,7 @@ use unicode_width::UnicodeWidthChar;
 use std::fs::{File, OpenOptions};
 use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 use libc;
+use regex::Regex;
 
 pub static COLOR_NORMAL:        u16 = 0;
 pub static COLOR_PROMPT:        u16 = 1;
@@ -39,6 +40,8 @@ lazy_static! {
 
     // COLOR_MAP is used to store ((fg <<8 ) | bg) -> attr_t, used to handle ANSI code
     static ref COLOR_MAP: RwLock<HashMap<String, attr_t>> = RwLock::new(HashMap::new());
+
+    static ref RE_ANSI_COLOR: Regex = Regex::new(r"\x1b\[[0-9;]*m").unwrap();
 }
 
 // register the color as color pair
@@ -63,58 +66,131 @@ pub fn register_ansi(ansi: String) -> attr_t {
     }
 }
 
-//pub fn init(theme: Option<&ColorTheme>, is_black: bool, _use_mouse: bool) {
-    //return;
-    //// initialize ncurses
-    //let mut use_color = USE_COLOR.write().unwrap();
+// utility function to check if an attr_t contains background color or reset background
 
-    //if let Some(theme) = theme {
-        //let base_theme = if tigetnum("colors") >= 256 {
-            //DARK256
-        //} else {
-            //DEFAULT16
-        //};
+pub fn ansi_contains_reset(key: attr_t) -> bool {
+    let resource_map = RESOURCE_MAP.read().unwrap();
+    let ansi = resource_map.get(&key);
+    if ansi.is_none() {
+        return false;
+    }
 
-        //init_pairs(&base_theme, theme, is_black);
-        //*use_color = true;
-    //} else {
-        //*use_color = false;
+    let text = ansi.as_ref().unwrap();
+    text == &"\x1B[m" || text == &"\x1B[0m" || text.ends_with(";0m")
+}
+
+// return (contains-background?, reset-background?)
+//pub fn ansi_contains_background(key: attr_t) -> (bool, bool) {
+    //let resource_map = RESOURCE_MAP.read().unwrap();
+    //let ansi = resource_map.get(&key);
+    //if ansi.is_none() {
+        //return (false, false);
     //}
+
+    //let text = ansi.as_ref().unwrap();
+
+    //let mut contains_background = false;
+    //let mut reset_background = false;
+    //for mat in RE_ANSI_COLOR.find_iter(text) {
+        //let (start, end) = (mat.start(), mat.end());
+
+        //// ^[[1;30;40m -> 1;30;40
+        //let code = &text[start+2..end-1];
+        //if code.len() <= 0 {
+            //// ^[[m
+            //contains_background = false;
+            //reset_background = true;
+            //continue;
+        //}
+
+        //// 1;30;40 -> [1, 30, 40]
+        ////  z
+        //let mut nums = code.split(';').map(|x|x.parse::<u16>().unwrap_or(1000)).peekable();
+        //while let Some(&num) = nums.peek() {
+            //let _ = nums.next();
+            //match num {
+                //0 => {reset_background = true;}
+                //40 ... 47 => {
+                    //contains_background = true;
+                    //reset_background = false;
+                //}
+                //48 => {
+                    //contains_background = true;
+                    //reset_background = false;
+
+                    //// skip RGB
+                    //let _ = nums.next();
+                    //let _ = nums.next();
+                    //let _ = nums.next();
+                    //let _ = nums.next();
+                //}
+                //49 => {
+                    //contains_background = false;
+                    //reset_background = true;
+                //}
+                //_ => {}
+            //}
+        //}
+    //}
+    //(contains_background, reset_background)
 //}
 
-//fn init_pairs(base: &ColorTheme, theme: &ColorTheme, is_black: bool) {
-    //let mut fg = FG.write().unwrap();
-    //let mut bg = BG.write().unwrap();
-
-
-    //*fg = shadow(base.fg, theme.fg);
-    //*bg = shadow(base.bg, theme.bg);
-
-    //if is_black {
-        //*bg = COLOR_BLACK;
-    //} else if theme.use_default {
-        //*fg = COLOR_DEFAULT;
-        //*bg = COLOR_DEFAULT;
-        //use_default_colors();
+//// return (contains-foreground?, reset-foreground?)
+//pub fn ansi_contains_foreground(key: attr_t) -> (bool, bool) {
+    //let resource_map = RESOURCE_MAP.read().unwrap();
+    //let ansi = resource_map.get(&key);
+    //if ansi.is_none() {
+        //return (false, false);
     //}
 
-    //if !theme.use_default {
-        //assume_default_colors(shadow(base.fg, theme.fg) as i32, shadow(base.bg, theme.bg) as i32);
+    //let text = ansi.as_ref().unwrap();
+
+    //let mut contains_foreground = false;
+    //let mut reset_foreground = false;
+    //for mat in RE_ANSI_COLOR.find_iter(text) {
+        //let (start, end) = (mat.start(), mat.end());
+
+        //// ^[[1;30;40m -> 1;30;40
+        //let code = &text[start+2..end-1];
+        //if code.len() <= 0 {
+            //// ^[[m
+            //contains_foreground = false;
+            //reset_foreground = true;
+        //}
+
+        //// 1;30;40 -> [1, 30, 40]
+        ////  z
+        //let mut nums = code.split(';').map(|x|x.parse::<u16>().unwrap_or(1000)).peekable();
+        //while let Some(&num) = nums.peek() {
+            //let _ = nums.next();
+            //match num {
+                //0 => {reset_foreground = true;}
+                //30 ... 37 => {
+                    //contains_foreground = true;
+                    //reset_foreground = false;
+                //}
+                //38 => {
+                    //contains_foreground = true;
+                    //reset_foreground = false;
+
+                    //// skip RGB
+                    //let _ = nums.next();
+                    //let _ = nums.next();
+                    //let _ = nums.next();
+                    //let _ = nums.next();
+                //}
+                //39 => {
+                    //contains_foreground = false;
+                    //reset_foreground = true;
+                //}
+                //_ => {}
+            //}
+        //}
     //}
-
-    //start_color();
-
-    //init_pair(COLOR_PROMPT,        shadow(base.prompt,        theme.prompt),        *bg);
-    //init_pair(COLOR_MATCHED,       shadow(base.matched,       theme.matched),       shadow(base.matched_bg, theme.matched_bg));
-    //init_pair(COLOR_CURRENT,       shadow(base.current,       theme.current),       shadow(base.current_bg, theme.current_bg));
-    //init_pair(COLOR_CURRENT_MATCH, shadow(base.current_match, theme.current_match), shadow(base.current_match_bg, theme.current_match_bg));
-    //init_pair(COLOR_SPINNER,       shadow(base.spinner,       theme.spinner),       *bg);
-    //init_pair(COLOR_INFO,          shadow(base.info,          theme.info),          *bg);
-    //init_pair(COLOR_CURSOR,        shadow(base.cursor,        theme.cursor),        shadow(base.current_bg, theme.current_bg));
-    //init_pair(COLOR_SELECTED,      shadow(base.selected,      theme.selected),      shadow(base.current_bg, theme.current_bg));
-    //init_pair(COLOR_HEADER,        shadow(base.header,        theme.header),        shadow(base.bg, theme.bg));
+    //(contains_foreground, reset_foreground)
 //}
 
+//==============================================================================
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 pub enum Margin {
@@ -256,6 +332,7 @@ impl Window {
             return;
         }
 
+        self.attron(COLOR_NORMAL);
         self.stdout_buffer.push_str(&" ".repeat((max_x - x) as usize));
         self.mv(y, x);
     }
@@ -364,10 +441,19 @@ impl Window {
 
     fn attron(&mut self, key: attr_t) {
         let resource_map = RESOURCE_MAP.read().unwrap();
-        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
+        resource_map.get(&key).map(|s|
+                                   {
+                                   debug!("curses:window:attron: {:?}", s);
+                                   self.stdout_buffer.push_str(s)
+                                   }
+                                   );
     }
 
-    fn attroff(&mut self, _: attr_t) {
+    fn attroff(&mut self, key: attr_t) {
+        if key == COLOR_NORMAL {
+            return;
+        }
+
         self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
     }
 
@@ -385,6 +471,12 @@ impl Window {
     }
     pub fn show_cursor(&mut self) {
         self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
+    }
+
+    pub fn move_cursor_right(&mut self, offset: u16) {
+        self.stdout_buffer.push_str(format!("{}", termion::cursor::Right(offset)).as_str());
+        let (_, max_x) = self.get_maxyx();
+        self.current_x = min(self.current_x + offset, max_x);
     }
 
     pub fn close(&mut self) {

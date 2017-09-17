@@ -316,7 +316,6 @@ impl Model {
 
             let item = self.items.get(i).unwrap().clone();
             self.draw_item(curses, &item, l == self.line_cursor);
-            curses.clrtoeol();
         }
 
         // clear rest of lines
@@ -397,97 +396,96 @@ impl Model {
             curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
         }
 
+        let (y, x) = curses.getyx();
+
         debug!("model:draw_item: {:?}", matched_item);
-        match matched_item.matched_range {
+        let (match_start, match_end) = match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
-                let (match_start, match_end) = if !matched_indics.is_empty() {
+                if !matched_indics.is_empty() {
                     (matched_indics[0], matched_indics[matched_indics.len()-1] + 1)
                 } else {
                     (0, 0)
-                };
+                }
+            }
+            Some(MatchedRange::Range(match_start, match_end)) => (match_start, match_end),
+            None => (0, 0),
+        };
 
-                let item = &matched_item.item;
-                let text: Vec<_> = item.get_text().chars().collect();
-                let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
+        let item = &matched_item.item;
+        let text: Vec<_> = item.get_text().chars().collect();
+        let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
 
-                let mut printer = LinePrinter::builder()
-                    .tabstop(self.tabstop)
-                    .container_width(self.width as usize)
-                    .shift(shift)
-                    .text_width(full_width)
-                    .hscroll_offset(self.hscroll_offset)
-                    .build();
+        let mut printer = LinePrinter::builder()
+            .tabstop(self.tabstop)
+            .container_width(self.width as usize)
+            .shift(shift)
+            .text_width(full_width)
+            .hscroll_offset(self.hscroll_offset)
+            .build();
 
+        // print out the original content
+        curses.mv(y, x);
+        printer.reset();
+        if is_current {
+            curses.attr_on(COLOR_CURRENT);
+        }
+
+        let mut ansi_states = item.get_ansi_states().iter().peekable();
+        for (ch_idx, &ch) in text.iter().enumerate() {
+            // print ansi color codes.
+            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
+                if ch_idx == ansi_idx {
+                    if is_current && ansi_contains_reset(attr) {
+                        curses.attr_on(COLOR_CURRENT);
+                    } else {
+                        curses.attr_on(attr);
+                    }
+                    let _ = ansi_states.next();
+                } else if ch_idx > ansi_idx {
+                    let _ = ansi_states.next();
+                } else {
+                    break;
+                }
+            }
+            printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+        }
+        curses.attr_on(0);
+        curses.clrtoeol();
+
+        // print the highlighted content
+        curses.mv(y, x);
+        printer.reset();
+        match matched_item.matched_range {
+            Some(MatchedRange::Chars(ref matched_indics)) => {
                 let mut matched_indics_iter = matched_indics.iter().peekable();
-                let mut ansi_states = item.get_ansi_states().iter().peekable();
 
                 for (ch_idx, &ch) in text.iter().enumerate() {
                     match matched_indics_iter.peek() {
                         Some(&&match_idx) if ch_idx == match_idx => {
-                            printer.print_char(curses, ch, COLOR_MATCHED, is_current);
+                            printer.print_char(curses, ch, COLOR_MATCHED, is_current, false);
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
-                            // print ansi color codes.
-                            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                                if ch_idx == ansi_idx {
-                                    curses.attr_on(attr);
-                                    let _ = ansi_states.next();
-                                } else if ch_idx > ansi_idx {
-                                    let _ = ansi_states.next();
-                                } else {
-                                    break;
-                                }
-                            }
-                            printer.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
+                            printer.print_char(curses, ch, COLOR_NORMAL, false, true);
                         }
                     }
                 }
                 curses.attr_on(0);
             }
 
-            Some(MatchedRange::Range(match_start, match_end)) => {
-                // pass
-                let item = &matched_item.item;
-                let text: Vec<_> = item.get_text().chars().collect();
-                let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
-
-                let mut printer = LinePrinter::builder()
-                    .tabstop(self.tabstop)
-                    .container_width(self.width as usize)
-                    .shift(shift)
-                    .text_width(full_width)
-                    .hscroll_offset(self.hscroll_offset)
-                    .build();
-
-
-                let mut ansi_states = item.get_ansi_states().iter().peekable();
-
-                for (ch_idx, &ch) in text.iter().enumerate() {
-                    if ch_idx >= match_start && ch_idx < match_end {
-                        printer.print_char(curses, ch, COLOR_MATCHED, is_current);
-                    } else {
-                        // print ansi color codes.
-                        while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                            if ch_idx == ansi_idx {
-                                curses.attr_on(attr);
-                                let _ = ansi_states.next();
-                            } else if ch_idx > ansi_idx {
-                                let _ = ansi_states.next();
-                            } else {
-                                break;
-                            }
-                        }
-                        printer.print_char(curses, ch, if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, is_current)
-                    }
+            Some(MatchedRange::Range(start, end)) => {
+                for (idx, &ch) in text.iter().enumerate() {
+                    printer.print_char(curses, ch, COLOR_MATCHED, is_current, !(idx>=start && idx<end));
                 }
                 curses.attr_on(0);
             }
 
-            _ => {
-                curses.printw(matched_item.item.get_text());
-            }
+            _ => {}
         }
+    }
+
+    fn set_color_for_current_item(&self, attr: attr_t) {
+        
     }
 
     fn draw_preview(&mut self, curses: &mut Window) {
@@ -680,12 +678,22 @@ fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Er
     Ok(output)
 }
 
+// use to print a single line, properly handle the tabsteop and shift of a string
+// e.g. a long line will be printed as `..some content` or `some content..` or `..some content..`
+// depends on the container's width and the size of the content.
+//
+// let's say we have a very long line with lots of useless information
+//                                |.. with lots of use..|             // only to show this
+//                                |<- container width ->|
+//             |<-    shift    -> |
+// |< hscroll >|
+
 struct LinePrinter {
-    tabstop: usize,
     start: usize,
     end: usize,
     current: i32,
 
+    tabstop: usize,
     shift: usize,
     text_width: usize,
     container_width: usize,
@@ -695,11 +703,11 @@ struct LinePrinter {
 impl LinePrinter {
     pub fn builder() -> Self {
         LinePrinter {
-            tabstop: 8,
             start: 0,
             end: 0,
             current: -1,
 
+            tabstop: 8,
             shift: 0,
             text_width: 0,
             container_width: 0,
@@ -733,13 +741,29 @@ impl LinePrinter {
     }
 
     pub fn build(mut self) -> Self {
-        self.start = self.shift + self.hscroll_offset;
-        self.end = self.start + self.container_width;
+        self.reset();
         self
     }
 
+    pub fn reset(&mut self) {
+        self.current = 0;
+        self.start = self.shift + self.hscroll_offset;
+        self.end = self.start + self.container_width;
+    }
 
-    fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
+    fn caddch(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
+        let w = ch.width_cjk().unwrap_or(2);
+
+        if skip {
+            curses.move_cursor_right(w as u16);
+        } else {
+            curses.caddch(ch, color, is_bold);
+        }
+    }
+
+    fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
+        // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
+
         // the hidden chracter
         let w = ch.width_cjk().unwrap_or(2);
 
@@ -752,23 +776,23 @@ impl LinePrinter {
         } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
             // print left ".."
             for _ in 0..min(w, current - self.start + 1) {
-                curses.caddch('.', color, is_bold);
+                self.caddch(curses, '.', color, is_bold, skip);
             }
         } else if current >= self.end {
             // overflow the line
         } else if self.end - current <= 2 && (self.text_width >= self.end) {
             // print right ".."
             for _ in 0..min(w, self.end - current) {
-                curses.caddch('.', color, is_bold);
+                self.caddch(curses, '.', color, is_bold, skip);
             }
         } else {
-            curses.caddch(ch, color, is_bold);
+            self.caddch(curses, ch, color, is_bold, skip);
         }
     }
 
-    pub fn print_char(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
+    pub fn print_char(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
         if ch != '\t' {
-            self.print_char_raw(curses, ch, color, is_bold);
+            self.print_char_raw(curses, ch, color, is_bold, skip);
         } else {
             // handle tabstop
             let rest = if self.current < 0 {
@@ -777,7 +801,7 @@ impl LinePrinter {
                 self.tabstop - (self.current as usize) % self.tabstop
             };
             for _ in 0..rest {
-                self.print_char_raw(curses, ' ', color, is_bold);
+                self.print_char_raw(curses, ' ', color, is_bold, skip);
             }
         }
     }
@@ -801,6 +825,11 @@ fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
     ret
 }
 
+// "smartly" calculate the "start" position of the string in order to show the matched contents
+// for example, if the match appear in the end of a long string, we need to show the right part.
+// `xxxxxxxxxxxxxxxxxxxxxxxxxxMMxxxxxMxxxxx`
+//                shift ->|               |
+//
 // return (left_shift, full_print_width)
 fn reshape_string(text: &[char],
                   container_width: usize,
