@@ -278,10 +278,10 @@ fn reader(cmd: &str,
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum FieldRange {
-    Single(usize),
-    LeftInf(usize),
-    RightInf(usize),
-    Both(usize, usize),
+    Single(i64),
+    LeftInf(i64),
+    RightInf(i64),
+    Both(i64, i64),
 }
 
 // range: "start..end", end is excluded.
@@ -298,8 +298,8 @@ fn parse_range(range: &str) -> Option<FieldRange> {
         return None;
     }
 
-    let start = range_string.get(0).and_then(|x| x.parse::<usize>().ok());
-    let end = range_string.get(1).and_then(|x| x.parse::<usize>().ok());
+    let start = range_string.get(0).and_then(|x| x.parse::<i64>().ok());
+    let end = range_string.get(1).and_then(|x| x.parse::<i64>().ok());
 
     if range_string.len() == 1 {
         return if start.is_none() {None} else {Some(Single(start.unwrap()))};

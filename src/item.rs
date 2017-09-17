@@ -202,13 +202,14 @@ fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -
 }
 
 fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)> {
+    let length = length as i64;
     match *range {
         FieldRange::Single(index) => {
             let index = if index >= 0 {index} else {length + index};
             if index < 0 || index >= length {
                 None
             } else {
-                Some((index, (index + 1)))
+                Some((index as usize, (index + 1) as usize))
             }
         }
         FieldRange::LeftInf(right) => {
@@ -216,7 +217,7 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
             if right <= 0 {
                 None
             } else {
-                Some((0, if right > length {length} else {right}))
+                Some((0, if right > length {length as usize} else {right as usize}))
             }
         }
         FieldRange::RightInf(left) => {
@@ -224,7 +225,7 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
             if left >= length {
                 None
             } else {
-                Some((if left < 0 {0} else {left}, length))
+                Some((if left < 0 {0} else {left} as usize, length as usize))
             }
         }
         FieldRange::Both(left, right) => {
@@ -233,8 +234,8 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
             if left >= right || left >= length || right < 0 {
                 None
             } else {
-                Some((if left < 0 {0} else {left},
-                      if right > length {length} else {right}))
+                Some((if left < 0 {0} else {left as usize},
+                      if right > length {length as usize} else {right as usize}))
             }
         }
     }
