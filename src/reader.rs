@@ -17,6 +17,7 @@ use std::fs::File;
 use getopts;
 use regex::Regex;
 use sender::CachedSender;
+use field::{FieldRange, parse_range};
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -46,7 +47,7 @@ impl ReaderOption {
 
         if let Some(delimiter) = options.opt_str("d") {
             self.delimiter = Regex::new(&(".*?".to_string() + &delimiter))
-                .unwrap_or(Regex::new(r".*?\t").unwrap());
+                .unwrap_or(Regex::new(r".*?[\t ]").unwrap());
         }
 
         if let Some(transform_fields) = options.opt_str("with-nth") {
@@ -276,68 +277,3 @@ fn reader(cmd: &str,
     let _ = tx_control.send(true);
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum FieldRange {
-    Single(i64),
-    LeftInf(i64),
-    RightInf(i64),
-    Both(i64, i64),
-}
-
-// range: "start..end", end is excluded.
-// "0", "0..", "..10", "1..10", etc.
-fn parse_range(range: &str) -> Option<FieldRange> {
-    use self::FieldRange::*;
-
-    if range == ".." {
-        return Some(RightInf(0));
-    }
-
-    let range_string: Vec<&str> = range.split("..").collect();
-    if range_string.is_empty() || range_string.len() > 2 {
-        return None;
-    }
-
-    let start = range_string.get(0).and_then(|x| x.parse::<i64>().ok());
-    let end = range_string.get(1).and_then(|x| x.parse::<i64>().ok());
-
-    if range_string.len() == 1 {
-        return if start.is_none() {None} else {Some(Single(start.unwrap()))};
-    }
-
-    if start.is_none() && end.is_none() {
-        None
-    } else if end.is_none() {
-        // 1..
-        Some(RightInf(start.unwrap()))
-    } else if start.is_none() {
-        // ..1
-        Some(LeftInf(end.unwrap()))
-    } else {
-        Some(Both(start.unwrap(), end.unwrap()))
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::FieldRange::*;
-    #[test]
-    fn test_parse_range() {
-        assert_eq!(super::parse_range("1"), Some(Single(1)));
-        assert_eq!(super::parse_range("-1"), Some(Single(-1)));
-
-        assert_eq!(super::parse_range("1.."), Some(RightInf(1)));
-        assert_eq!(super::parse_range("-1.."), Some(RightInf(-1)));
-
-        assert_eq!(super::parse_range("..1"), Some(LeftInf(1)));
-        assert_eq!(super::parse_range("..-1"), Some(LeftInf(-1)));
-
-        assert_eq!(super::parse_range("1..3"), Some(Both(1, 3)));
-        assert_eq!(super::parse_range("-1..-3"), Some(Both(-1, -3)));
-
-        assert_eq!(super::parse_range(".."), Some(RightInf(0)));
-        assert_eq!(super::parse_range("a.."), None);
-        assert_eq!(super::parse_range("..b"), None);
-        assert_eq!(super::parse_range("a..b"), None);
-    }
-}

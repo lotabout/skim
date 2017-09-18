@@ -24,6 +24,7 @@ mod curses;
 mod query;
 mod ansi;
 mod sender;
+mod field;
 
 use std::thread;
 use std::time::Duration;
