@@ -441,12 +441,7 @@ impl Window {
 
     fn attron(&mut self, key: attr_t) {
         let resource_map = RESOURCE_MAP.read().unwrap();
-        resource_map.get(&key).map(|s|
-                                   {
-                                   debug!("curses:window:attron: {:?}", s);
-                                   self.stdout_buffer.push_str(s)
-                                   }
-                                   );
+        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
     }
 
     fn attroff(&mut self, key: attr_t) {
@@ -507,7 +502,7 @@ pub struct Curses {
     bottom: u16,
     left: u16,
     right: u16,
-    start_y: u16,
+    start_y: i32, // +3 means 3 lines from top, -3 means 3 lines from bottom,
     height: Margin,
     min_height: u16,
     margin_top: Margin,
@@ -581,10 +576,14 @@ impl Curses {
         };
 
         // keep the start position on the screen
-        let start_y = match height {
-            Margin::Percent(100) => 0,
-            Margin::Percent(p) => min(y, max_y - max(p*max_y/100, min_height)),
-            Margin::Fixed(rows) => min(y, max_y - rows),
+        let start_y = if height == Margin::Percent(100) {
+            0
+        } else {
+            let height = match height {
+                Margin::Percent(p) => max(p*max_y/100, min_height),
+                Margin::Fixed(rows) => rows,
+            };
+            if y + height >= max_y {- (height as i32)} else {y as i32}
         };
 
         // parse options for margin
@@ -743,11 +742,16 @@ impl Curses {
     }
 
     pub fn resize(&mut self) {
-        let (_, max_x) = Curses::terminal_size();
+        let (max_y, max_x) = Curses::terminal_size();
         let height = self.height();
 
-        let start = if self.height == Margin::Percent(100) { 0 } else { self.start_y };
-        //debug!("curses:resize: start = {}", start);
+        let start = if self.start_y >= 0 {
+            self.start_y
+        } else {
+            max_y as i32 + self.start_y
+        };
+
+        let start = min(max_y-height, max(0, start as u16));
 
         self.top = start + match self.margin_top {
             Margin::Fixed(num) => num,
