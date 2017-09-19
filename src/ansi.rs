@@ -62,8 +62,13 @@ impl ANSIParser {
     }
 
     fn interpret_code(&self, code: &str) -> Option<attr_t> {
-        let key = register_ansi(code.to_owned());
-        Some(key)
+        if code == "\x1B[K" || code == "\x1B[2J" {
+            // clear screen & clear line
+            None
+        } else {
+            let key = register_ansi(code.to_owned());
+            Some(key)
+        }
 
         //let mut state256 = 0;
         //let mut attr = 0;
