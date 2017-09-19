@@ -540,8 +540,11 @@ impl Curses {
             10 // default value
         };
 
-        let height = if let Some(height_option) = options.opt_str("height") {
-            Curses::parse_margin_string(&height_option)
+        let no_height = options.opt_present("no-height");
+
+        let height_option = options.opt_str("height");
+        let height = if !no_height && height_option.is_some() {
+            Curses::parse_margin_string(&height_option.unwrap())
         } else {
             Margin::Percent(100)
         };

@@ -72,6 +72,7 @@ Usage: sk [options]
   Layout
     --reverse            Reverse orientation
     --height=HEIGHT      Height of skim's window (--height 40%)
+    --no-height          Disable height feature
     --min-height=HEIGHT  Minimum height when --height is given by percent
                          (default: 10)
     --margin=MARGIN      Screen Margin (TRBL / TB,RL / T,RL,B / T,R,B,L)
@@ -155,6 +156,7 @@ fn real_main() -> i32 {
     opts.optopt("", "margin", "margin around the finder", "");
     opts.optopt("", "min-height", "minum height when --height is given by percent", "");
     opts.optopt("", "height", "height", "");
+    opts.optflag("", "no-height", "Disable height feature");
     opts.optopt("", "preview", "command to preview current highlighted line", "");
     opts.optopt("", "preview-window", "layout of preview window", "");
     opts.optflag("", "reverse", "reverse orientation");
