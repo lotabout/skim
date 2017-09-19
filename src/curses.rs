@@ -11,7 +11,7 @@ use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion;
 use std::cmp::{min, max};
-use termion::color;
+use termion::{color, style};
 use std::fmt;
 use unicode_width::UnicodeWidthChar;
 use std::fs::{File, OpenOptions};
@@ -453,7 +453,7 @@ impl Window {
     }
 
     fn attrclear(&mut self) {
-        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
+        self.stdout_buffer.push_str(format!("{}{}{}", color::Fg(color::Reset), color::Bg(color::Reset), style::Reset).as_str());
     }
 
     pub fn write_to_term(&mut self, term: &mut Write) {

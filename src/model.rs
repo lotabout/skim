@@ -17,6 +17,7 @@ use std::default::Default;
 use regex::{Regex, Captures};
 use field::get_string_by_range;
 use std::borrow::Cow;
+use std::convert::From;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -305,7 +306,6 @@ impl Model {
     }
 
     fn draw_items(&mut self, curses: &mut Window) {
-        //debug!("model:draw_items");
         // cursor should be placed on query, so store cursor before printing
         let (old_y, old_x) = curses.getyx();
 
@@ -330,6 +330,7 @@ impl Model {
 
             let item = self.items.get(i).unwrap().clone();
             self.draw_item(curses, &item, l == self.line_cursor);
+            curses.attr_on(0);
         }
 
         // clear rest of lines
@@ -504,6 +505,8 @@ impl Model {
             return;
         }
 
+        curses.attr_on(0);
+
         // cursor should be placed on query, so store cursor before printing
         let (lines, cols) = curses.get_maxyx();
 
@@ -518,8 +521,13 @@ impl Model {
 
         debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
         let cmd = self.inject_preview_command(highlighted_content);
+        debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
-        let output = get_command_output(&cmd, lines, cols).unwrap_or("command execute failed".to_string());
+        let output = match get_command_output(&cmd, lines, cols) {
+            Ok(output) => output,
+            Err(e) => format!("{}\n{}", cmd, e.description()),
+        };
+        debug!("model:draw_preview: output: '{:?}'", output);
 
         let mut ansi_parser: ANSIParser = Default::default();
         let (strip_string, ansi_states) = ansi_parser.parse_ansi(&output);
@@ -689,18 +697,18 @@ impl Model {
 
 
 fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Error>> {
-    let mut command = Command::new("sh")
+    let output= Command::new("sh")
                        .env("LINES", lines.to_string())
                        .env("COLUMNS", cols.to_string())
                        .arg("-c")
                        .arg(cmd)
-                       .stdout(Stdio::piped())
-                       .stderr(Stdio::null())
-                       .spawn()?;
-    let mut stdout = command.stdout.take().ok_or("command output: unwrap failed".to_owned())?;
-    let mut output = String::new();
-    let _ = stdout.read_to_string(&mut output);
-    Ok(output)
+                       .output()?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let error: Box<Error> = From::from(String::from_utf8_lossy(&output.stderr).to_string());
+        Err(error)
+    }
 }
 
 // use to print a single line, properly handle the tabsteop and shift of a string
