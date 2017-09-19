@@ -81,6 +81,7 @@ Usage: sk [options]
 
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
+                         We can specify the fields. e.g. ({1}, {..3}, {0..})
     --preview-window=OPT Preview window layout (default: right:50%)
                          [up|down|left|right][:SIZE[%]][:hidden]
 

@@ -14,11 +14,18 @@ use std::process::{Command, Stdio};
 use std::error::Error;
 use ansi::ANSIParser;
 use std::default::Default;
+use regex::{Regex, Captures};
+use field::get_string_by_range;
+use std::borrow::Cow;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+
+lazy_static! {
+    static ref RE_FILEDS: Regex = Regex::new(r"(\{[0-9.,q]*?})").unwrap();
+}
 
 pub struct Model {
     rx_cmd: Receiver<(Event, EventArg)>,
@@ -44,6 +51,7 @@ pub struct Model {
 
     // preview related
     preview_cmd: Option<String>,
+    delimiter: Regex,
 }
 
 impl Model {
@@ -71,6 +79,7 @@ impl Model {
             matcher_mode: "".to_string(),
 
             preview_cmd: None,
+            delimiter: Regex::new(r"[ \t\n]+").unwrap(),
         }
     }
 
@@ -89,6 +98,11 @@ impl Model {
 
         if let Some(preview_cmd) = options.opt_str("preview") {
             self.preview_cmd = Some(preview_cmd.clone());
+        }
+
+        if let Some(delimiter) = options.opt_str("d") {
+            self.delimiter = Regex::new(&delimiter)
+                .unwrap_or(Regex::new(r"[ \t\n]+").unwrap());
         }
     }
 
@@ -484,10 +498,6 @@ impl Model {
         }
     }
 
-    fn set_color_for_current_item(&self, attr: attr_t) {
-        
-    }
-
     fn draw_preview(&mut self, curses: &mut Window) {
         curses.draw_border();
         if self.preview_cmd.is_none() {
@@ -507,8 +517,8 @@ impl Model {
         let highlighted_content = item.item.get_text();
 
         debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
+        let cmd = self.inject_preview_command(highlighted_content);
 
-        let cmd = self.preview_cmd.as_ref().unwrap().replace(&"{}", highlighted_content);
         let output = get_command_output(&cmd, lines, cols).unwrap_or("command execute failed".to_string());
 
         let mut ansi_parser: ANSIParser = Default::default();
@@ -539,6 +549,21 @@ impl Model {
 
         curses.clrtoend();
     }
+
+    fn inject_preview_command<'a>(&'a self, text: &str) -> Cow<'a, str> {
+        let cmd = self.preview_cmd.as_ref().unwrap();
+        debug!("replace: {:?}, text: {:?}", cmd, text);
+        RE_FILEDS.replace_all(cmd, |caps: &Captures| {
+            assert!(caps[1].len() >= 2);
+            let range = &caps[1][1..caps[1].len()-1];
+            if range == "" {
+                format!("'{}'", text)
+            } else {
+                format!("'{}'", get_string_by_range(&self.delimiter, &text, range).unwrap_or(""))
+            }
+        })
+    }
+
 
     fn print_char(&self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
         if ch != '\t' {
