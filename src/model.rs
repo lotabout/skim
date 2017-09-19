@@ -52,6 +52,7 @@ pub struct Model {
 
     // preview related
     preview_cmd: Option<String>,
+    preview_hidden: bool,
     delimiter: Regex,
 }
 
@@ -80,6 +81,7 @@ impl Model {
             matcher_mode: "".to_string(),
 
             preview_cmd: None,
+            preview_hidden: true,
             delimiter: Regex::new(r"[ \t\n]+").unwrap(),
         }
     }
@@ -99,6 +101,10 @@ impl Model {
 
         if let Some(preview_cmd) = options.value_of("preview") {
             self.preview_cmd = Some(preview_cmd.to_string());
+        }
+
+        if let Some(preview_window) = options.value_of("preview-window") {
+            self.preview_hidden = preview_window.find("hidden").is_some();
         }
 
         if let Some(delimiter) = options.value_of("delimiter") {
@@ -500,6 +506,10 @@ impl Model {
     }
 
     fn draw_preview(&mut self, curses: &mut Window) {
+        if self.preview_hidden {
+            return;
+        }
+
         curses.draw_border();
         if self.preview_cmd.is_none() {
             return;
@@ -664,6 +674,7 @@ impl Model {
     }
 
     pub fn act_toggle_preview(&mut self, curses: &mut Curses) {
+        self.preview_hidden = !self.preview_hidden;
         curses.toggle_preview_window();
     }
 
