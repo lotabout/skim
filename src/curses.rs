@@ -312,7 +312,14 @@ impl Window {
     }
 
     pub fn get_maxyx(&self) -> (u16, u16) {
+        assert!(self.bottom >= self.top);
+        assert!(self.right >= self.left);
         let (max_y, max_x) = (self.bottom-self.top, self.right-self.left);
+
+        // window is hidden
+        if max_y == 0 || max_x == 0 {
+            return (0, 0);
+        }
 
         match self.border {
             Some(Direction::Up) | Some(Direction::Down) => (max_y-1, max_x),
@@ -338,8 +345,8 @@ impl Window {
     }
 
     pub fn clrtoend(&mut self) {
-        let (y, x) = self.getyx();
-        let (max_y, max_x) = self.get_maxyx();
+        let (y, _) = self.getyx();
+        let (max_y, _) = self.get_maxyx();
 
         //debug!("curses:window:clrtoend: y/x: {}/{}, max_y/max_x: {}/{}", y, x, max_y, max_x);
 
