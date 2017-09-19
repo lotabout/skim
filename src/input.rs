@@ -33,9 +33,6 @@ impl Input {
     pub fn run(&mut self) {
         loop {
             match self.keyboard.get_key() {
-                Some(Key::Char(ch)) => {
-                    let _ = self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
-                }
                 Some(Key::Pos(row, col)) => {
                     let _ = self.tx_input.send((Event::EvReportCursorPos, Box::new((row, col))));
                 }
@@ -49,7 +46,11 @@ impl Input {
                             let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
                         }
                         None => {
-                            let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
+                            if let Key::Char(ch) = key {
+                                let _ = self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
+                            } else {
+                                let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
+                            }
                         }
                     }
                 }
@@ -477,6 +478,7 @@ pub fn parse_key(key: &str) -> Option<Key> {
         "alt-x" => Some(Key::AltX),
         "alt-y" => Some(Key::AltY),
         "alt-z" => Some(Key::AltZ),
+        ch if ch.chars().count() == 1 => Some(Key::Char(ch.chars().next().unwrap())),
         _ => None,
     }
 }
