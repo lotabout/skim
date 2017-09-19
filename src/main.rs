@@ -1,7 +1,6 @@
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 extern crate libc;
-extern crate getopts;
 extern crate regex;
 extern crate shlex;
 extern crate utf8parse;
@@ -10,6 +9,7 @@ extern crate termion;
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate time;
+extern crate clap;
 
 #[macro_use] extern crate lazy_static;
 mod item;
@@ -28,7 +28,6 @@ mod field;
 
 use std::thread;
 use std::time::Duration;
-use getopts::Options;
 use std::env;
 use std::sync::mpsc::{sync_channel, channel, Sender, Receiver};
 use event::Event::*;
@@ -39,8 +38,9 @@ use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
 use curses::Curses;
 use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
+use clap::{Arg, App};
 
-const REFRESH_DURATION: u64 = 200;
+const VERSION: &'static str = "0.2.1-beta.2";
 
 const USAGE : &'static str = "
 Usage: sk [options]
@@ -97,6 +97,8 @@ Usage: sk [options]
                          (e.g. '-c \"$HOME/bin/ag\"')
 ";
 
+const REFRESH_DURATION: u64 = 200;
+
 fn main() {
     use log::{LogRecord, LogLevelFilter};
     use env_logger::LogBuilder;
@@ -124,69 +126,59 @@ fn main() {
     std::process::exit(exit_code);
 }
 
-fn print_usage() {
-    print!("{}", USAGE);
-
-}
-
 fn real_main() -> i32 {
-
-    //------------------------------------------------------------------------------
-    // parse options
-    let mut opts = Options::new();
-    opts.optopt("b", "bind", "comma seperated keybindings, such as 'ctrl-j:accept,ctrl-k:kill-line'", "KEY:ACTION");
-    opts.optflag("h", "help", "print this help menu");
-    opts.optflag("m", "multi", "Enable Multiple Selection");
-    opts.optflag("", "no-multi", "Disable Multiple Selection");
-    opts.optopt("p", "prompt", "prompt string", "'> '");
-    opts.optopt("", "cmd-prompt", "prompt string", "'> '");
-    opts.optopt("e", "expect", "comma seperated keys that can be used to complete skim", "KEYS");
-    opts.optopt("t", "tiebreak", "comma seperated criteria", "[score,index,begin,end,-score,...]");
-    opts.optflag("", "ansi", "parse ANSI color codes for input strings");
-    opts.optflag("", "exact", "start skim in exact mode");
-    opts.optopt("c", "cmd", "command to invoke dynamically", "ag");
-    opts.optflag("i", "interactive", "Use skim as an interactive interface");
-    opts.optopt("q", "query", "specify the initial query", "\"\"");
-    opts.optflag("", "regex", "use regex instead of fuzzy match");
-    opts.optopt("d", "delimiter", "specify the delimiter(in REGEX) for fields", "\\t");
-    opts.optopt("n", "nth", "specify the fields to be matched", "1,2..5");
-    opts.optopt("", "with-nth", "specify the fields to be transformed", "1,2..5");
-    opts.optopt("I", "", "replace `replstr` with the selected item", "replstr");
-    opts.optopt("", "color", "change color theme", "[BASE][,COLOR:ANSI]");
-    opts.optopt("", "margin", "margin around the finder", "");
-    opts.optopt("", "min-height", "minum height when --height is given by percent", "");
-    opts.optopt("", "height", "height", "");
-    opts.optflag("", "no-height", "Disable height feature");
-    opts.optopt("", "preview", "command to preview current highlighted line", "");
-    opts.optopt("", "preview-window", "layout of preview window", "");
-    opts.optflag("", "reverse", "reverse orientation");
-    opts.optflag("", "version", "print out the current version of skim");
-
     let mut args = Vec::new();
 
+    args.push(env::args().next().unwrap());
     args.extend(env::var("SKIM_DEFAULT_OPTIONS")
                 .ok()
                 .and_then(|val| shlex::split(&val))
                 .unwrap_or(Vec::new()));
-
     for arg in env::args().skip(1) {
         args.push(arg);
     }
 
-    let options = match opts.parse(args) {
-        Ok(m) => { m }
-        Err(f) => { panic!(f.to_string()) }
-    };
 
-    // print help message
-    if options.opt_present("h") {
-        print_usage();
+    //------------------------------------------------------------------------------
+    // parse options
+    let options = App::new("sk")
+        .author("Jinzhou Zhang<lotabout@gmail.com")
+        .arg(Arg::with_name("help").long("help").short("h"))
+        .arg(Arg::with_name("version").long("version").short("v"))
+        .arg(Arg::with_name("bind").long("bind").short("b").multiple(true).takes_value(true))
+        .arg(Arg::with_name("multi").long("multi").short("m"))
+        .arg(Arg::with_name("no-multi").long("no-multi"))
+        .arg(Arg::with_name("prompt").long("prompt").short("p").takes_value(true).default_value("> "))
+        .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c>"))
+        .arg(Arg::with_name("expect").long("expect").short("e").multiple(true) .takes_value(true))
+        .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").takes_value(true))
+        .arg(Arg::with_name("ansi").long("ansi"))
+        .arg(Arg::with_name("exact").long("exact"))
+        .arg(Arg::with_name("cmd").long("cmd").short("cmd").takes_value(true))
+        .arg(Arg::with_name("interactive").long("interactive").short("i"))
+        .arg(Arg::with_name("query").long("query").short("q").takes_value(true))
+        .arg(Arg::with_name("regex").long("regex"))
+        .arg(Arg::with_name("delimiter").long("delimiter").short("d").takes_value(true))
+        .arg(Arg::with_name("nth").long("nth").short("n").takes_value(true))
+        .arg(Arg::with_name("with-nth").long("with-nth").takes_value(true))
+        .arg(Arg::with_name("replstr").short("I").takes_value(true))
+        .arg(Arg::with_name("color").long("color").takes_value(true))
+        .arg(Arg::with_name("margin").long("margin").takes_value(true).default_value("0,0,0,0"))
+        .arg(Arg::with_name("min-height").long("min-height").takes_value(true).default_value("10"))
+        .arg(Arg::with_name("height").long("height").takes_value(true).default_value("100%"))
+        .arg(Arg::with_name("no-height").long("no-height"))
+        .arg(Arg::with_name("preview").long("preview").takes_value(true))
+        .arg(Arg::with_name("preview-window").long("preview-window").takes_value(true).default_value("right:50%"))
+        .arg(Arg::with_name("reverse").long("reverse"))
+        .get_matches_from(args);
+
+    if options.is_present("help") {
+        print!("{}", USAGE);
         return 0;
     }
 
-    // print version
-    if options.opt_present("version") {
-        println!("0.2.1-beta.2");
+    if options.is_present("version") {
+        println!("{}", VERSION);
         return 0;
     }
 
@@ -258,8 +250,10 @@ fn real_main() -> i32 {
     // input
     let tx_input_clone = tx_input.clone();
     let mut input = input::Input::new(tx_input_clone);
-    input.parse_keymap(options.opt_str("b"));
-    input.parse_expect_keys(options.opt_str("e"));
+
+    let keymaps = options.values_of("bind").map(|x| x.collect::<Vec<_>>()).unwrap_or(Vec::new());
+    input.parse_keymaps(&keymaps);
+    input.parse_expect_keys(options.value_of("expect"));
     thread::spawn(move || {
         input.run();
     });

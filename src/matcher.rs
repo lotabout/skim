@@ -4,11 +4,11 @@ use event::{Event, EventArg};
 use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use std::thread;
 
-use getopts;
 use score;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use clap::ArgMatches;
 
 lazy_static! {
     static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End]);
@@ -45,8 +45,8 @@ impl Matcher {
         }
     }
 
-    pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if let Some(tie_breaker) = options.opt_str("t") {
+    pub fn parse_options(&mut self, options: &ArgMatches) {
+        if let Some(tie_breaker) = options.value_of("tiebreak") {
             let mut vec = Vec::new();
             for criteria in tie_breaker.split(',') {
                 if let Some(c) = parse_criteria(criteria) {
@@ -56,11 +56,11 @@ impl Matcher {
             *RANK_CRITERION.write().unwrap() = vec;
         }
 
-        if options.opt_present("exact") {
+        if options.is_present("exact") {
             self.mode = MatcherMode::Exact;
         }
 
-        if options.opt_present("regex") {
+        if options.is_present("regex") {
             self.mode = MatcherMode::Regex;
         }
 

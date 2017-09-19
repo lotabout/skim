@@ -16,7 +16,6 @@ path = "src/main.rs"
 
 [dependencies]
 libc = "0.2.20"
-getopts = "0.2"
 regex = "0.2"
 lazy_static = "0.2.1"
 clippy = {version = "0.0.108", optional = true}
@@ -27,6 +26,7 @@ termion = "*"
 log = "0.3.8"
 env_logger = "0.4.3"
 time = "*"
+clap = "2.26.2"
 
 [features]
 default = []

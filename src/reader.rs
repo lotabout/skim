@@ -14,10 +14,10 @@ use std::collections::HashMap;
 use std::mem;
 use std::fs::File;
 
-use getopts;
 use regex::Regex;
 use sender::CachedSender;
 use field::{FieldRange, parse_range};
+use clap::ArgMatches;
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -40,17 +40,17 @@ impl ReaderOption {
         }
     }
 
-    pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if options.opt_present("ansi") {
+    pub fn parse_options(&mut self, options: &ArgMatches) {
+        if options.is_present("ansi") {
             self.use_ansi_color = true;
         }
 
-        if let Some(delimiter) = options.opt_str("d") {
-            self.delimiter = Regex::new(&(".*?".to_string() + &delimiter))
+        if let Some(delimiter) = options.value_of("delimiter") {
+            self.delimiter = Regex::new(&(".*?".to_string() + delimiter))
                 .unwrap_or(Regex::new(r".*?[\t ]").unwrap());
         }
 
-        if let Some(transform_fields) = options.opt_str("with-nth") {
+        if let Some(transform_fields) = options.value_of("with-nth") {
             self.transform_fields = transform_fields.split(',')
                 .filter_map(|string| {
                     parse_range(string)
@@ -58,12 +58,11 @@ impl ReaderOption {
                 .collect();
         }
 
-        if let Some(matching_fields) = options.opt_str("nth") {
+        if let Some(matching_fields) = options.value_of("nth") {
             self.matching_fields = matching_fields.split(',')
                 .filter_map(|string| {
                     parse_range(string)
-                })
-                .collect();
+                }).collect();
         }
     }
 }
@@ -87,7 +86,7 @@ impl Reader {
         }
     }
 
-    pub fn parse_options(&mut self, options: &getopts::Matches) {
+    pub fn parse_options(&mut self, options: &ArgMatches) {
         let mut option = self.option.write().unwrap();
         option.parse_options(options);
     }

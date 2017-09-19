@@ -8,7 +8,6 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use unicode_width::UnicodeWidthChar;
 use curses::*;
-use getopts;
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::error::Error;
@@ -18,6 +17,7 @@ use regex::{Regex, Captures};
 use field::get_string_by_range;
 use std::borrow::Cow;
 use std::convert::From;
+use clap::ArgMatches;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -84,25 +84,25 @@ impl Model {
         }
     }
 
-    pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if options.opt_present("m") {
+    pub fn parse_options(&mut self, options: &ArgMatches) {
+        if options.is_present("multi") {
             self.multi_selection = true;
         }
 
-        if options.opt_present("no-multi") {
+        if options.is_present("no-multi") {
             self.multi_selection = false;
         }
 
-        if options.opt_present("reverse") {
+        if options.is_present("reverse") {
             self.reverse = true;
         }
 
-        if let Some(preview_cmd) = options.opt_str("preview") {
-            self.preview_cmd = Some(preview_cmd.clone());
+        if let Some(preview_cmd) = options.value_of("preview") {
+            self.preview_cmd = Some(preview_cmd.to_string());
         }
 
-        if let Some(delimiter) = options.opt_str("d") {
-            self.delimiter = Regex::new(&delimiter)
+        if let Some(delimiter) = options.value_of("delimiter") {
+            self.delimiter = Regex::new(delimiter)
                 .unwrap_or(Regex::new(r"[ \t\n]+").unwrap());
         }
     }

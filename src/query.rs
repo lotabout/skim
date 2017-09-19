@@ -1,7 +1,7 @@
 use model::ClosureType;
-use getopts;
 use curses::*;
 use std::mem;
+use clap::ArgMatches;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -60,29 +60,29 @@ impl Query {
         self
     }
 
-    pub fn parse_options(&mut self, options: &getopts::Matches) {
-        if let Some(base_cmd) = options.opt_str("c") {
-            self.base_cmd = base_cmd.clone();
+    pub fn parse_options(&mut self, options: &ArgMatches) {
+        if let Some(base_cmd) = options.value_of("cmd") {
+            self.base_cmd = base_cmd.to_string();
         }
 
-        if let Some(query) = options.opt_str("q") {
+        if let Some(query) = options.value_of("query") {
             self.query_before = query.chars().collect();
         }
 
-        if let Some(replstr) = options.opt_str("I") {
-            self.replstr = replstr.clone();
+        if let Some(replstr) = options.value_of("replstr") {
+            self.replstr = replstr.to_string();
         }
 
-        if options.opt_present("i") {
+        if options.is_present("interactive") {
             self.mode = QueryMode::CMD;
         }
 
-        if let Some(query_prompt) = options.opt_str("prompt") {
-            self.query_prompt = query_prompt;
+        if let Some(query_prompt) = options.value_of("prompt") {
+            self.query_prompt = query_prompt.to_string();
         }
 
-        if let Some(cmd_prompt) = options.opt_str("cmd-prompt") {
-            self.cmd_prompt = cmd_prompt;
+        if let Some(cmd_prompt) = options.value_of("cmd-prompt") {
+            self.cmd_prompt = cmd_prompt.to_string();
         }
     }
 

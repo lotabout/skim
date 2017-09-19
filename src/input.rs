@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::Duration;
 use utf8parse;
+use clap::ArgMatches;
 
 use event::{Event, EventArg, parse_action};
 
@@ -72,21 +73,25 @@ impl Input {
         self.keymap.entry(key).or_insert((act, args));
     }
 
-    // keymap is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
-    pub fn parse_keymap(&mut self, keymap: Option<String>) {
-        if let Some(key_action) = keymap {
-            for pair in key_action.split(',') {
-                let vec: Vec<&str> = pair.split(':').collect();
-                if vec.len() < 2 {
-                    continue;
-                } else {
-                    self.bind(vec[0], vec[1], vec.get(2).map(|&string| string.to_string()));
-                }
+    pub fn parse_keymaps(&mut self, maps: &[&str]) {
+        for &map in maps {
+            self.parse_keymap(map);
+        }
+    }
+
+    // key_action is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
+    pub fn parse_keymap(&mut self, key_action: &str) {
+        for pair in key_action.split(',') {
+            let vec: Vec<&str> = pair.split(':').collect();
+            if vec.len() < 2 {
+                continue;
+            } else {
+                self.bind(vec[0], vec[1], vec.get(2).map(|&string| string.to_string()));
             }
         }
     }
 
-    pub fn parse_expect_keys(&mut self, keys: Option<String>) {
+    pub fn parse_expect_keys(&mut self, keys: Option<&str>) {
         if let Some(keys) = keys {
             self.bind("enter", "accept", Some("".to_string()));
             for key in keys.split(',') {

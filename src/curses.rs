@@ -2,7 +2,6 @@
 // Modeled after fzf
 
 //use ncurses::*;
-use getopts;
 use std::sync::RwLock;
 use std::collections::HashMap;
 use std::io::{stdin, stdout, Write};
@@ -18,6 +17,7 @@ use std::fs::{File, OpenOptions};
 use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
 use libc;
 use regex::Regex;
+use clap::ArgMatches;
 
 pub static COLOR_NORMAL:        u16 = 0;
 pub static COLOR_PROMPT:        u16 = 1;
@@ -530,25 +530,16 @@ unsafe impl Send for Curses {}
 const CURSES_BUF_SIZE: usize = 100 * 1024;
 
 impl Curses {
-    pub fn new(options: &getopts::Matches) -> Self {
+    pub fn new(options: &ArgMatches) -> Self {
         ColorTheme::init_from_options(&options);
 
         // parse the option of window height of skim
-        let min_height = if let Some(min_height_option) = options.opt_str("min-height") {
-            min_height_option.parse::<u16>().unwrap_or(10)
-        } else {
-            10 // default value
-        };
 
-        let no_height = options.opt_present("no-height");
+        let min_height = options.value_of("min-height").map(|x| x.parse::<u16>().unwrap_or(10)).unwrap();
+        let no_height = options.is_present("no-height");
+        let height = options.value_of("height").map(Curses::parse_margin_string).unwrap();
 
-        let height_option = options.opt_str("height");
-        let height = if !no_height && height_option.is_some() {
-            Curses::parse_margin_string(&height_option.unwrap())
-        } else {
-            Margin::Percent(100)
-        };
-
+        let height = if no_height {Margin::Percent(100)} else {height};
 
         // If skim is invoked by pipeline `echo 'abc' | sk | awk ...`
         // The the output is redirected. We need to open /dev/tty for output.
@@ -590,21 +581,12 @@ impl Curses {
         };
 
         // parse options for margin
-        let margins = if let Some(margin_option) = options.opt_str("margin") {
-            Curses::parse_margin(&margin_option)
-        } else {
-            (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0))
-        };
+        let margins = options.value_of("margin").map(Curses::parse_margin).unwrap();
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         // parse options for preview window
-        let preview_cmd_exist = options.opt_present("preview");
-        let (preview_direction, preview_size, preview_wrap, preview_shown) = if let Some(opts) = options.opt_str("preview-window") {
-            Curses::parse_preview(&opts)
-        } else {
-            (Direction::Right, Margin::Percent(50), false, true)
-        };
-
+        let preview_cmd_exist = options.is_present("preview");
+        let (preview_direction, preview_size, preview_wrap, preview_shown) = options.value_of("preview-window").map(Curses::parse_preview).unwrap();
         let mut ret = Curses {
             term: Some(term),
             top: 0,
@@ -933,9 +915,9 @@ pub struct ColorTheme {
 
 
 impl ColorTheme {
-    pub fn init_from_options(options: &getopts::Matches) {
+    pub fn init_from_options(options: &ArgMatches) {
         // register
-        let theme = if let Some(color) = options.opt_str("color") {
+        let theme = if let Some(color) = options.value_of("color") {
             ColorTheme::from_options(&color)
         } else {
             ColorTheme::dark256()
