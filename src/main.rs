@@ -149,7 +149,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("multi").long("multi").short("m"))
         .arg(Arg::with_name("no-multi").long("no-multi"))
         .arg(Arg::with_name("prompt").long("prompt").short("p").takes_value(true).default_value("> "))
-        .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c>"))
+        .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c> "))
         .arg(Arg::with_name("expect").long("expect").short("e").multiple(true) .takes_value(true))
         .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi"))
