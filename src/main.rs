@@ -50,6 +50,7 @@ Usage: sk [options]
     --version            print out the current version of skim
 
   Search
+    --tac                reverse the order of input
     -t, --tiebreak [score,index,begin,end,-score,...]
                          comma seperated criteria
     -n, --nth 1,2..5     specify the fields to be matched
@@ -151,6 +152,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("prompt").long("prompt").short("p").takes_value(true).default_value("> "))
         .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c> "))
         .arg(Arg::with_name("expect").long("expect").short("e").multiple(true) .takes_value(true))
+        .arg(Arg::with_name("tac").long("tac"))
         .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi"))
         .arg(Arg::with_name("exact").long("exact"))

@@ -62,7 +62,7 @@ skim-history-widget() {
   local selected num
   setopt localoptions noglobsubst noposixbuiltins pipefail 2> /dev/null
   selected=( $(fc -l 1 |
-    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS -n2..,.. --tiebreak=score,index --preview='echo {}' --preview-window down:4:wrap $SKIM_CTRL_R_OPTS --query=${(q)LBUFFER} -m" $(__skimcmd)) )
+    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS -n2..,.. --tac --preview='echo {}' --preview-window down:4:wrap $SKIM_CTRL_R_OPTS --query=${(q)LBUFFER} -m" $(__skimcmd)) )
   local ret=$?
   if [ -n "$selected" ]; then
     num=$selected[1]

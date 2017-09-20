@@ -46,6 +46,7 @@ impl Matcher {
     }
 
     pub fn parse_options(&mut self, options: &ArgMatches) {
+
         if let Some(tie_breaker) = options.value_of("tiebreak") {
             let mut vec = Vec::new();
             for criteria in tie_breaker.split(',') {
@@ -54,6 +55,17 @@ impl Matcher {
                 }
             }
             *RANK_CRITERION.write().unwrap() = vec;
+        }
+
+        if options.is_present("tac") {
+            let mut ranks = RANK_CRITERION.write().unwrap();
+            for i in 0..ranks.len() {
+                match &ranks[i] {
+                    &RankCriteria::Index => ranks[i] = RankCriteria::NegIndex,
+                    &RankCriteria::NegIndex => ranks[i] = RankCriteria::Index,
+                    _ => {}
+                }
+            }
         }
 
         if options.is_present("exact") {
@@ -594,7 +606,7 @@ impl EngineFactory {
 }
 
 //------------------------------------------------------------------------------
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum RankCriteria {
     Score,
     Index,

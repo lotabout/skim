@@ -58,7 +58,7 @@ __skim_history__() (
   shopt -u nocaseglob nocasematch
   line=$(
     HISTTIMEFORMAT= history |
-    SKIM_DEFAULT_OPTIONS="--height ${skim_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS --reverse -n2..,.. --tiebreak=index --bind=ctrl-r:toggle-sort $skim_CTRL_R_OPTS -m" $(__skimcmd) |
+    SKIM_DEFAULT_OPTIONS="--height ${skim_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS --reverse -n2..,.. --tac $skim_CTRL_R_OPTS -m" $(__skimcmd) |
     command grep '^ *[0-9]') &&
     if [[ $- =~ H ]]; then
       sed 's/^ *\([0-9]*\)\** .*/!\1/' <<< "$line"
