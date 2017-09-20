@@ -1,7 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender};
 use event::{Event, EventArg};
 use item::{MatchedItem, MatchedItemGroup, MatchedRange};
-use std::time::Instant;
 use std::cmp::{max, min};
 use orderedvec::OrderedVec;
 use std::sync::Arc;
@@ -18,6 +17,7 @@ use field::get_string_by_range;
 use std::borrow::Cow;
 use std::convert::From;
 use clap::ArgMatches;
+use std::time::{Duration, Instant};
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -26,6 +26,7 @@ const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 
 lazy_static! {
     static ref RE_FILEDS: Regex = Regex::new(r"(\{[0-9.,q]*?})").unwrap();
+    static ref REFRESH_DURATION: Duration = Duration::from_millis(200);
 }
 
 pub struct Model {
@@ -115,6 +116,8 @@ impl Model {
 
     pub fn run(&mut self, mut curses: Curses) {
         // generate a new instance of curses for printing
+        //
+        let mut last_refresh = Instant::now();
 
         // main loop
         loop {
@@ -154,9 +157,13 @@ impl Model {
                             // to the number of read items
                             self.num_read = num_processed;
 
+                            let now = Instant::now();
+                            let diff = now.duration_since(last_refresh);
+
                             // update the screen
-                            if num_processed & 0xFFF == 0 {
+                            if num_processed & 0xFFF == 0 && diff > *REFRESH_DURATION {
                                 self.act_redraw_items_and_status(&mut curses);
+                                last_refresh = now;
                             }
                         }
 
