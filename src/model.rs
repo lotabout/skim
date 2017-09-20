@@ -625,7 +625,7 @@ impl Model {
     }
 
     pub fn act_toggle(&mut self) {
-        if !self.multi_selection {return;}
+        if !self.multi_selection || self.items.len() <= 0 {return;}
 
         let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
         let index = current_item.item.get_full_index();
