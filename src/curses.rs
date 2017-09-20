@@ -932,7 +932,7 @@ impl ColorTheme {
         theme.register_self();
     }
 
-    fn default() -> Self {
+    fn default16() -> Self {
         ColorTheme {
             fg:               ColorWrapper(Box::new(color::Reset)),
             bg:               ColorWrapper(Box::new(color::Reset)),
@@ -1013,15 +1013,15 @@ impl ColorTheme {
     }
 
     fn from_options(color: &str) -> Self {
-        let mut theme = ColorTheme::default();
+        let mut theme = ColorTheme::dark256();
         for pair in color.split(',') {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
                 theme = match color[0] {
                     "molokai"  => ColorTheme::molokai256(),
                     "light"    => ColorTheme::light256(),
-                    "16"       => ColorTheme::default(),
-                    "dark" | _ => ColorTheme::dark256(),
+                    "16"       => ColorTheme::default16(),
+                    "dark" | "default" | _ => ColorTheme::dark256(),
                 };
                 continue;
             }
