@@ -7,26 +7,28 @@
 import subprocess
 import unittest
 import os
-from datetime import datetime
 import time
 import re
 import inspect
 
 INPUT_RECORD_SEPARATOR = '\n'
-DEFAULT_TIMEOUT = 1000
+DEFAULT_TIMEOUT = 2000
 
 SCRIPT_PATH = os.path.realpath(__file__)
 BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '../'))
 os.chdir(BASE)
 SK = f"SKIM_DEFAULT_OPTIONS= SKIM_DEFAULT_COMMAND= {BASE}/target/release/sk"
 
+def now_mills():
+    return int(round(time.time() * 1000))
+
 def wait(func):
-    since = datetime.now()
-    while (datetime.now() - since).microseconds < DEFAULT_TIMEOUT * 1000:
+    since = now_mills()
+    while now_mills() - since < DEFAULT_TIMEOUT:
         ret = func()
         if ret is not None and ret:
             return
-        time.sleep(0.0005)
+        time.sleep(0.005)
     raise BaseException('Timeout on wait')
 
 class Shell(object):
