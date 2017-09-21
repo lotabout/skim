@@ -22,11 +22,11 @@ matrix:
 
 before_install:
   - export PATH="$PATH:$HOME/.cargo/bin"
-  - sudo apt-get -y install python3-pip python-dev
-  - sudo pip3 install -U setuptools
-  - sudo pip3 install -U virtualenvwrapper
-  - python3 -V
-  - pip3 -V
+
+  - sudo add-apt-repository ppa:jonathonf/python-3.6
+  - sudo apt-get update
+  - sudo apt-get install python3.6
+  - python3.6 -V
 
 install:
  - sudo apt-get install -y tmux zsh
@@ -34,7 +34,7 @@ install:
 script:
   - cargo build --release --verbose
   - cargo test --verbose
-  - tmux new "python3 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
+  - tmux new "python3.6 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
 
 before_deploy:
   - bash ci/before_deploy.sh
