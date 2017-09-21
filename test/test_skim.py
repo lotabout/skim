@@ -244,6 +244,7 @@ class TestSkim(TestBase):
                 Ctrl('h'), Ctrl('e'), Ctrl('b'), Ctrl('k'), Key('Tab'), Key('BTab'))
 
         self.tmux.until(lambda ls: ls[-2].startswith('  856/100000'))
+        self.tmux.until(lambda ls: ls[-4] == '> 1390')
         lines = self.tmux.capture()
         self.assertEqual('> 1390', lines[-4])
         self.assertEqual('  139', lines[-3])
