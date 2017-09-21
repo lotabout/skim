@@ -12,6 +12,27 @@ It is blazingly fast as it reads the data source asynchronously.
 skim provides a single executable: `sk`, basically anywhere you would want to use
 `grep` try `sk` instead.
 
+# Table of contents
+
+- [Installation](#installation)
+- [Usage](#usage)
+    - [As Filter](#as-filter)
+    - [As Interactive Interface](#as-interactive-interface)
+    - [Key Bindings](#key-bindings)
+    - [Search Syntax](#search-syntax)
+    - [Exit code](#exit-code)
+- [Customization](#customization)
+    - [Keymap to redefine](#keymap)
+    - [Sort Criteria](#sort-criteria)
+    - [Color Scheme](#color-scheme)
+    - [Misc](#misc)
+- [Advance Topics](#advance-topics)
+    - [Interactive Mode](#interactive-mode)
+    - [Preview Window](#preview-window)
+    - [Fields Support](#fields-support)
+- [Difference to fzf](#difference-to-fzf)
+- [How to contribute](#how-to-contribute)
+
 # Installation
 
 skim project contains several components:
@@ -167,12 +188,9 @@ You can switch to `regex` mode dynamically by pressing `Ctrl-R` (Rotate Mode).
 | 1         | No Match found                    |
 | 130       | Abort by Ctrl-C/Ctrl-G/ESC/etc... |
 
-## Customization
+# Customization
 
-skim can be customized with lots of options. You can use them to create new
-bash/zsh/.. functions by yourself. Use your imagination :)
-
-## Key binding & Actions
+## Keymap
 
 Specify the bindings with comma seperated pairs(no space allowed), example:
 
@@ -210,13 +228,14 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 | toggle-down          | tab                         |
 | toggle-interactive   | ctrl-q                      |
 | toggle-out           | None                        |
+| toggle-preview       | None                        |
 | toggle-sort          | None                        |
 | toggle-up            | shift-tab                   |
 | unix-line-discard    | ctrl-u                      |
 | unix-word-rubout     | ctrl-w                      |
 | up                   | ctrl-p, ctrl-k, up          |
 
-## Sort criterion
+## Sort Criteria
 
 There are four sort keys for results: `score, index, begin, end`, you can
 specify how the records are sorted by `sk --tiebreak score,index,-begin` or any
@@ -268,11 +287,15 @@ While the customisable `COLOR`s are
 | prompt           | Prompt                                           |
 | cursor           | Cursor                                           |
 | selected         | Text color of "selected" indicator               |
+| border           | Border color of preview window                   |
+
 
 ## Misc
 
 - `--ansi`: to parse ANSI color codes(e.g `\e[32mABC`) of the data source
 - `--regex`: use the query as regular expression to match the data source
+
+# Advance Topics
 
 ## Interactive mode
 
@@ -290,6 +313,41 @@ the above command with `ag --color "hello"` and invoke it.
 
 If you want to further narrow down the result returned by the command, press
 `Ctrl-Q` to toggle interactive mode.
+
+## Preview Window
+This is a great feature of fzf that skim borrows. For example, we use 'ag' to
+find the matched lines, once we narrow down to the target lines, we want to
+finally decide which lines to pick by checking the context around the line.
+`grep` and `ag` has an option `--context`, skim can do better with preview
+window. For example:
+
+```
+sk --ansi -i -c 'ag --color "{}"' --preview "preview.sh {0}"
+```
+
+(Note the [preview.sh](https://github.com/junegunn/fzf.vim/blob/master/bin/preview.sh) is a script to print the context given filename:lines:columns)
+You got things like this:
+
+![preview demo](https://user-images.githubusercontent.com/1527040/30677573-0cee622e-9ebf-11e7-8316-c741324ecb3a.png)
+
+### How it work?
+
+If preview command is given by `--preview` option, skim will replace the `{}`
+with the current highlighted line surrounded by single quote. Then call the
+command to get the output. And print the output on the preview window.
+
+Sometimes you don't need the whole line for invoking the command, in this case
+you can use `{0}`, `{1..}`, `{..3}` or `{1..5}` to select the fields. The
+syntax is explained in the section "Fields Support".
+
+Last, you might want to configure the position of preview windows, use
+`--preview-window`.
+- `--preview-window up:30%` to put the window in the up position with height
+    30% of the total height of skim.
+- `--preview-window left:10:wrap`, to specify the `wrap` allows the preview
+    window to wrap the output of the preview command.
+- `--preview-window wrap:hidden` to hide the preview window at startup, later
+    it can be shown by the action `toggle-preview`.
 
 ## Fields support
 
@@ -318,7 +376,7 @@ Also you can use `--with-nth` to re-arrange the order of fields.
 - `start..end` -- starting from `start`-th field, all the way to `end`-th
     field, excluding `end`.
 
-## Difference to fzf
+# Difference to fzf
 
 [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder written
 in Go and [skim](https://github.com/lotabout/skim) tries to implement a new one
@@ -333,7 +391,7 @@ different from fzf. For example:
 3. `skim` has an interactive mode.
 4. `skim`'s range syntax is git style.
 
-## How to contribute
+# How to contribute
 
 [Create new issues](https://github.com/lotabout/skim/issues/new) if you meet any bugs
 or have any ideas. Pull requests are warmly welcomed.
