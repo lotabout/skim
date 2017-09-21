@@ -1,6 +1,6 @@
 # Change Log
 
-## 0.3.1-alpha.1: 2017-09-21
+## 0.3.0: 2017-09-21
 This release starts from adding `--height` featuren, ends up a big change in
 the code base.
 - feature: `--bind` accept character keys. Only Ctrl/Alt/F keys were accepted.

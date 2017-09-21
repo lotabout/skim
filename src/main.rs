@@ -40,7 +40,7 @@ use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use clap::{Arg, App};
 
-const VERSION: &'static str = "0.3.1-alpha.1";
+const VERSION: &'static str = "0.3.0";
 
 const USAGE : &'static str = "
 Usage: sk [options]
