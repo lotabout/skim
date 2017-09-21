@@ -1,8 +1,16 @@
 language: rust
+rust:
+  stable
+
 cache: cargo
+dist: trusty
+sudo: required
+python:
+  - "3.4"
 env:
   global:
   - PROJECT_NAME=skim
+
 matrix:
   include:
   - os: osx
@@ -11,10 +19,26 @@ matrix:
   - os: linux
     rust: nightly
     env: TARGET=x86_64-unknown-linux-gnu
+
 before_install:
-- export PATH="$PATH:$HOME/.cargo/bin"
+  - export PATH="$PATH:$HOME/.cargo/bin"
+  - sudo apt-get -y install python3-pip python-dev
+  - sudo pip3 install -U setuptools
+  - sudo pip3 install -U virtualenvwrapper
+  - python3 -V
+  - pip3 -V
+
+install:
+ - sudo apt-get install -y tmux zsh
+
+script:
+  - cargo build --release --verbose
+  - cargo test --verbose
+  - tmux new "python3 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
+
 before_deploy:
-- bash ci/before_deploy.sh
+  - bash ci/before_deploy.sh
+
 deploy:
   provider: releases
   api_key:
@@ -25,10 +49,12 @@ deploy:
   on:
     condition: "$TRAVIS_RUST_VERSION = nightly"
     tags: true
+
 branches:
   only:
   - master
   - "/^v\\d+\\.\\d+\\.\\d+.*$/"
+
 notifications:
   email:
     on_success: never
