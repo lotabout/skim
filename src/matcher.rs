@@ -84,7 +84,7 @@ impl Matcher {
         // start a new thread listening for EvMatcherRestart, that means the query had been
         // changed, so that matcher shoudl discard all previous events.
         {
-            let matcher_restart = matcher_restart.clone();
+            let matcher_restart = Arc::clone(&matcher_restart);
             thread::spawn(move || {
                 while let Ok((ev, arg)) = rx_item.recv() {
                     match ev {
@@ -460,7 +460,7 @@ impl OrEngine {
 impl MatchEngine for OrEngine {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
         for engine in &self.engines {
-            let result = engine.match_item(item.clone());
+            let result = engine.match_item(Arc::clone(&item));
             if result.is_some() {
                 return result;
             }
@@ -515,7 +515,7 @@ impl AndEngine {
     fn merge_matched_items(&self, mut items: Vec<MatchedItem>) -> MatchedItem {
         items.sort();
         let rank = items[0].rank;
-        let item = items[0].item.clone();
+        let item = Arc::clone(&items[0].item);
         let mut ranges = vec![];
         for item in items {
             match item.matched_range {
@@ -543,7 +543,7 @@ impl MatchEngine for AndEngine {
         // mock
         let mut results = vec![];
         for engine in &self.engines {
-            let result = engine.match_item(item.clone());
+            let result = engine.match_item(Arc::clone(&item));
             if result.is_none() {
                 return None;
             } else {

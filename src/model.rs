@@ -341,7 +341,7 @@ impl Model {
             let label = if l == self.line_cursor {">"} else {" "};
             curses.cprint(label, COLOR_CURSOR, true);
 
-            let item = self.items.get(i).unwrap().clone();
+            let item = Arc::clone(self.items.get(i).unwrap());
             self.draw_item(curses, &item, l == self.line_cursor);
             curses.attr_on(0);
         }
@@ -533,7 +533,7 @@ impl Model {
             return;
         }
 
-        let item = self.items.get(current_idx).unwrap().clone();
+        let item = Arc::clone(self.items.get(current_idx).unwrap());
         let highlighted_content = item.item.get_text();
 
         debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
@@ -637,7 +637,7 @@ impl Model {
         let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
-            self.selected.insert(index, current_item.clone());
+            self.selected.insert(index, Arc::clone(current_item));
         } else {
             self.selected.remove(&index);
         }
@@ -647,7 +647,7 @@ impl Model {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
             if !self.selected.contains_key(&index) {
-                self.selected.insert(index, current_item.clone());
+                self.selected.insert(index, Arc::clone(current_item));
             } else {
                 self.selected.remove(&index);
             }
@@ -657,7 +657,7 @@ impl Model {
     pub fn act_select_all(&mut self) {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
-            self.selected.insert(index, current_item.clone());
+            self.selected.insert(index, Arc::clone(&current_item));
         }
     }
 
@@ -670,7 +670,7 @@ impl Model {
         if !self.items.is_empty() {
             let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
             let index = current_item.item.get_full_index();
-            self.selected.insert(index, current_item.clone());
+            self.selected.insert(index, Arc::clone(current_item));
         }
 
         let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();

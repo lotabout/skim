@@ -122,7 +122,7 @@ impl Reader {
                         let (tx, rx_reader) = channel();
                         tx_reader = Some(tx);
                         let cmd_clone = cmd.clone();
-                        let option_clone = self.option.clone();
+                        let option_clone = Arc::clone(&self.option);
                         let tx_sender_clone = tx_sender.clone();
                         let query_clone = query.clone();
                         let real_stdin = self.real_stdin.take();
