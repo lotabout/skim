@@ -1,11 +1,15 @@
 language: rust
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
 dist: trusty
 sudo: required
-python:
-  - "3.4"
+
 env:
   global:
-  - PROJECT_NAME=skim
+  - CRATE_NAME=skim
 
 matrix:
   include:
@@ -19,20 +23,13 @@ matrix:
 before_install:
   - export PATH="$PATH:$HOME/.cargo/bin"
 
-  - sudo add-apt-repository -y ppa:jonathonf/python-3.6
-  - sudo add-apt-repository -y ppa:pi-rho/dev
-  - sudo apt-get update
-  - sudo apt-get -y install python3.6
-  - python3.6 -V
-  - sudo apt-get install -y python-software-properties software-properties-common
-  - sudo apt-get install -y tmux=2.0-1~ppa1~t
-  - tmux -V
-  - sudo apt-get install -y zsh
+install:
+  - bash ci/install.sh
 
 script:
-  - cargo build --release --verbose
-  - cargo test --verbose
-  - tmux new "python3.6 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
+  - bash ci/script.sh
+
+after_script: set +e
 
 before_deploy:
   - bash ci/before_deploy.sh
@@ -42,10 +39,10 @@ deploy:
   api_key:
   - secure: vmF0/waQcwHLnsurJmb+zXjL4kjdDyLgDZ6UwLY3RzAu6IUWwE3YG6n40X4kwcmGeVBr9OXooFUFYGXnv+uUsgGCuXSXxr9+SL16YOy5YKp1SAEkdIBZb0PTXOXiiGi9O5EDSRYlvkJ9qEEO0UqvQ0NO0VY/1Zhd2pDLrdkkoWuC7SKq8QCLZA3LqfXKEq1WwAwbvJzyTcqgUWSPOeYF0+gec0wTd1W9AjpNX20vzhdVU2VC9gHWhDtaA9cHyk/tGc9HQpMwozIZokdnD3+K2trXcpwMQUkv95zODeyUgcFlv3gtXPVzlhkhsWRLwhtIPUDPbGeLwizRo8T8DAaKXlim3rwdlt7NanTkp4TztlbFK+TaKZyvZdVUDAAX3NTpZLaDO9mFOk8yeswP6yMChiCUxxItkcNdbgD+uBgoAR25vSYf1/j9+vZPg65m9cA+R6cIliFzoGTtlVp+Yv5JTUJVXjSZrPyUZ1i/S6CTqJLLz+I/sFSTKawcmxHBMlCRnzr3tHbh+ikGcYCnR7ZcsjurJ3crStNrs+afUNDtmdOmUmquACQ5AygBPf7KBy/4/xmsJ2mpKSeZTSgO//tvYRkhQMfVexU4aC6N8OXqpsLM+3IcoxTMxmTtey2dP0zIYh/hOWIaOKUTjh4rqu5kx9Z8cvJl4PnYFHferh/6lwY=
   file_glob: true
-  file: "${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}.*"
+  file: "${CRATE_NAME}-${TRAVIS_TAG}-${TARGET}.*"
   skip_cleanup: true
   on:
-    condition: "$TRAVIS_RUST_VERSION = nightly"
+    condition: "$TRAVIS_RUST_VERSION = stable"
     tags: true
 
 branches:

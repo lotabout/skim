@@ -25,10 +25,10 @@ def now_mills():
 def wait(func):
     since = now_mills()
     while now_mills() - since < DEFAULT_TIMEOUT:
+        time.sleep(0.005)
         ret = func()
         if ret is not None and ret:
             return
-        time.sleep(0.005)
     raise BaseException('Timeout on wait')
 
 class Shell(object):
@@ -242,11 +242,35 @@ class TestSkim(TestBase):
         self.assertEqual('>',   lines[-1])
 
         # testing basic key binding
-        self.tmux.send_keys(Key('99'), Ctrl('a'), Key('1'), Ctrl('f'), Key('3'), Ctrl('b'),
-                Ctrl('h'), Ctrl('e'), Ctrl('b'), Ctrl('k'), Key('Tab'), Key('BTab'))
+        self.tmux.send_keys(Key('99'))
+        self.tmux.until(lambda ls: ls[-2].startswith('  8146/100000'))
+        self.tmux.until(lambda ls: ls[-1].startswith('> 99'))
 
+        self.tmux.send_keys(Ctrl('a'), Key('1'))
         self.tmux.until(lambda ls: ls[-2].startswith('  856/100000'))
-        self.tmux.until(lambda ls: ls[-4] == '> 1390')
+        self.tmux.until(lambda ls: ls[-1].startswith('> 199'))
+
+        self.tmux.send_keys(Ctrl('f'), Key('3'))
+        self.tmux.until(lambda ls: ls[-2].startswith('  46/100000'))
+        self.tmux.until(lambda ls: ls[-1].startswith('> 1939'))
+
+        self.tmux.send_keys(Ctrl('b'), Ctrl('h'))
+        self.tmux.until(lambda ls: ls[-2].startswith('  856/100000'))
+        self.tmux.until(lambda ls: ls[-1].startswith('> 139'))
+
+        self.tmux.send_keys(Ctrl('e'), Ctrl('b'))
+        self.tmux.send_keys(Ctrl('k'))
+        self.tmux.until(lambda ls: ls[-4].startswith('> 1390'))
+        self.tmux.until(lambda ls: ls[-3].startswith('  139'))
+
+        self.tmux.send_keys(Key('Tab'))
+        self.tmux.until(lambda ls: ls[-4].startswith('  1390'))
+        self.tmux.until(lambda ls: ls[-3].startswith('> 139'))
+
+        self.tmux.send_keys(Key('BTab'))
+        self.tmux.until(lambda ls: ls[-4].startswith('> 1390'))
+        self.tmux.until(lambda ls: ls[-3].startswith('  139'))
+
         lines = self.tmux.capture()
         self.assertEqual('> 1390', lines[-4])
         self.assertEqual('  139', lines[-3])
