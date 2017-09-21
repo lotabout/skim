@@ -4,7 +4,7 @@ use item::Item;
 use std::sync::{Arc, RwLock};
 use std::process::{Command, Stdio, Child};
 use std::io::{BufRead, BufReader};
-use event::{Event, EventArg};
+use event::{EventSender, EventReceiver, Event, EventArg};
 use std::thread::JoinHandle;
 use std::thread;
 use std::time::Duration;
@@ -66,14 +66,14 @@ impl ReaderOption {
 }
 
 pub struct Reader {
-    rx_cmd: Receiver<(Event, EventArg)>,
+    rx_cmd: EventReceiver,
     tx_item: SyncSender<(Event, EventArg)>,
     option: Arc<RwLock<ReaderOption>>,
     real_stdin: Option<File>,  // used to support piped output
 }
 
 impl Reader {
-    pub fn new(rx_cmd: Receiver<(Event, EventArg)>,
+    pub fn new(rx_cmd: EventReceiver,
                tx_item: SyncSender<(Event, EventArg)>,
                real_stdin: Option<File>) -> Self {
         Reader {
@@ -184,7 +184,7 @@ lazy_static! {
 
 fn reader(cmd: &str,
           rx_cmd: Receiver<bool>,
-          tx_sender: &Sender<(Event, EventArg)>,
+          tx_sender: &EventSender,
           option: Arc<RwLock<ReaderOption>>,
           source_file: Option<File>) {
 
@@ -210,13 +210,15 @@ fn reader(cmd: &str,
                 break;
             }
 
-            if rx_control.recv_timeout(Duration::from_millis(10)).is_ok() {
+            if rx_control.try_recv().is_ok() {
                 command.map(|mut x| {
                     let _ = x.kill();
                     let _ = x.wait();
                 });
                 break;
             }
+
+            thread::sleep(Duration::from_millis(5));
         }
     });
 

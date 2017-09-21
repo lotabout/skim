@@ -10,16 +10,16 @@ use std::collections::VecDeque;
 use std::time::Duration;
 use utf8parse;
 
-use event::{Event, EventArg, parse_action};
+use event::{Event, EventSender, parse_action};
 
 pub struct Input {
-    tx_input: Sender<(Event, EventArg)>,
+    tx_input: EventSender,
     keyboard: KeyBoard,
     keymap: HashMap<Key, (Event, Option<String>)>,
 }
 
 impl Input {
-    pub fn new(tx_input: Sender<(Event, EventArg)>) -> Self {
+    pub fn new(tx_input: EventSender) -> Self {
         let f = File::open("/dev/tty").unwrap();
         let keyboard = KeyBoard::new(f);
         Input {

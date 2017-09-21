@@ -1,8 +1,11 @@
 // All the events that will be used
 
 use std::any::Any;
+use std::sync::mpsc::{Receiver, Sender};
 
 pub type EventArg = Box<Any + 'static + Send>;
+pub type EventReceiver = Receiver<(Event, EventArg)>;
+pub type EventSender = Sender<(Event, EventArg)>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Event {

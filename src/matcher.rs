@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
-use std::sync::mpsc::{Receiver, Sender, channel};
-use event::{Event, EventArg};
+use std::sync::mpsc::channel;
+use event::{Event, EventSender, EventReceiver};
 use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use std::thread;
 
@@ -33,12 +33,12 @@ enum MatcherMode {
 }
 
 pub struct Matcher {
-    tx_result: Sender<(Event, EventArg)>,
+    tx_result: EventSender,
     mode: MatcherMode,
 }
 
 impl Matcher {
-    pub fn new(tx_result: Sender<(Event, EventArg)>) -> Self {
+    pub fn new(tx_result: EventSender) -> Self {
         Matcher {
             tx_result: tx_result,
             mode: MatcherMode::Fuzzy,
@@ -78,8 +78,8 @@ impl Matcher {
 
     }
 
-    pub fn run(&self, rx_item: Receiver<(Event, EventArg)>) {
-        let (tx_matcher, rx_matcher) = channel();
+    pub fn run(&self, rx_item: EventReceiver) {
+        let (tx_matcher, rx_matcher): (EventSender, EventReceiver) = channel();
         let matcher_restart = Arc::new(AtomicBool::new(false));
         // start a new thread listening for EvMatcherRestart, that means the query had been
         // changed, so that matcher shoudl discard all previous events.
@@ -87,9 +87,12 @@ impl Matcher {
             let matcher_restart = Arc::clone(&matcher_restart);
             thread::spawn(move || {
                 while let Ok((ev, arg)) = rx_item.recv() {
+                    debug!("matcher: rx_item: {:?}", ev);
                     match ev {
                         Event::EvMatcherRestart => {
                             matcher_restart.store(true, Ordering::Relaxed);
+
+                            let _ = tx_matcher.send((ev, Box::new(true)));
                             while matcher_restart.load(Ordering::Relaxed) {
                                 thread::sleep(Duration::from_millis(10));
                             }
@@ -108,77 +111,76 @@ impl Matcher {
         let mut matcher_engine: Option<Box<MatchEngine>> = None;
         let mut num_processed: usize = 0;
         let mut matcher_mode = self.mode;
-        loop {
 
+        while let Ok((ev, arg)) = rx_matcher.recv() {
+            debug!("matcher: rx_matcher: {:?}", ev);
             if matcher_restart.load(Ordering::Relaxed) {
                 while let Ok(_) = rx_matcher.try_recv() {}
                 matcher_restart.store(false, Ordering::Relaxed);
+                continue;
             }
 
-            if let Ok((ev, arg)) = rx_matcher.recv_timeout(Duration::from_millis(10)) {
-                match ev {
-                    Event::EvMatcherNewItem => {
-                        let items: ItemGroup = *arg.downcast().unwrap();
-                        num_processed += items.len();
+            match ev {
+                Event::EvMatcherRestart => {
+                    num_processed = 0;
+                    let query = arg.downcast::<String>().unwrap();
 
-                        matcher_engine.as_ref().map(|mat| {
-                            let matched_items: MatchedItemGroup = items.into_iter()
-                                .filter_map(|item| mat.match_item(item))
-                                .collect();
-                            let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
-                        });
+                    // notifiy the model that the query had been changed
+                    let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
 
-                        // report the number of processed items
-                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
-                    }
+                    let mode_string = match matcher_mode {
+                        MatcherMode::Regex => "RE".to_string(),
+                        MatcherMode::Exact => "EX".to_string(),
+                        _ => "".to_string(),
+                    };
+                    let _ = self.tx_result.send((Event::EvModelNotifyMatcherMode, Box::new(mode_string)));
 
-                    Event::EvReaderStopped | Event::EvReaderStarted => {
-                        let _ = self.tx_result.send((ev, arg));
-                    }
-                    Event::EvSenderStopped => {
-                        // Since matcher is single threaded, sender stopped means all items are
-                        // processed.
-                        let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
-                        let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
-                    }
+                    matcher_engine = Some(EngineFactory::build(&query, matcher_mode));
+                }
 
+                Event::EvMatcherNewItem => {
+                    let items: ItemGroup = *arg.downcast().unwrap();
+                    num_processed += items.len();
 
-                    Event::EvMatcherRestart => {
-                        num_processed = 0;
-                        let query = arg.downcast::<String>().unwrap();
+                    matcher_engine.as_ref().map(|mat| {
+                        let matched_items: MatchedItemGroup = items.into_iter()
+                            .filter_map(|item| mat.match_item(item))
+                            .collect();
+                        let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
+                    });
 
-                        // notifiy the model that the query had been changed
-                        let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
+                    // report the number of processed items
+                    let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+                }
 
-                        let mode_string = match matcher_mode {
-                            MatcherMode::Regex => "RE".to_string(),
-                            MatcherMode::Exact => "EX".to_string(),
-                            _ => "".to_string(),
-                        };
-                        let _ = self.tx_result.send((Event::EvModelNotifyMatcherMode, Box::new(mode_string)));
+                Event::EvReaderStopped | Event::EvReaderStarted => {
+                    let _ = self.tx_result.send((ev, arg));
+                }
+                Event::EvSenderStopped => {
+                    // Since matcher is single threaded, sender stopped means all items are
+                    // processed.
+                    let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
+                    let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
+                }
 
-                        matcher_engine = Some(EngineFactory::build(&query, matcher_mode));
-                    }
-
-                    Event::EvActRotateMode => {
-                        if self.mode == MatcherMode::Regex {
-                            // sk started with regex mode.
-                            matcher_mode = if matcher_mode == self.mode {
-                                MatcherMode::Fuzzy
-                            } else {
-                                MatcherMode::Regex
-                            };
+                Event::EvActRotateMode => {
+                    if self.mode == MatcherMode::Regex {
+                        // sk started with regex mode.
+                        matcher_mode = if matcher_mode == self.mode {
+                            MatcherMode::Fuzzy
                         } else {
-                            matcher_mode = if matcher_mode == self.mode {
-                                MatcherMode::Regex
-                            } else {
-                                self.mode
-                            }
+                            MatcherMode::Regex
+                        };
+                    } else {
+                        matcher_mode = if matcher_mode == self.mode {
+                            MatcherMode::Regex
+                        } else {
+                            self.mode
                         }
                     }
-
-                    _ => {}
                 }
+
+                _ => {}
             }
         }
     }

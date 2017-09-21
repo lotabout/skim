@@ -1,5 +1,5 @@
-use std::sync::mpsc::{Receiver, Sender};
-use event::{Event, EventArg};
+use std::sync::mpsc::Sender;
+use event::{Event, EventReceiver};
 use item::{MatchedItem, MatchedItemGroup, MatchedRange};
 use std::cmp::{max, min};
 use orderedvec::OrderedVec;
@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 pub struct Model {
-    rx_cmd: Receiver<(Event, EventArg)>,
+    rx_cmd: EventReceiver,
     items: OrderedVec<Arc<MatchedItem>>, // all items
     selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
@@ -57,7 +57,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(rx_cmd: Receiver<(Event, EventArg)>) -> Self {
+    pub fn new(rx_cmd: EventReceiver) -> Self {
         Model {
             rx_cmd: rx_cmd,
             items: OrderedVec::new(),

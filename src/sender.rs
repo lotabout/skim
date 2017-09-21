@@ -1,18 +1,18 @@
-use std::sync::mpsc::{Receiver, SyncSender};
+use std::sync::mpsc::SyncSender;
 use item::ItemGroup;
-use event::{Event, EventArg};
+use event::{Event, EventArg, EventReceiver};
 use std::thread;
 use std::time::Duration;
 
 // sender is a cache of reader
 pub struct CachedSender {
     items: Vec<ItemGroup>, // cache
-    rx_sender: Receiver<(Event, EventArg)>,
+    rx_sender: EventReceiver,
     tx_item: SyncSender<(Event, EventArg)>,
 }
 
 impl CachedSender {
-    pub fn new(rx_sender: Receiver<(Event, EventArg)>,
+    pub fn new(rx_sender: EventReceiver,
                tx_item: SyncSender<(Event, EventArg)>) -> Self {
         CachedSender{
             items: Vec::new(),
@@ -32,7 +32,7 @@ impl CachedSender {
 
         loop {
             // try to read a bunch of items first
-            if let Ok((ev, arg)) = self.rx_sender.recv_timeout(Duration::from_millis(10)) {
+            if let Ok((ev, arg)) = self.rx_sender.try_recv() {
                 match ev {
                     Event::EvReaderStarted => {
                         reader_stopped = false;
@@ -81,7 +81,7 @@ impl CachedSender {
                     am_i_runing = false;
                 }
             } else {
-                thread::sleep(Duration::from_millis(3));
+                thread::sleep(Duration::from_millis(10));
             }
         }
     }

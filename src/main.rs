@@ -31,7 +31,7 @@ use std::time::Duration;
 use std::env;
 use std::sync::mpsc::{sync_channel, channel, Sender, Receiver};
 use event::Event::*;
-use event::{Event, EventArg};
+use event::{EventSender, EventReceiver};
 use std::mem;
 use std::ptr;
 use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
@@ -184,7 +184,7 @@ fn real_main() -> i32 {
         return 0;
     }
 
-    let (tx_input, rx_input): (Sender<(Event, EventArg)>, Receiver<(Event, EventArg)>) = channel();
+    let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
     //------------------------------------------------------------------------------
     // register terminal resize event, `pthread_sigmask` should be run before any thread.
     let mut sigset = unsafe {mem::uninitialized()};
