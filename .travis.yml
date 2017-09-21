@@ -20,12 +20,14 @@ before_install:
   - export PATH="$PATH:$HOME/.cargo/bin"
 
   - sudo add-apt-repository -y ppa:jonathonf/python-3.6
+  - sudo add-apt-repository -y ppa:pi-rho/dev
   - sudo apt-get update
   - sudo apt-get -y install python3.6
   - python3.6 -V
-
-install:
- - sudo apt-get install -y tmux zsh
+  - sudo apt-get install -y python-software-properties software-properties-common
+  - sudo apt-get install -y tmux=2.0-1~ppa1~t
+  - tmux -V
+  - sudo apt-get install -y zsh
 
 script:
   - cargo build --release --verbose
