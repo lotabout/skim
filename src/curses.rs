@@ -13,10 +13,9 @@ use std::cmp::{min, max};
 use termion::{color, style};
 use std::fmt;
 use unicode_width::UnicodeWidthChar;
-use std::fs::{File, OpenOptions};
-use std::os::unix::io::{FromRawFd, IntoRawFd, RawFd};
+use std::fs::OpenOptions;
+use std::os::unix::io::{IntoRawFd, RawFd};
 use libc;
-use regex::Regex;
 use clap::ArgMatches;
 
 pub static COLOR_NORMAL:        u16 = 0;
@@ -40,8 +39,6 @@ lazy_static! {
 
     // COLOR_MAP is used to store ((fg <<8 ) | bg) -> attr_t, used to handle ANSI code
     static ref COLOR_MAP: RwLock<HashMap<String, attr_t>> = RwLock::new(HashMap::new());
-
-    static ref RE_ANSI_COLOR: Regex = Regex::new(r"\x1b\[[0-9;]*m").unwrap();
 }
 
 // register the color as color pair
@@ -364,13 +361,13 @@ impl Window {
         }
     }
 
-    pub fn cprint(&mut self, text: &str, pair: u16, is_bold: bool) {
+    pub fn cprint(&mut self, text: &str, pair: u16, _is_bold: bool) {
         self.attron(pair);
         self.printw(text);
         self.attroff(pair);
     }
 
-    pub fn caddch(&mut self, ch: char, pair: u16, is_bold: bool) {
+    pub fn caddch(&mut self, ch: char, pair: u16, _is_bold: bool) {
         self.attron(pair);
         self.add_char(ch);
         self.attroff(pair);
@@ -517,9 +514,6 @@ pub struct Curses {
     margin_left: Margin,
     margin_right: Margin,
 
-    current_y: u16,
-    current_x: u16,
-
     // preview window status
     preview_direction: Direction,
     preview_size: Margin,
@@ -538,7 +532,7 @@ const CURSES_BUF_SIZE: usize = 100 * 1024;
 
 impl Curses {
     pub fn new(options: &ArgMatches) -> Self {
-        ColorTheme::init_from_options(&options);
+        ColorTheme::init_from_options(options);
 
         // parse the option of window height of skim
 
@@ -584,7 +578,7 @@ impl Curses {
                 Margin::Percent(p) => max(p*max_y/100, min_height),
                 Margin::Fixed(rows) => rows,
             };
-            if y + height >= max_y {- (height as i32)} else {y as i32}
+            if y + height >= max_y {- i32::from(height)} else {i32::from(y)}
         };
 
         // parse options for margin
@@ -607,8 +601,6 @@ impl Curses {
             margin_bottom,
             margin_left,
             margin_right,
-            current_y: 0,
-            current_x: 0,
 
             preview_direction,
             preview_size,
@@ -656,7 +648,7 @@ impl Curses {
     }
 
     fn parse_margin_string(margin: &str) -> Margin {
-        if margin.ends_with("%") {
+        if margin.ends_with('%') {
             Margin::Percent(min(100, margin[0..margin.len()-1].parse::<u16>().unwrap_or(100)))
         } else {
             Margin::Fixed(margin.parse::<u16>().unwrap_or(0))
@@ -665,7 +657,7 @@ impl Curses {
 
     pub fn parse_margin(margin_option: &str) -> (Margin, Margin, Margin, Margin) {
         let margins = margin_option
-            .split(",")
+            .split(',')
             .collect::<Vec<&str>>();
 
         match margins.len() {
@@ -698,7 +690,7 @@ impl Curses {
     // -> (direction, size, wrap, shown)
     fn parse_preview(preview_option: &str) -> (Direction, Margin, bool, bool) {
         let options = preview_option
-            .split(":")
+            .split(':')
             .collect::<Vec<&str>>();
 
         let mut direction = Direction::Right;
@@ -708,7 +700,7 @@ impl Curses {
 
         for option in options {
             // mistake
-            if option.len() <= 0 {
+            if option.is_empty() {
                 continue;
             }
 
@@ -740,7 +732,7 @@ impl Curses {
         let start = if self.start_y >= 0 {
             self.start_y
         } else {
-            max_y as i32 + self.start_y
+            i32::from(max_y) + self.start_y
         };
 
         let start = min(max_y-height, max(0, start as u16));
@@ -850,7 +842,7 @@ impl Curses {
     }
 
     pub fn refresh(&mut self) {
-        let mut term = self.term.as_mut().unwrap();
+        let term = self.term.as_mut().unwrap();
         self.win_preview.write_to_term(term);
         self.win_main.write_to_term(term);
         term.flush().unwrap();
@@ -925,7 +917,7 @@ impl ColorTheme {
     pub fn init_from_options(options: &ArgMatches) {
         // register
         let theme = if let Some(color) = options.value_of("color") {
-            ColorTheme::from_options(&color)
+            ColorTheme::from_options(color)
         } else {
             ColorTheme::dark256()
         };

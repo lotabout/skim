@@ -7,8 +7,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use unicode_width::UnicodeWidthChar;
 use curses::*;
-use std::io::Read;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::error::Error;
 use ansi::ANSIParser;
 use std::default::Default;
@@ -110,7 +109,7 @@ impl Model {
 
         if let Some(delimiter) = options.value_of("delimiter") {
             self.delimiter = Regex::new(delimiter)
-                .unwrap_or(Regex::new(r"[ \t\n]+").unwrap());
+                .unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
         }
     }
 
@@ -161,7 +160,8 @@ impl Model {
                             let diff = now.duration_since(last_refresh);
 
                             // update the screen
-                            if num_processed & 0xFFF == 0 && diff > *REFRESH_DURATION {
+                            // num_processed % 4096 == 0
+                            if num_processed.trailing_zeros() >= 12 && diff > *REFRESH_DURATION {
                                 self.act_redraw_items_and_status(&mut curses);
                                 last_refresh = now;
                             }
@@ -255,24 +255,24 @@ impl Model {
                     }
                     Event::EvActPageDown => {
                         //debug!("model:redraw_items_and_status");
-                        let height = 1- (self.height as i32);
+                        let height = 1- i32::from(self.height);
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageUp => {
                         //debug!("model:redraw_items_and_status");
-                        let height = (self.height as i32) - 1;
+                        let height = i32::from(self.height) - 1;
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActScrollLeft => {
                         //debug!("model:redraw_items_and_status");
-                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(-1)));
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(-1)));
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActScrollRight => {
                         //debug!("model:redraw_items_and_status");
-                        self.act_scroll(*arg.downcast::<i32>().unwrap_or(Box::new(1)));
+                        self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(1)));
                         self.act_redraw_items_and_status(&mut curses);
                     }
 
@@ -584,7 +584,7 @@ impl Model {
             if range == "" {
                 format!("'{}'", text)
             } else {
-                format!("'{}'", get_string_by_range(&self.delimiter, &text, range).unwrap_or(""))
+                format!("'{}'", get_string_by_range(&self.delimiter, text, range).unwrap_or(""))
             }
         })
     }
@@ -612,7 +612,7 @@ impl Model {
         let mut item_cursor = self.item_cursor as i32;
         let item_len = self.items.len() as i32;
 
-        let height = self.height as i32;
+        let height = i32::from(self.height);
 
         line_cursor += diff;
         if line_cursor >= height {
@@ -632,7 +632,7 @@ impl Model {
     }
 
     pub fn act_toggle(&mut self) {
-        if !self.multi_selection || self.items.len() <= 0 {return;}
+        if !self.multi_selection || self.items.is_empty() {return;}
 
         let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
         let index = current_item.item.get_full_index();
@@ -822,15 +822,13 @@ impl LinePrinter {
         assert!(self.current >= 0);
         let current = self.current as usize;
 
-        if current < self.start {
+        if current < self.start || current >= self.end {
             // pass if it is hidden
         } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
             // print left ".."
             for _ in 0..min(w, current - self.start + 1) {
                 self.caddch(curses, '.', color, is_bold, skip);
             }
-        } else if current >= self.end {
-            // overflow the line
         } else if self.end - current <= 2 && (self.text_width >= self.end) {
             // print right ".."
             for _ in 0..min(w, self.end - current) {
@@ -887,7 +885,7 @@ fn reshape_string(text: &[char],
                   match_start: usize,
                   match_end: usize,
                   tabstop: usize) -> (usize, usize) {
-    if text.len() <= 0 {
+    if text.is_empty() {
         return (0, 0);
     }
 

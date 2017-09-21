@@ -17,8 +17,8 @@ path = "src/main.rs"
 [dependencies]
 libc = "0.2.20"
 regex = "0.2"
-lazy_static = "0.2.1"
-clippy = {version = "0.0.108", optional = true}
+lazy_static = "0.2.8"
+clippy = {version = "0.0.162", optional = true}
 shlex = "0.1.1"
 utf8parse = "0.1.0"
 unicode-width = "0.1.4"

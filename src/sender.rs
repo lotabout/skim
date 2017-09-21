@@ -73,7 +73,7 @@ impl CachedSender {
             if am_i_runing {
                 // try to send a bunch of items:
                 if index < self.items.len() {
-                    if let Ok(_) = self.tx_item.try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone()))) {
+                    if self.tx_item.try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone()))).is_ok() {
                         index += 1;
                     }
                 } else if reader_stopped {

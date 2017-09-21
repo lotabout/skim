@@ -20,7 +20,7 @@ pub fn get_string_by_field<'a>(delimiter: &Regex, text: &'a str, field: &FieldRa
 
     if let Some((start, stop)) = parse_field_range(field, ranges.len()) {
 
-        let &(begin, _) = ranges.get(start).unwrap();
+        let &(begin, _) = &ranges[start];
         let &(_, end) = ranges.get(stop-1).unwrap_or(&(text.len(), 0));
         Some(&text[begin..end])
     } else {
@@ -43,7 +43,7 @@ pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange
     let mut ret = Vec::new();
     for field in fields {
         if let Some((start, stop)) = parse_field_range(field, ranges.len()) {
-            let &(begin, _) = ranges.get(start).unwrap();
+            let &(begin, _) = &ranges[start];
             let &(end, _) = ranges.get(stop).unwrap_or(&(text.len(), 0));
             let first = (&text[..begin]).chars().count();
             let last = first + (&text[begin..end]).chars().count();
@@ -138,7 +138,7 @@ pub fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRang
     let mut ret = String::new();
     for field in fields {
         if let Some((start, stop)) = parse_field_range(field, ranges.len()) {
-            let &(begin, _) = ranges.get(start).unwrap();
+            let &(begin, _) = &ranges[start];
             let &(end, _) = ranges.get(stop).unwrap_or(&(text.len(), 0));
             ret.push_str(&text[begin..end]);
         }

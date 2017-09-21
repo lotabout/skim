@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::Duration;
 use utf8parse;
-use clap::ArgMatches;
 
 use event::{Event, EventArg, parse_action};
 
@@ -86,9 +85,8 @@ impl Input {
             let vec: Vec<&str> = pair.split(':').collect();
             if vec.len() < 2 {
                 continue;
-            } else {
-                self.bind(vec[0], vec[1], vec.get(2).map(|&string| string.to_string()));
             }
+            self.bind(vec[0], vec[1], vec.get(2).map(|&string| string.to_string()));
         }
     }
 

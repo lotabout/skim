@@ -116,7 +116,7 @@ impl Query {
         let cmd_prompt = self.cmd_prompt.clone();
         let query_prompt = self.query_prompt.clone();
 
-        Box::new(move |mut curses| {
+        Box::new(move |curses| {
             match mode {
                 QueryMode::CMD   => {
                     curses.cprint(&cmd_prompt, COLOR_PROMPT, false);
@@ -141,7 +141,7 @@ impl Query {
     }
 
     fn save_yank(&mut self, mut yank: Vec<char>, reverse: bool) {
-        if yank.len() <= 0 {
+        if yank.is_empty() {
             return;
         }
 
@@ -315,8 +315,8 @@ impl Query {
 
     pub fn act_yank(&mut self) {
         let yank = mem::replace(&mut self.yank, Vec::new());
-        for c in yank.iter() {
-            self.act_add_char(*c);
+        for &c in &yank {
+            self.act_add_char(c);
         }
         let _ = mem::replace(&mut self.yank, yank);
     }

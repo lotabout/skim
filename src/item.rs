@@ -52,7 +52,7 @@ impl<'a> Item {
                matching_fields: &[FieldRange],
                delimiter: &Regex,
                index: (usize, usize)) -> Self {
-        let using_transform_fields = trans_fields.len() > 0;
+        let using_transform_fields = !trans_fields.is_empty();
 
         //        transformed | ANSI             | output
         //------------------------------------------------------
@@ -86,13 +86,13 @@ impl<'a> Item {
             text: text,
             text_lower_chars: Vec::new(),
             ansi_states: states_text,
-            using_transform_fields: trans_fields.len() > 0,
+            using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
             ansi_enabled: ansi_enabled,
         };
 
         let lower_chars: Vec<char> = ret.get_text().to_ascii_lowercase().chars().collect();
-        let matching_ranges = if matching_fields.len() > 0 {
+        let matching_ranges = if !matching_fields.is_empty() {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
             vec![(0, lower_chars.len())]

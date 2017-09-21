@@ -108,7 +108,7 @@ fn main() {
         let t = time::now();
         format!("{},{:03} - {} - {}",
                 time::strftime("%Y-%m-%d %H:%M:%S", &t).unwrap(),
-                t.tm_nsec / 1000_000,
+                t.tm_nsec / 1_000_000,
                 record.level(),
                 record.args()
                )
@@ -134,7 +134,7 @@ fn real_main() -> i32 {
     args.extend(env::var("SKIM_DEFAULT_OPTIONS")
                 .ok()
                 .and_then(|val| shlex::split(&val))
-                .unwrap_or(Vec::new()));
+                .unwrap_or_default());
     for arg in env::args().skip(1) {
         args.push(arg);
     }
@@ -227,9 +227,8 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // query
     let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
-        Ok("") => "find .".to_owned(),
+        Ok("") | Err(_) => "find .".to_owned(),
         Ok(val) => val.to_owned(),
-        Err(_) => "find .".to_owned(),
     };
     let mut query = query::Query::builder()
         .base_cmd(&default_command)
@@ -253,7 +252,7 @@ fn real_main() -> i32 {
     let tx_input_clone = tx_input.clone();
     let mut input = input::Input::new(tx_input_clone);
 
-    let keymaps = options.values_of("bind").map(|x| x.collect::<Vec<_>>()).unwrap_or(Vec::new());
+    let keymaps = options.values_of("bind").map(|x| x.collect::<Vec<_>>()).unwrap_or_default();
     input.parse_keymaps(&keymaps);
     input.parse_expect_keys(options.value_of("expect"));
     thread::spawn(move || {
@@ -423,7 +422,7 @@ fn real_main() -> i32 {
                 // sync with model to quit
 
                 let accept_key = *arg.downcast::<Option<String>>()
-                    .unwrap_or(Box::new(None));
+                    .unwrap_or_else(|_| Box::new(None));
 
                 let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
                 let _ = tx_model.send((EvActAccept, Box::new((accept_key, tx))));

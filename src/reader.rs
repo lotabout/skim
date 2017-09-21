@@ -1,5 +1,3 @@
-extern crate libc;
-
 use std::sync::mpsc::{Receiver, Sender, SyncSender, channel};
 use std::error::Error;
 use item::Item;
@@ -47,7 +45,7 @@ impl ReaderOption {
 
         if let Some(delimiter) = options.value_of("delimiter") {
             self.delimiter = Regex::new(&(".*?".to_string() + delimiter))
-                .unwrap_or(Regex::new(r".*?[\t ]").unwrap());
+                .unwrap_or_else(|_| Regex::new(r".*?[\t ]").unwrap());
         }
 
         if let Some(transform_fields) = options.value_of("with-nth") {
@@ -170,7 +168,7 @@ fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Er
                        .stdout(Stdio::piped())
                        .stderr(Stdio::null())
                        .spawn());
-    let stdout = try!(command.stdout.take().ok_or("command output: unwrap failed".to_owned()));
+    let stdout = try!(command.stdout.take().ok_or_else(|| "command output: unwrap failed".to_owned()));
     Ok((Some(command), Box::new(BufReader::new(stdout))))
 }
 
@@ -261,7 +259,8 @@ fn reader(cmd: &str,
                 debug!("reader:reader: item created. index = {}", index);
                 index += 1;
 
-                if index & 0xFFF == 0 {
+                // % 4096 == 0
+                if index.trailing_zeros() > 12 {
                     let _ = tx_sender.send((Event::EvReaderNewItem, Box::new(mem::replace(&mut item_group, Vec::new()))));
                 }
             }

@@ -59,10 +59,10 @@ impl Matcher {
 
         if options.is_present("tac") {
             let mut ranks = RANK_CRITERION.write().unwrap();
-            for i in 0..ranks.len() {
-                match &ranks[i] {
-                    &RankCriteria::Index => ranks[i] = RankCriteria::NegIndex,
-                    &RankCriteria::NegIndex => ranks[i] = RankCriteria::Index,
+            for rank in ranks.iter_mut() {
+                match *rank {
+                    RankCriteria::Index => *rank = RankCriteria::NegIndex,
+                    RankCriteria::NegIndex => *rank = RankCriteria::Index,
                     _ => {}
                 }
             }
@@ -132,7 +132,7 @@ impl Matcher {
                         let _ = self.tx_result.send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                     }
 
-                    Event::EvReaderStopped => {
+                    Event::EvReaderStopped | Event::EvReaderStarted => {
                         let _ = self.tx_result.send((ev, arg));
                     }
                     Event::EvSenderStopped => {
@@ -142,7 +142,6 @@ impl Matcher {
                         let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
                     }
 
-                    Event::EvReaderStarted => { let _ = self.tx_result.send((ev, arg)); }
 
                     Event::EvMatcherRestart => {
                         num_processed = 0;
@@ -460,7 +459,7 @@ impl OrEngine {
 
 impl MatchEngine for OrEngine {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
-        for engine in self.engines.iter() {
+        for engine in &self.engines {
             let result = engine.match_item(item.clone());
             if result.is_some() {
                 return result;
@@ -518,7 +517,7 @@ impl AndEngine {
         let rank = items[0].rank;
         let item = items[0].item.clone();
         let mut ranges = vec![];
-        for item in items.into_iter() {
+        for item in items {
             match item.matched_range {
                 Some(MatchedRange::Range(start, end)) => {
                     ranges.extend((start..end).into_iter());
@@ -543,7 +542,7 @@ impl MatchEngine for AndEngine {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
         // mock
         let mut results = vec![];
-        for engine in self.engines.iter() {
+        for engine in &self.engines {
             let result = engine.match_item(item.clone());
             if result.is_none() {
                 return None;
@@ -571,7 +570,7 @@ impl EngineFactory {
         match mode {
             MatcherMode::Regex => Box::new(RegexEngine::builder(query).build()),
             MatcherMode::Fuzzy | MatcherMode::Exact => {
-                if query.contains(" ") {
+                if query.contains(' ') {
                     Box::new(AndEngine::builder(query, mode).build())
                 } else {
                     EngineFactory::build_single(query, mode)
