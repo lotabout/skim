@@ -1,8 +1,4 @@
 language: rust
-rust:
-  stable
-
-cache: cargo
 dist: trusty
 sudo: required
 python:
@@ -14,18 +10,18 @@ env:
 matrix:
   include:
   - os: osx
-    rust: nightly
+    rust: stable
     env: TARGET=x86_64-apple-darwin
   - os: linux
-    rust: nightly
+    rust: stable
     env: TARGET=x86_64-unknown-linux-gnu
 
 before_install:
   - export PATH="$PATH:$HOME/.cargo/bin"
 
-  - sudo add-apt-repository ppa:jonathonf/python-3.6
+  - sudo add-apt-repository -y ppa:jonathonf/python-3.6
   - sudo apt-get update
-  - sudo apt-get install python3.6
+  - sudo apt-get -y install python3.6
   - python3.6 -V
 
 install:
