@@ -22,10 +22,10 @@ clippy = {version = "0.0.162", optional = true}
 shlex = "0.1.1"
 utf8parse = "0.1.0"
 unicode-width = "0.1.4"
-termion = "*"
+termion = "1.5.1"
 log = "0.3.8"
 env_logger = "0.4.3"
-time = "*"
+time = "0.1.38"
 clap = "2.26.2"
 
 [features]
