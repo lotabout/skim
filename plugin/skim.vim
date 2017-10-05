@@ -26,6 +26,10 @@ if exists('g:loaded_skim')
 endif
 let g:loaded_skim = 1
 
+if empty($SKIM_DEFAULT_COMMAND)
+    let $SKIM_DEFAULT_COMMAND = "git ls-tree -r --name-only HEAD || rg --files || ag -l -g \"\" || find ."
+endif
+
 let s:is_win = has('win32') || has('win64')
 if s:is_win && &shellslash
   set noshellslash

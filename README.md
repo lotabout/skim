@@ -30,6 +30,9 @@ skim provides a single executable: `sk`, basically anywhere you would want to us
     - [Interactive Mode](#interactive-mode)
     - [Preview Window](#preview-window)
     - [Fields Support](#fields-support)
+- [FAQ](#faq)
+    - [How to ignore files?](#how-to-ignore-files)
+    - [Some files are not shown in vim plugin](#some-files-are-not-shown-in-vim-plugin)
 - [Difference to fzf](#difference-to-fzf)
 - [How to contribute](#how-to-contribute)
 
@@ -375,6 +378,36 @@ Also you can use `--with-nth` to re-arrange the order of fields.
     excluding `end`.
 - `start..end` -- starting from `start`-th field, all the way to `end`-th
     field, excluding `end`.
+
+# FAQ
+
+## How to ignore files?
+
+Skim invoke `find .` to fetch a list of files for filtering. You can override
+that by setting the environment variable `SKIM_DEFAULT_COMMAND`. For example:
+
+```sh
+$ SKIM_DEFAULT_COMMAND="git ls-tree -r --name-only HEAD || rg --files || find ."
+$ sk
+```
+
+You could put it in your `.bashrc` or `.zshrc` if you like it to be default.
+
+## Some files are not shown in vim plugin
+
+If you use the vim plugin and execute the `:SK` command, you might find some
+of your files not shown.
+
+As described in [#3](https://github.com/lotabout/skim/issues/3), in the vim
+plugin, `SKIM_DEFAULT_COMMAND` is set to the command by default:
+
+```
+let $SKIM_DEFAULT_COMMAND = "git ls-tree -r --name-only HEAD || rg --files || ag -l -g \"\" || find ."
+```
+
+That means the files not recognized by git will not shown. Either override the
+default with `let $SKIM_DEFAULT_COMMAND = ''` or find the missing file by
+yourself.
 
 # Difference to fzf
 
