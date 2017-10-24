@@ -486,7 +486,6 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::ESC,   (Event::EvActAbort, None));
     ret.insert(Key::CtrlC, (Event::EvActAbort, None));
     ret.insert(Key::CtrlG, (Event::EvActAbort, None));
-    ret.insert(Key::CtrlQ, (Event::EvActAbort, None));
 
     ret.insert(Key::Enter, (Event::EvActAccept, None));
 
@@ -523,12 +522,10 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
 
     //ret.insert(Key::AltZ,  (Event::EvActIgnore, None));
 
-    ret.insert(Key::CtrlK, (Event::EvActKillLine, None));
     ret.insert(Key::AltD,  (Event::EvActKillWord, None));
     //ret.insert(Key::CtrlN, (Event::EvActNextHistory, None));
     ret.insert(Key::PgDn,  (Event::EvActPageDown, None));
     ret.insert(Key::PgUp,  (Event::EvActPageUp, None));
-    ret.insert(Key::CtrlP, (Event::EvActPreviousHistory, None));
     ret.insert(Key::CtrlR, (Event::EvActRotateMode, None));
     ret.insert(Key::AltH,  (Event::EvActScrollLeft, None));
     ret.insert(Key::AltL,  (Event::EvActScrollRight, None));
