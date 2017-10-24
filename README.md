@@ -146,7 +146,7 @@ Some common used keybindings.
 | Key               | Action                                     |
 |------------------:|--------------------------------------------|
 | Enter             | Accept (select current one and quit)       |
-| ESC/Ctrl-G/Ctrl-Q | Abort                                      |
+| ESC/Ctrl-G        | Abort                                      |
 | Ctrl-P/Up         | Move cursor up                             |
 | Ctrl-N/Down       | Move cursor Down                           |
 | TAB               | Toggle selection and move down (with `-m`) |
@@ -201,7 +201,7 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 
 | Action               | Default key                 |
 |----------------------|-----------------------------|
-| abort                | esc, ctrl-c, ctrl-g, ctrl-q |
+| abort                | esc, ctrl-c, ctrl-g         |
 | accept               | enter                       |
 | backward-char        | left, ctrl-b                |
 | backward-delete-char | ctrl-h, backspace           |
