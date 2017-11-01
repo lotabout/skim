@@ -69,6 +69,10 @@ impl Query {
             self.query_before = query.chars().collect();
         }
 
+        if let Some(cmd_query) = options.value_of("cmd-query") {
+            self.cmd_before = cmd_query.chars().collect();
+        }
+
         if let Some(replstr) = options.value_of("replstr") {
             self.replstr = replstr.to_string();
         }

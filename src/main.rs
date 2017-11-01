@@ -89,6 +89,7 @@ Usage: sk [options]
 
   Scripting
     -q, --query \"\"       specify the initial query
+    --cmd-query \"\"       specify the initial query for interactive mode
     -e, --expect KEYS    comma seperated keys that can be used to complete skim
 
   Environment variables
@@ -159,6 +160,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("cmd").long("cmd").short("cmd").takes_value(true))
         .arg(Arg::with_name("interactive").long("interactive").short("i"))
         .arg(Arg::with_name("query").long("query").short("q").takes_value(true))
+        .arg(Arg::with_name("cmd-query").long("cmd-query").takes_value(true))
         .arg(Arg::with_name("regex").long("regex"))
         .arg(Arg::with_name("delimiter").long("delimiter").short("d").takes_value(true))
         .arg(Arg::with_name("nth").long("nth").short("n").takes_value(true))
