@@ -56,7 +56,7 @@ Usage: sk [options]
     -n, --nth 1,2..5     specify the fields to be matched
     --with-nth 1,2..5    specify the fields to be transformed
     -d, --delimiter \\t  specify the delimiter(in REGEX) for fields
-    --exact              start skim in exact mode
+    -e, --exact          start skim in exact mode
     --regex              use regex instead of fuzzy match
 
   Interface
@@ -90,13 +90,35 @@ Usage: sk [options]
   Scripting
     -q, --query \"\"       specify the initial query
     --cmd-query \"\"       specify the initial query for interactive mode
-    -e, --expect KEYS    comma seperated keys that can be used to complete skim
+    --expect KEYS          comma seperated keys that can be used to complete skim
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
     SKIM_DEFAULT_OPTIONS Default options (e.g. '--ansi --regex')
                          You should not include other environment variables
                          (e.g. '-c \"$HOME/bin/ag\"')
+
+  Reserved (not used for now)
+    --algo=TYPE
+    --literal
+    --no-mouse
+    --cycle
+    --no-hscroll
+    --hscroll-off=COL
+    --filepath-word
+    --jump-labels=CHARS
+    --border
+    --inline-info
+    --header=STR
+    --header-lines=N
+    --tabstop=SPACES
+    --no-bold
+    --history=FILE
+    --history-size=N
+    --print-query
+    --read0
+    --print0
+    --sync
 ";
 
 const REFRESH_DURATION: u64 = 200;
@@ -152,11 +174,11 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("no-multi").long("no-multi"))
         .arg(Arg::with_name("prompt").long("prompt").short("p").takes_value(true).default_value("> "))
         .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c> "))
-        .arg(Arg::with_name("expect").long("expect").short("e").multiple(true) .takes_value(true))
+        .arg(Arg::with_name("expect").long("expect").multiple(true) .takes_value(true))
         .arg(Arg::with_name("tac").long("tac"))
         .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi"))
-        .arg(Arg::with_name("exact").long("exact"))
+        .arg(Arg::with_name("exact").long("exact").short("e"))
         .arg(Arg::with_name("cmd").long("cmd").short("cmd").takes_value(true))
         .arg(Arg::with_name("interactive").long("interactive").short("i"))
         .arg(Arg::with_name("query").long("query").short("q").takes_value(true))
@@ -174,6 +196,27 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("preview").long("preview").takes_value(true))
         .arg(Arg::with_name("preview-window").long("preview-window").takes_value(true).default_value("right:50%"))
         .arg(Arg::with_name("reverse").long("reverse"))
+        .arg(Arg::with_name("algorithm").long("algo").takes_value(true).default_value(""))
+        .arg(Arg::with_name("literal").long("literal"))
+        .arg(Arg::with_name("no-mouse").long("no-mouse"))
+
+        .arg(Arg::with_name("cycle").long("cycle"))
+        .arg(Arg::with_name("no-hscroll").long("no-hscroll"))
+        .arg(Arg::with_name("hscroll-off").long("hscroll-off").takes_value(true).default_value("10"))
+        .arg(Arg::with_name("filepath-word").long("filepath-word"))
+        .arg(Arg::with_name("jump-labels").long("jump-labels").takes_value(true).default_value("abcdefghijklmnopqrstuvwxyz"))
+        .arg(Arg::with_name("border").long("border"))
+        .arg(Arg::with_name("inline-info").long("inline-info"))
+        .arg(Arg::with_name("header").long("header").takes_value(true).default_value(""))
+        .arg(Arg::with_name("header-lines").long("header-lines").takes_value(true).default_value("1"))
+        .arg(Arg::with_name("tabstop").long("tabstop").takes_value(true).default_value("8"))
+        .arg(Arg::with_name("no-bold").long("no-bold"))
+        .arg(Arg::with_name("history").long("history").takes_value(true).default_value(""))
+        .arg(Arg::with_name("history-size").long("history-size").takes_value(true).default_value("500"))
+        .arg(Arg::with_name("print-query").long("print-query"))
+        .arg(Arg::with_name("read0").long("read0"))
+        .arg(Arg::with_name("print0").long("print0"))
+        .arg(Arg::with_name("sync").long("sync"))
         .get_matches_from(args);
 
     if options.is_present("help") {
