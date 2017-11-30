@@ -485,6 +485,7 @@ impl Model {
         let text: Vec<_> = item.get_text().chars().collect();
         let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
 
+        debug!("model:draw_item: shfit: {:?}, width:{:?}, full_width: {:?}", shift, self.width, full_width);
         let mut printer = LinePrinter::builder()
             .tabstop(self.tabstop)
             .container_width(self.width as usize)
@@ -856,11 +857,10 @@ impl LinePrinter {
 
     fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
         // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
-
         // the hidden chracter
+
         let w = ch.width_cjk().unwrap_or(2);
 
-        self.current += w as i32;
         assert!(self.current >= 0);
         let current = self.current as usize;
 
@@ -871,7 +871,7 @@ impl LinePrinter {
             for _ in 0..min(w, current - self.start + 1) {
                 self.caddch(curses, '.', color, is_bold, skip);
             }
-        } else if self.end - current <= 2 && (self.text_width >= self.end) {
+        } else if self.end - current <= 2 && (self.text_width > self.end) {
             // print right ".."
             for _ in 0..min(w, self.end - current) {
                 self.caddch(curses, '.', color, is_bold, skip);
@@ -879,6 +879,8 @@ impl LinePrinter {
         } else {
             self.caddch(curses, ch, color, is_bold, skip);
         }
+
+        self.current += w as i32;
     }
 
     pub fn print_char(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
