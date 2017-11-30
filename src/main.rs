@@ -70,6 +70,8 @@ Usage: sk [options]
     --ansi               parse ANSI color codes for input strings
     --color [BASE][,COLOR:ANSI]
                          change color theme
+    --no-hscroll         Disable horizontal scroll
+
   Layout
     --reverse            Reverse orientation
     --height=HEIGHT      Height of skim's window (--height 40%)
@@ -107,7 +109,6 @@ Usage: sk [options]
     --literal
     --no-mouse
     --cycle
-    --no-hscroll
     --hscroll-off=COL
     --filepath-word
     --jump-labels=CHARS

@@ -59,6 +59,7 @@ pub struct Model {
     output_ending: &'static str,
     print_query: bool,
     print_cmd: bool,
+    no_hscroll: bool,
 }
 
 impl Model {
@@ -92,6 +93,7 @@ impl Model {
             output_ending: "\n",
             print_query: false,
             print_cmd: false,
+            no_hscroll: false,
         }
     }
 
@@ -131,6 +133,10 @@ impl Model {
 
         if options.is_present("print-cmd") {
             self.print_cmd = true;
+        }
+
+        if options.is_present("no-hscroll") {
+            self.no_hscroll = true;
         }
     }
 
@@ -477,7 +483,7 @@ impl Model {
         let mut printer = LinePrinter::builder()
             .tabstop(self.tabstop)
             .container_width(self.width as usize)
-            .shift(shift)
+            .shift(if self.no_hscroll {0} else {shift})
             .text_width(full_width)
             .hscroll_offset(self.hscroll_offset)
             .build();
