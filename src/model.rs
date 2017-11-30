@@ -36,11 +36,9 @@ pub struct Model {
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
-    reverse: bool,
     height: u16,
     width: u16,
 
-    multi_selection: bool,
     pub tabstop: usize,
 
     reader_stopped: bool,
@@ -50,10 +48,15 @@ pub struct Model {
     matcher_mode: String,
     timer: Instant,
 
-    // preview related
-    preview_cmd: Option<String>,
     preview_hidden: bool,
+
+    // Options
+
+    multi_selection: bool,
+    reverse: bool,
+    preview_cmd: Option<String>,
     delimiter: Regex,
+    output_ending: &'static str,
 }
 
 impl Model {
@@ -68,11 +71,9 @@ impl Model {
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
-            reverse: false,
             height: 0,
             width: 0,
 
-            multi_selection: false,
             tabstop: 8,
 
             reader_stopped: false,
@@ -80,9 +81,13 @@ impl Model {
             timer: Instant::now(),
             matcher_mode: "".to_string(),
 
-            preview_cmd: None,
             preview_hidden: true,
+
+            multi_selection: false,
+            reverse: false,
+            preview_cmd: None,
             delimiter: Regex::new(r"[ \t\n]+").unwrap(),
+            output_ending: "\n",
         }
     }
 
@@ -110,6 +115,10 @@ impl Model {
         if let Some(delimiter) = options.value_of("delimiter") {
             self.delimiter = Regex::new(delimiter)
                 .unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
+        }
+
+        if options.is_present("print0") {
+            self.output_ending = "\0";
         }
     }
 
@@ -199,7 +208,7 @@ impl Model {
                         // output the expect key
                         let (accept_key, tx_ack): (Option<String>, Sender<usize>) = *arg.downcast().unwrap();
                         accept_key.map(|key| {
-                            println!("{}", key);
+                            print!("{}{}", key, self.output_ending);
                         });
 
                         self.act_output();
@@ -676,7 +685,7 @@ impl Model {
         let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
         output.sort_by_key(|k| k.0);
         for (_, item) in output {
-            println!("{}", item.item.get_output_text());
+            print!("{}{}", item.item.get_output_text(), self.output_ending);
         }
     }
 
