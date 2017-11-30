@@ -90,8 +90,9 @@ Usage: sk [options]
   Scripting
     -q, --query \"\"       specify the initial query
     --cmd-query \"\"       specify the initial query for interactive mode
-    --expect KEYS          comma seperated keys that can be used to complete skim
-    --print0               Print output delimited by ASCII NUL(\\0) characters
+    --expect KEYS        comma seperated keys that can be used to complete skim
+    --read0              Read input delimited by ASCII NUL(\\0) characters
+    --print0             Print output delimited by ASCII NUL(\\0) characters
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -117,7 +118,6 @@ Usage: sk [options]
     --history=FILE
     --history-size=N
     --print-query
-    --read0
     --sync
 ";
 

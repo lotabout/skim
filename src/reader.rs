@@ -24,6 +24,7 @@ struct ReaderOption {
     pub matching_fields: Vec<FieldRange>,
     pub delimiter: Regex,
     pub replace_str: String,
+    pub line_ending: u8,
 }
 
 impl ReaderOption {
@@ -35,6 +36,7 @@ impl ReaderOption {
             matching_fields: Vec::new(),
             delimiter: Regex::new(r".*?\t").unwrap(),
             replace_str: "{}".to_string(),
+            line_ending: b'\n',
         }
     }
 
@@ -61,6 +63,10 @@ impl ReaderOption {
                 .filter_map(|string| {
                     parse_range(string)
                 }).collect();
+        }
+
+        if options.is_present("read0") {
+            self.line_ending = b'\0';
         }
     }
 }
@@ -236,22 +242,26 @@ fn reader(cmd: &str,
 
     let mut index = 0;
     let mut item_group = Vec::new();
+    let mut buffer = Vec::with_capacity(100);
     loop {
+        buffer.clear();
         // start reading
-        let mut input = String::new();
-        match source.read_line(&mut input) {
+        match source.read_until(opt.line_ending, &mut buffer) {
             Ok(n) => {
                 if n == 0 { break; }
                 debug!("reader:reader: read a new line. index = {}", index);
 
-                if input.ends_with('\n') {
-                    input.pop();
-                    if input.ends_with('\r') {
-                        input.pop();
-                    }
+                if buffer.ends_with(&[b'\n']) {
+                    buffer.pop();
+                } else if buffer.ends_with(&[b'\r', b'\n']) {
+                    buffer.pop();
+                    buffer.pop();
+                } else if buffer.ends_with(&[b'\0']) {
+                    buffer.pop();
                 }
+
                 debug!("reader:reader: create new item. index = {}", index);
-                let item = Item::new(input,
+                let item = Item::new(String::from_utf8_lossy(&buffer),
                                      opt.use_ansi_color,
                                      &opt.transform_fields,
                                      &opt.matching_fields,
