@@ -25,7 +25,7 @@ def now_mills():
 def wait(func):
     since = now_mills()
     while now_mills() - since < DEFAULT_TIMEOUT:
-        time.sleep(0.005)
+        time.sleep(0.01)
         ret = func()
         if ret is not None and ret:
             return
@@ -350,6 +350,87 @@ class TestSkim(TestBase):
         # CTRL-M
         self.tmux.send_keys(Ctrl('m'))
         self.tmux.until(lambda lines: not lines[-1].startswith('>'))
+
+    def test_read0(self):
+        self.tmux.send_keys(f"find . | {self.sk()}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        orig = self.readonce().strip()
+
+        self.tmux.send_keys(f"find . -print0 | {self.sk('--read0')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.assertEqual(orig, self.readonce().strip())
+
+    def test_print0(self):
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-m', '--print0')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('BTab'), Key('Enter'))
+
+        lines = self.readonce().strip()
+        self.assertEqual(lines, 'a\0b\0')
+
+    def test_print_query(self):
+        self.tmux.send_keys(f"seq 1 1000 | {self.sk('-q 10', '--print-query')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        lines = self.readonce().strip()
+        self.assertEqual(lines, '10\n10')
+
+    def test_print_cmd(self):
+        self.tmux.send_keys(f"seq 1 1000 | {self.sk('--cmd-query 10', '--print-cmd')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        lines = self.readonce().strip()
+        self.assertEqual(lines, '10\n1')
+
+    def test_print_cmd_and_query(self):
+        self.tmux.send_keys(f"seq 1 1000 | {self.sk('-q 10', '--cmd-query cmd', '--print-cmd', '--print-query')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        lines = self.readonce().strip()
+        self.assertEqual(lines, '10\ncmd\n10')
+
+    def test_hscroll(self):
+        self.tmux.send_keys(f"echo {'a'*1000}b | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].endswith('b'))
+
+    def test_no_hscroll(self):
+        self.tmux.send_keys(f"echo {'a'*1000}b | {self.sk('-q b', '--no-hscroll')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+
+    def test_tabstop(self):
+        self.tmux.send_keys(f"echo -e 'a\\tb' | {self.sk()}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a       b'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\tb' | {self.sk('--tabstop 1')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a b'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'aa\\tb' | {self.sk('--tabstop 2')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aa  b'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'aa\\tb' | {self.sk('--tabstop 3')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aa b'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\tb' | {self.sk('--tabstop 4')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a   b'))
+        self.tmux.send_keys(Key('Enter'))
 
 if __name__ == '__main__':
     unittest.main()
