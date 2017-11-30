@@ -93,6 +93,8 @@ Usage: sk [options]
     --expect KEYS        comma seperated keys that can be used to complete skim
     --read0              Read input delimited by ASCII NUL(\\0) characters
     --print0             Print output delimited by ASCII NUL(\\0) characters
+    --print-query        Print query as the first line
+    --print-cmd          Print command query as the first line (after --print-query)
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -117,7 +119,6 @@ Usage: sk [options]
     --no-bold
     --history=FILE
     --history-size=N
-    --print-query
     --sync
 ";
 
@@ -214,6 +215,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("history").long("history").takes_value(true).default_value(""))
         .arg(Arg::with_name("history-size").long("history-size").takes_value(true).default_value("500"))
         .arg(Arg::with_name("print-query").long("print-query"))
+        .arg(Arg::with_name("print-cmd").long("print-cmd"))
         .arg(Arg::with_name("read0").long("read0"))
         .arg(Arg::with_name("print0").long("print0"))
         .arg(Arg::with_name("sync").long("sync"))
@@ -470,7 +472,7 @@ fn real_main() -> i32 {
                     .unwrap_or_else(|_| Box::new(None));
 
                 let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
-                let _ = tx_model.send((EvActAccept, Box::new((accept_key, tx))));
+                let _ = tx_model.send((EvActAccept, Box::new((accept_key, query.get_query(), query.get_cmd_query(), tx))));
                 let selected = rx.recv().unwrap_or(0);
                 exit_code = if selected > 0 {0} else {1};
                 break;

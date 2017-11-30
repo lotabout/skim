@@ -57,6 +57,8 @@ pub struct Model {
     preview_cmd: Option<String>,
     delimiter: Regex,
     output_ending: &'static str,
+    print_query: bool,
+    print_cmd: bool,
 }
 
 impl Model {
@@ -88,6 +90,8 @@ impl Model {
             preview_cmd: None,
             delimiter: Regex::new(r"[ \t\n]+").unwrap(),
             output_ending: "\n",
+            print_query: false,
+            print_cmd: false,
         }
     }
 
@@ -119,6 +123,14 @@ impl Model {
 
         if options.is_present("print0") {
             self.output_ending = "\0";
+        }
+
+        if options.is_present("print-query") {
+            self.print_query = true;
+        }
+
+        if options.is_present("print-cmd") {
+            self.print_cmd = true;
         }
     }
 
@@ -206,7 +218,17 @@ impl Model {
                         curses.close();
 
                         // output the expect key
-                        let (accept_key, tx_ack): (Option<String>, Sender<usize>) = *arg.downcast().unwrap();
+                        let (accept_key, query, cmd, tx_ack): (Option<String>, String, String, Sender<usize>) = *arg.downcast().unwrap();
+
+                        // output query
+                        if self.print_query {
+                            print!("{}{}", query, self.output_ending);
+                        }
+
+                        if self.print_cmd {
+                            print!("{}{}", cmd, self.output_ending);
+                        }
+
                         accept_key.map(|key| {
                             print!("{}{}", key, self.output_ending);
                         });

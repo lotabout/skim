@@ -99,6 +99,10 @@ impl Query {
         self.base_cmd.replace(&self.replstr, &arg)
     }
 
+    pub fn get_cmd_query(&self) -> String {
+        self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect()
+    }
+
     fn get_before(&self) -> String {
         match self.mode {
             QueryMode::CMD   => self.cmd_before.iter().cloned().collect(),
