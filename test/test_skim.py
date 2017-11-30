@@ -398,26 +398,34 @@ class TestSkim(TestBase):
 
     def test_hscroll(self):
         # XXXXXXXXXXXXXXXXX..
-        self.tmux.send_keys(f"echo b{'a'*1000} | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.send_keys(f"b{'a'*1000}", Key('Enter'))
+        self.tmux.send_keys(f"EOF", Key('Enter'))
         self.tmux.until(lambda lines: lines[-1].startswith('>'))
         self.tmux.until(lambda lines: lines[-3].endswith('..'))
         self.tmux.send_keys(Key('Enter'))
 
         # ..XXXXXXXXXXXXXXXXXM
-        self.tmux.send_keys(f"echo {'a'*1000}b | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.send_keys(f"{'a'*1000}b", Key('Enter'))
+        self.tmux.send_keys(f"EOF", Key('Enter'))
         self.tmux.until(lambda lines: lines[-1].startswith('>'))
         self.tmux.until(lambda lines: lines[-3].endswith('b'))
         self.tmux.send_keys(Key('Enter'))
 
         # ..XXXXXXXMXXXXXXX..
-        self.tmux.send_keys(f"echo {'a'*1000}b{'a'*1000} | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b')}", Key('Enter'))
+        self.tmux.send_keys(f"{'a'*1000}b{'a'*1000}", Key('Enter'))
+        self.tmux.send_keys(f"EOF", Key('Enter'))
         self.tmux.until(lambda lines: lines[-1].startswith('>'))
         self.tmux.until(lambda lines: lines[-3].startswith('> ..'))
         self.tmux.until(lambda lines: lines[-3].endswith('..'))
         self.tmux.send_keys(Key('Enter'))
 
     def test_no_hscroll(self):
-        self.tmux.send_keys(f"echo {'a'*1000}b | {self.sk('-q b', '--no-hscroll')}", Key('Enter'))
+        self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b', '--no-hscroll')}", Key('Enter'))
+        self.tmux.send_keys(f"{'a'*1000}b", Key('Enter'))
+        self.tmux.send_keys(f"EOF", Key('Enter'))
         self.tmux.until(lambda lines: lines[-1].startswith('>'))
         self.tmux.until(lambda lines: lines[-3].startswith('> a'))
         self.tmux.send_keys(Key('Enter'))
