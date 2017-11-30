@@ -105,6 +105,7 @@ Usage: sk [options]
                          (e.g. '-c \"$HOME/bin/ag\"')
 
   Reserved (not used for now)
+    --extended
     --algo=TYPE
     --literal
     --no-mouse
@@ -220,6 +221,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("read0").long("read0"))
         .arg(Arg::with_name("print0").long("print0"))
         .arg(Arg::with_name("sync").long("sync"))
+        .arg(Arg::with_name("extended").long("extended").short("x"))
         .get_matches_from(args);
 
     if options.is_present("help") {
