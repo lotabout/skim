@@ -67,7 +67,6 @@ Usage: sk [options]
     -c, --cmd ag         command to invoke dynamically
     -I replstr           replace `replstr` with the selected item
     -i, --interactive    Start skim in interactive(command) mode
-    --ansi               parse ANSI color codes for input strings
     --color [BASE][,COLOR:ANSI]
                          change color theme
     --no-hscroll         Disable horizontal scroll
@@ -82,6 +81,10 @@ Usage: sk [options]
                          e.g. (sk --margin 1,10%)
     -p, --prompt '> '    prompt string for query mode
     --cmd-prompt '> '    prompt string for command mode
+
+  Display
+    --ansi               parse ANSI color codes for input strings
+    --tabstop=SPACES     Number of spaces for a tab character (default: 8)
 
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
@@ -117,7 +120,6 @@ Usage: sk [options]
     --inline-info
     --header=STR
     --header-lines=N
-    --tabstop=SPACES
     --no-bold
     --history=FILE
     --history-size=N
@@ -177,7 +179,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("no-multi").long("no-multi"))
         .arg(Arg::with_name("prompt").long("prompt").short("p").takes_value(true).default_value("> "))
         .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c> "))
-        .arg(Arg::with_name("expect").long("expect").multiple(true) .takes_value(true))
+        .arg(Arg::with_name("expect").long("expect").multiple(true).takes_value(true))
         .arg(Arg::with_name("tac").long("tac"))
         .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi"))

@@ -138,6 +138,11 @@ impl Model {
         if options.is_present("no-hscroll") {
             self.no_hscroll = true;
         }
+
+        if let Some(tabstop_str) = options.value_of("tabstop") {
+            let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
+            self.tabstop = max(1, tabstop);
+        }
     }
 
     pub fn run(&mut self, mut curses: Curses) {
