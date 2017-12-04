@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.3.1: 2017-12-04
+Support more options, and reserve several others. The purpose is to reuse
+`fzf.vim` as much as possible.
+- `--print0`: use NUL(\0) as field separator for output.
+- `--read0`: read input delimited by NUL(\0) characters
+- `--tabstop`: allow customizing tabstop (default to 8).
+- `--no-hscroll`: disable hscroll on match.
+- reserve several other options, skim will do nothing on them instead of throwing errors.
+
 ## 0.3.0: 2017-09-21
 This release starts from adding `--height` featuren, ends up a big change in
 the code base.
