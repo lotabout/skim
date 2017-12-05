@@ -6,6 +6,7 @@
 use std::cmp::max;
 use std::cell::RefCell;
 use regex::Regex;
+use std::ascii::AsciiExt;
 
 const BONUS_UPPER_MATCH: i64 = 10;
 const BONUS_ADJACENCY: i64 = 10;
@@ -73,9 +74,7 @@ impl MatchingStatus {
     }
 }
 
-pub fn fuzzy_match(choice: &[char],
-                   pattern: &[char],
-                   pattern_lower: &[char]) -> Option<(i64, Vec<usize>)>{
+pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>)>{
     if pattern.is_empty() {
         return Some((0, Vec::new()));
     }
@@ -84,11 +83,11 @@ pub fn fuzzy_match(choice: &[char],
     let mut picked = vec![];
 
     let mut prev_matched_idx = -1; // to ensure that the pushed char are able to match the pattern
-    for (pattern_idx, &pattern_char) in pattern_lower.iter().enumerate() {
+    for (pattern_idx, pattern_char) in pattern.iter().map(|c| c.to_ascii_lowercase()).enumerate() {
         let vec_cell = RefCell::new(vec![]);
         {
             let mut vec = vec_cell.borrow_mut();
-            for (idx, &ch) in choice.iter().enumerate() {
+            for (idx, ch) in choice.iter().map(|c| c.to_ascii_lowercase()).enumerate() {
                 if ch == pattern_char && (idx as i64) > prev_matched_idx {
                     let score = fuzzy_score(choice, idx, pattern, pattern_idx);
                     vec.push(MatchingStatus{idx: idx, score: score, final_score: score, adj_num: 1, back_ref: 0});

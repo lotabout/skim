@@ -239,7 +239,7 @@ impl MatchEngine for RegexEngine {
                 break;
             }
 
-            let source: String = item.get_lower_chars()[start .. end].iter().cloned().collect();
+            let source: String = item.get_chars()[start .. end].iter().cloned().collect();
             matched_result = score::regex_match(&source, &self.query_regex)
                 .map(|(s, e)| (s+start, e+start));
 
@@ -273,7 +273,6 @@ impl MatchEngine for RegexEngine {
 struct FuzzyEngine {
     query: String,
     query_chars: Vec<char>,
-    query_lower_chars: Vec<char>,
 }
 
 impl FuzzyEngine {
@@ -281,7 +280,6 @@ impl FuzzyEngine {
         FuzzyEngine {
             query: query.to_string(),
             query_chars: query.chars().collect(),
-            query_lower_chars: query.to_lowercase().chars().collect(),
         }
     }
 
@@ -295,9 +293,9 @@ impl MatchEngine for FuzzyEngine {
         // iterate over all matching fields:
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
-            let source = &item.get_lower_chars()[start .. end];
+            let source = &item.get_chars()[start .. end];
 
-            matched_result = score::fuzzy_match(source, &self.query_chars, &self.query_lower_chars)
+            matched_result = score::fuzzy_match(source, &self.query_chars)
                 .map(|(s, vec)| {
                     if start != 0 {
                         (s, vec.iter().map(|x| x + start).collect())
@@ -339,7 +337,6 @@ impl MatchEngine for FuzzyEngine {
 struct ExactEngine {
     query: String,
     query_chars: Vec<char>,
-    query_lower_chars: Vec<char>,
     algorithm: Algorithm,
 }
 
@@ -348,7 +345,6 @@ impl ExactEngine {
         ExactEngine {
             query: query.to_string(),
             query_chars: query.chars().collect(),
-            query_lower_chars: query.to_lowercase().chars().collect(),
             algorithm: algo,
         }
     }

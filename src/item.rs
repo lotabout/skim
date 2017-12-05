@@ -5,7 +5,6 @@ use std::cmp::Ordering;
 use ansi::ANSIParser;
 use regex::Regex;
 use std::borrow::Cow;
-use std::ascii::AsciiExt;
 use std::sync::Arc;
 use curses::attr_t;
 use std::default::Default;
@@ -34,7 +33,7 @@ pub struct Item {
     text: String,
 
     // cache of the lower case version of text. To improve speed
-    text_lower_chars: Vec<char>,
+    chars: Vec<char>,
 
     // the ansi state (color) of the text
     ansi_states: Vec<(usize, attr_t)>,
@@ -84,21 +83,21 @@ impl<'a> Item {
             index: index,
             output_text: orig_text.into_owned(),
             text: text,
-            text_lower_chars: Vec::new(),
+            chars: Vec::new(),
             ansi_states: states_text,
             using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
             ansi_enabled: ansi_enabled,
         };
 
-        let lower_chars: Vec<char> = ret.get_text().to_ascii_lowercase().chars().collect();
+        let lower_chars: Vec<char> = ret.get_text().chars().collect();
         let matching_ranges = if !matching_fields.is_empty() {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
             vec![(0, lower_chars.len())]
         };
 
-        ret.text_lower_chars = lower_chars;
+        ret.chars = lower_chars;
         ret.matching_ranges = matching_ranges;
         ret
     }
@@ -123,8 +122,8 @@ impl<'a> Item {
         }
     }
 
-    pub fn get_lower_chars(&self) -> &[char] {
-        &self.text_lower_chars
+    pub fn get_chars(&self) -> &[char] {
+        &self.chars
     }
 
     pub fn get_ansi_states(&self) -> &Vec<(usize, attr_t)> {
@@ -150,7 +149,7 @@ impl Clone for Item {
             index: self.index,
             output_text: self.output_text.clone(),
             text: self.text.clone(),
-            text_lower_chars: self.text_lower_chars.clone(),
+            chars: self.chars.clone(),
             ansi_states: self.ansi_states.clone(),
             using_transform_fields: self.using_transform_fields,
             matching_ranges: self.matching_ranges.clone(),
