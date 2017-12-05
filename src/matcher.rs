@@ -47,7 +47,7 @@ impl Matcher {
 
     pub fn parse_options(&mut self, options: &ArgMatches) {
 
-        if let Some(tie_breaker) = options.value_of("tiebreak") {
+        if let Some(tie_breaker) = options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")) {
             let mut vec = Vec::new();
             for criteria in tie_breaker.split(',') {
                 if let Some(c) = parse_criteria(criteria) {

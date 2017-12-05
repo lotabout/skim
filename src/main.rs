@@ -181,7 +181,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").takes_value(true).default_value("c> "))
         .arg(Arg::with_name("expect").long("expect").multiple(true).takes_value(true))
         .arg(Arg::with_name("tac").long("tac"))
-        .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").takes_value(true))
+        .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").multiple(true).takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi"))
         .arg(Arg::with_name("exact").long("exact").short("e"))
         .arg(Arg::with_name("cmd").long("cmd").short("cmd").takes_value(true))
@@ -306,7 +306,9 @@ fn real_main() -> i32 {
 
     let keymaps = options.values_of("bind").map(|x| x.collect::<Vec<_>>()).unwrap_or_default();
     input.parse_keymaps(&keymaps);
-    input.parse_expect_keys(options.value_of("expect"));
+
+    let expect_keys = options.values_of("expect").map(|x| x.collect::<Vec<_>>().join(","));
+    input.parse_expect_keys(expect_keys.as_ref().map(|x| &**x));
     thread::spawn(move || {
         input.run();
     });
