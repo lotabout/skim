@@ -1,7 +1,7 @@
 /// score is responsible for calculating the scores of the similarity between
 /// the query and the choice.
 ///
-/// It is modeled after https://github.com/felipesere/icepick.git
+/// It is modeled after <https://github.com/felipesere/icepick.git>
 
 use std::cmp::max;
 use std::cell::RefCell;

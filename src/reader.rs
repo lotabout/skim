@@ -251,12 +251,10 @@ fn reader(cmd: &str,
                 if n == 0 { break; }
                 debug!("reader:reader: read a new line. index = {}", index);
 
-                if buffer.ends_with(&[b'\n']) {
-                    buffer.pop();
-                } else if buffer.ends_with(&[b'\r', b'\n']) {
+                if buffer.ends_with(&[b'\r', b'\n']) {
                     buffer.pop();
                     buffer.pop();
-                } else if buffer.ends_with(&[b'\0']) {
+                } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
                     buffer.pop();
                 }
 

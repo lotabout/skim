@@ -169,7 +169,7 @@ impl Model {
                     Event::EvModelDrawQuery => {
                         //debug!("model:EvModelDrawQuery:query");
                         let print_query_func = *arg.downcast::<ClosureType>().unwrap();
-                        self.draw_query(&mut curses.win_main, print_query_func);
+                        self.draw_query(&mut curses.win_main, &print_query_func);
                         curses.refresh();
                     }
                     Event::EvModelDrawInfo => {
@@ -445,7 +445,7 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_query(&self, curses: &mut Window, print_query_func: ClosureType) {
+    fn draw_query(&self, curses: &mut Window, print_query_func: &ClosureType) {
         let (h, w) = curses.get_maxyx();
         let (h, _) = (h as usize, w as usize);
 
@@ -700,7 +700,7 @@ impl Model {
     pub fn act_select_all(&mut self) {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
-            self.selected.insert(index, Arc::clone(&current_item));
+            self.selected.insert(index, Arc::clone(current_item));
         }
     }
 
@@ -741,7 +741,7 @@ impl Model {
         self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
-        self.draw_query(&mut curses.win_main, print_query_func);
+        self.draw_query(&mut curses.win_main, &print_query_func);
         curses.refresh();
     }
 
