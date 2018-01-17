@@ -460,5 +460,115 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-3].startswith('> a   b'))
         self.tmux.send_keys(Key('Enter'))
 
+    def test_reserved_options(self):
+        # --extended
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--extended')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --algo=TYPE
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--algo=TYPE')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --literal
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--literal')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --no-mouse
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--no-mouse')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --cycle
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--cycle')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --hscroll-off=COL
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--hscroll-off=COL')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --filepath-word
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--filepath-word')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --jump-labels=CHARS
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--jump-labels=CHARS')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --border
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--border')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --inline-info
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--inline-info')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --header=STR
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--header=STR')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --header-lines=N
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--header-lines=N')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --no-bold
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--no-bold')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --history=FILE
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--history=FILE')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --history-size=N
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--history-size=10')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --sync
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--sync')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --no-sort
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--no-sort')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --select-1
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--select-1')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-1')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --exit-0
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--exit-0')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-0')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        # --filter
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--filter')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-f')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
 if __name__ == '__main__':
     unittest.main()
