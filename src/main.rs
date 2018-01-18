@@ -124,6 +124,10 @@ Usage: sk [options]
     --history=FILE
     --history-size=N
     --sync
+    --no-sort
+    --select-1
+    --exit-0
+    --filter
 ";
 
 const REFRESH_DURATION: u64 = 200;
@@ -224,6 +228,10 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("print0").long("print0"))
         .arg(Arg::with_name("sync").long("sync"))
         .arg(Arg::with_name("extended").long("extended").short("x"))
+        .arg(Arg::with_name("no-sort").long("no-sort"))
+        .arg(Arg::with_name("select-1").long("select-1").short("1"))
+        .arg(Arg::with_name("exit-0").long("exit-0").short("0"))
+        .arg(Arg::with_name("filter").long("filter").short("f"))
         .get_matches_from(args);
 
     if options.is_present("help") {
