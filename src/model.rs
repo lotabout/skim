@@ -110,15 +110,15 @@ impl Model {
             self.reverse = true;
         }
 
-        if let Some(preview_cmd) = options.value_of("preview") {
+        if let Some(preview_cmd) = options.values_of("preview").and_then(|vals| vals.last()) {
             self.preview_cmd = Some(preview_cmd.to_string());
         }
 
-        if let Some(preview_window) = options.value_of("preview-window") {
+        if let Some(preview_window) = options.values_of("preview-window").and_then(|vals| vals.last()) {
             self.preview_hidden = preview_window.find("hidden").is_some();
         }
 
-        if let Some(delimiter) = options.value_of("delimiter") {
+        if let Some(delimiter) = options.values_of("delimiter").and_then(|vals| vals.last()) {
             self.delimiter = Regex::new(delimiter)
                 .unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
         }
@@ -139,7 +139,7 @@ impl Model {
             self.no_hscroll = true;
         }
 
-        if let Some(tabstop_str) = options.value_of("tabstop") {
+        if let Some(tabstop_str) = options.values_of("tabstop").and_then(|vals| vals.last()) {
             let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
             self.tabstop = max(1, tabstop);
         }
