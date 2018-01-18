@@ -846,7 +846,7 @@ impl LinePrinter {
     }
 
     fn caddch(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
-        let w = ch.width_cjk().unwrap_or(2);
+        let w = ch.width().unwrap_or(2);
 
         if skip {
             curses.move_cursor_right(w as u16);
@@ -859,7 +859,7 @@ impl LinePrinter {
         // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
         // the hidden chracter
 
-        let w = ch.width_cjk().unwrap_or(2);
+        let w = ch.width().unwrap_or(2);
 
         assert!(self.current >= 0);
         let current = self.current as usize;
@@ -911,7 +911,7 @@ fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
         w += if ch == '\t' {
             tabstop - (w % tabstop)
         } else {
-            ch.width_cjk().unwrap_or(2)
+            ch.width().unwrap_or(2)
         };
         ret.push(w);
     }

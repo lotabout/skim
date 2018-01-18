@@ -412,7 +412,7 @@ impl Window {
     fn add_char_raw(&mut self, ch: char) {
         let (max_y, max_x) = self.get_maxyx();
         let (y, x) = self.getyx();
-        let text_width = ch.width_cjk().unwrap_or(2) as u16;
+        let text_width = ch.width().unwrap_or(2) as u16;
         let target_x = x + text_width;
 
 
