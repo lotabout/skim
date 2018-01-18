@@ -536,9 +536,12 @@ impl Curses {
 
         // parse the option of window height of skim
 
-        let min_height = options.value_of("min-height").map(|x| x.parse::<u16>().unwrap_or(10)).unwrap();
+        let min_height = options.values_of("min-height")
+            .and_then(|vals| vals.last())
+            .map(|x| x.parse::<u16>().unwrap_or(10)).unwrap();
         let no_height = options.is_present("no-height");
-        let height = options.value_of("height").map(Curses::parse_margin_string).unwrap();
+        let height = options.values_of("height").and_then(|vals| vals.last())
+            .map(Curses::parse_margin_string).unwrap();
 
         let height = if no_height {Margin::Percent(100)} else {height};
 
@@ -582,12 +585,16 @@ impl Curses {
         };
 
         // parse options for margin
-        let margins = options.value_of("margin").map(Curses::parse_margin).unwrap();
+        let margins = options.values_of("margin").and_then(|vals| vals.last())
+            .map(Curses::parse_margin).unwrap();
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         // parse options for preview window
         let preview_cmd_exist = options.is_present("preview");
-        let (preview_direction, preview_size, preview_wrap, preview_shown) = options.value_of("preview-window").map(Curses::parse_preview).unwrap();
+        let (preview_direction, preview_size, preview_wrap, preview_shown) = options.values_of("preview-window")
+            .and_then(|vals| vals.last())
+            .map(Curses::parse_preview)
+            .unwrap();
         let mut ret = Curses {
             term: Some(term),
             top: 0,
@@ -916,7 +923,7 @@ pub struct ColorTheme {
 impl ColorTheme {
     pub fn init_from_options(options: &ArgMatches) {
         // register
-        let theme = if let Some(color) = options.value_of("color") {
+        let theme = if let Some(color) = options.values_of("color").and_then(|vals| vals.last()) {
             ColorTheme::from_options(color)
         } else {
             ColorTheme::dark256()

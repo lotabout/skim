@@ -61,19 +61,21 @@ impl Query {
     }
 
     pub fn parse_options(&mut self, options: &ArgMatches) {
-        if let Some(base_cmd) = options.value_of("cmd") {
+        // some options accept multiple values, thus take the last one
+
+        if let Some(base_cmd) = options.values_of("cmd").and_then(|vals| vals.last()) {
             self.base_cmd = base_cmd.to_string();
         }
 
-        if let Some(query) = options.value_of("query") {
+        if let Some(query) = options.values_of("query").and_then(|vals| vals.last()) {
             self.query_before = query.chars().collect();
         }
 
-        if let Some(cmd_query) = options.value_of("cmd-query") {
+        if let Some(cmd_query) = options.values_of("cmd-query").and_then(|vals| vals.last()) {
             self.cmd_before = cmd_query.chars().collect();
         }
 
-        if let Some(replstr) = options.value_of("replstr") {
+        if let Some(replstr) = options.values_of("replstr").and_then(|vals| vals.last()) {
             self.replstr = replstr.to_string();
         }
 
@@ -81,11 +83,11 @@ impl Query {
             self.mode = QueryMode::CMD;
         }
 
-        if let Some(query_prompt) = options.value_of("prompt") {
+        if let Some(query_prompt) = options.values_of("prompt").and_then(|vals| vals.last()) {
             self.query_prompt = query_prompt.to_string();
         }
 
-        if let Some(cmd_prompt) = options.value_of("cmd-prompt") {
+        if let Some(cmd_prompt) = options.values_of("cmd-prompt").and_then(|vals| vals.last()) {
             self.cmd_prompt = cmd_prompt.to_string();
         }
     }

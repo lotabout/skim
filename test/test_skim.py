@@ -570,5 +570,81 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-1].startswith('>'))
         self.tmux.send_keys(Key('Enter'))
 
+    def test_multiple_option_values_should_be_accepted(self):
+        # normally we'll put some default options to SKIM_DEFAULT_OPTIONS and override it in command
+        # line. this test will ensure multiple values are accepted.
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--bind=ctrl-a:cancel --bind ctrl-b:cancel')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--prompt a --prompt b -p c')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('c'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-i --cmd-prompt a --cmd-prompt b')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('b'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--expect=ctrl-a --expect=ctrl-v')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--tiebreak=index --tiebreak=score')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--cmd asdf --cmd find')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--query asdf -q xyz')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('> xyz'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-i --cmd-query asdf --cmd-query xyz')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> xyz'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--delimiter , --delimiter . -d ,')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--nth 1,2 --nth=1,3 -n 1,3')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--with-nth 1,2 --with-nth=1,3')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-I {} -I XX')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--color base --color light')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--margin 30% --margin 0')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--min-height 30% --min-height 10')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--height 30% --height 10')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"""echo -e 'a\\nb' | {self.sk('--preview "ls {}" --preview "cat {}"')}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--preview-window up --preview-window down')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('>'))
+        self.tmux.send_keys(Key('Enter'))
+
 if __name__ == '__main__':
     unittest.main()

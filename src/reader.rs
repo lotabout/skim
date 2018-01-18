@@ -45,12 +45,12 @@ impl ReaderOption {
             self.use_ansi_color = true;
         }
 
-        if let Some(delimiter) = options.value_of("delimiter") {
+        if let Some(delimiter) = options.values_of("delimiter").and_then(|vals| vals.last()) {
             self.delimiter = Regex::new(&(".*?".to_string() + delimiter))
                 .unwrap_or_else(|_| Regex::new(r".*?[\t ]").unwrap());
         }
 
-        if let Some(transform_fields) = options.value_of("with-nth") {
+        if let Some(transform_fields) = options.values_of("with-nth").and_then(|vals| vals.last()) {
             self.transform_fields = transform_fields.split(',')
                 .filter_map(|string| {
                     parse_range(string)
@@ -58,7 +58,7 @@ impl ReaderOption {
                 .collect();
         }
 
-        if let Some(matching_fields) = options.value_of("nth") {
+        if let Some(matching_fields) = options.values_of("nth").and_then(|vals| vals.last()) {
             self.matching_fields = matching_fields.split(',')
                 .filter_map(|string| {
                     parse_range(string)
