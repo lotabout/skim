@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.3.2: 2018-01-18
+Some minor enhancements that might comes handy.
+- Reserve all fzf options, so that skim can be a drop-in replacement of fzf.
+- Fix: the number of columns a unicode character occupies
+- Accept multiple values for most options. So that you can safely put them
+    in `$SKIM_DEFAULT_OPTIONS` and override it in command line.
+
+Thanks to @magnetophon for the bug report and feature requests.
+
 ## 0.3.1: 2017-12-04
 Support more options, and reserve several others. The purpose is to reuse
 `fzf.vim` as much as possible.
