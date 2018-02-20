@@ -56,11 +56,15 @@ impl Matcher {
                     vec.push(c);
                 }
             }
-            *RANK_CRITERION.write().unwrap() = vec;
+            *RANK_CRITERION
+                .write()
+                .expect("matcher:parse_options: failed to lock RANK_CRITERION") = vec;
         }
 
         if options.is_present("tac") {
-            let mut ranks = RANK_CRITERION.write().unwrap();
+            let mut ranks = RANK_CRITERION
+                .write()
+                .expect("matcher:parse_options: failed to lock RANK_CRITERION");
             for rank in ranks.iter_mut() {
                 match *rank {
                     RankCriteria::Index => *rank = RankCriteria::NegIndex,
@@ -124,7 +128,8 @@ impl Matcher {
             match ev {
                 Event::EvMatcherRestart => {
                     num_processed = 0;
-                    let query = arg.downcast::<String>().unwrap();
+                    let query = arg.downcast::<String>()
+                        .expect("matcher:EvMatcherRestart: failed to get arguments");
 
                     // notifiy the model that the query had been changed
                     let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
@@ -141,7 +146,8 @@ impl Matcher {
                 }
 
                 Event::EvMatcherNewItem => {
-                    let items: ItemGroup = *arg.downcast().unwrap();
+                    let items: ItemGroup = *arg.downcast()
+                        .expect("matcher:EvMatcherNewItem: failed to get arguments");
                     num_processed += items.len();
 
                     matcher_engine.as_ref().map(|mat| {
@@ -200,7 +206,13 @@ trait MatchEngine {
 
 fn build_rank(score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
     let mut rank = [0; 4];
-    for (idx, criteria) in (*RANK_CRITERION.read().unwrap()).iter().enumerate().take(4) {
+    for (idx, criteria) in (*RANK_CRITERION
+        .read()
+        .expect("matcher:build_rank: failed to lock RANK_CRITERION"))
+        .iter()
+        .enumerate()
+        .take(4)
+    {
         rank[idx] = match *criteria {
             RankCriteria::Score => score,
             RankCriteria::Index => index,

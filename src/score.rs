@@ -168,7 +168,7 @@ pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>
         .iter()
         .enumerate()
         .max_by_key(|&(_, x)| x.final_score)
-        .unwrap();
+        .expect("score:fuzzy_match: failed to iterate over last_row");
     let mut pattern_idx = pattern.len() as i64 - 1;
     while pattern_idx >= 0 {
         let status = scores[pattern_idx as usize].borrow()[next_col];

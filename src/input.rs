@@ -20,7 +20,7 @@ pub struct Input {
 
 impl Input {
     pub fn new(tx_input: EventSender) -> Self {
-        let f = File::open("/dev/tty").unwrap();
+        let f = File::open("/dev/tty").expect("failed on open /dev/tty");
         let keyboard = KeyBoard::new(f);
         Input {
             tx_input: tx_input,
@@ -136,7 +136,10 @@ impl KeyBoard {
             let mut utf8_receiver = SimpleUtf8Receiver::new(tx);
             let mut utf8_parser = utf8parse::Parser::new();
             for byte in f.bytes() {
-                utf8_parser.advance(&mut utf8_receiver, byte.unwrap());
+                utf8_parser.advance(
+                    &mut utf8_receiver,
+                    byte.expect("fail to parse keyboard input"),
+                );
             }
         });
 
@@ -155,7 +158,8 @@ impl KeyBoard {
     }
 
     fn get_chars(&mut self) {
-        let ch = self.getch(true).unwrap();
+        let ch = self.getch(true)
+            .expect("input:get_chars: something is wrong on gettting next character");
         self.buf.push_back(ch);
 
         // sleep for a short time to make sure the chars(if any) are ready to read.
@@ -249,18 +253,28 @@ impl KeyBoard {
                     let mut row = String::new();
                     let mut col = String::new();
                     while self.buf.front() != Some(&';') {
-                        row.push(self.buf.pop_front().unwrap());
+                        row.push(
+                            self.buf
+                                .pop_front()
+                                .expect("input:get_escaped_key: early end for ANSI code"),
+                        );
                     }
                     self.buf.pop_front();
                     while self.buf.front() != Some(&'R') {
-                        col.push(self.buf.pop_front().unwrap());
+                        col.push(
+                            self.buf
+                                .pop_front()
+                                .expect("input:get_escaped_key: early end for ANSI code"),
+                        );
                     }
                     self.buf.pop_front();
 
-                    return Some(Key::Pos(
-                        row.parse::<u16>().unwrap() - 1,
-                        col.parse::<u16>().unwrap() - 1,
-                    ));
+                    let row_num = row.parse::<u16>()
+                        .expect(format!("input:get_escaped_key: failed to parse row: {}", row).as_str());
+                    let col_num = col.parse::<u16>()
+                        .expect(format!("input:get_escaped_key: failed to parse col: {}", col).as_str());
+
+                    return Some(Key::Pos(row_num - 1, col_num - 1));
                 }
 
                 // other special sequence
@@ -518,7 +532,7 @@ pub fn parse_key(key: &str) -> Option<Key> {
         "alt-x" => Some(Key::AltX),
         "alt-y" => Some(Key::AltY),
         "alt-z" => Some(Key::AltZ),
-        ch if ch.chars().count() == 1 => Some(Key::Char(ch.chars().next().unwrap())),
+        ch if ch.chars().count() == 1 => Some(Key::Char(ch.chars().next().expect("input:parse_key: no key is specified"))),
         _ => None,
     }
 }

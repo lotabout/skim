@@ -38,11 +38,15 @@ where
             return;
         }
 
-        let smaller = if item > *self.ordered.last().unwrap() {
+        let smaller = if item
+            > *self.ordered
+                .last()
+                .expect("orderedvec: failed to get last element")
+        {
             item
         } else {
             self.ordered_insert(item);
-            self.ordered.pop().unwrap()
+            self.ordered.pop().expect("orderedvec: No element at all!")
         };
 
         self.unordered.push(smaller);

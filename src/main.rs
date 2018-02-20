@@ -140,7 +140,7 @@ fn main() {
         let t = time::now();
         format!(
             "{},{:03} - {} - {}",
-            time::strftime("%Y-%m-%d %H:%M:%S", &t).unwrap(),
+            time::strftime("%Y-%m-%d %H:%M:%S", &t).expect("main: time format error"),
             t.tm_nsec / 1_000_000,
             record.level(),
             record.args()
@@ -154,7 +154,7 @@ fn main() {
         builder.parse(&env::var("RUST_LOG").unwrap());
     }
 
-    builder.init().unwrap();
+    builder.init().expect("failed to initialize logger builder");
 
     let exit_code = real_main();
     std::process::exit(exit_code);
@@ -164,7 +164,7 @@ fn main() {
 fn real_main() -> i32 {
     let mut args = Vec::new();
 
-    args.push(env::args().next().unwrap());
+    args.push(env::args().next().expect("there should be at least one arg: the application name"));
     args.extend(env::var("SKIM_DEFAULT_OPTIONS")
                 .ok()
                 .and_then(|val| shlex::split(&val))
@@ -276,7 +276,7 @@ fn real_main() -> i32 {
     let real_stdin = if !istty {
         unsafe {
             let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
-            let tty = File::open("/dev/tty").unwrap();
+            let tty = File::open("/dev/tty").expect("main: failed to open /dev/tty");
             libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
             Some(stdin)
         }
@@ -391,7 +391,7 @@ fn real_main() -> i32 {
         debug!("main: got event {:?}", ev);
         match ev {
             EvActAddChar =>  {
-                let ch: char = *arg.downcast().unwrap();
+                let ch: char = *arg.downcast().expect("EvActAddChar: failed to get argument");
                 query.act_add_char(ch);
                 on_query_change(&query);
             }
@@ -521,7 +521,7 @@ fn real_main() -> i32 {
             }
 
             EvReportCursorPos => {
-                let (y, x): (u16, u16) = *arg.downcast().unwrap();
+                let (y, x): (u16, u16) = *arg.downcast().expect("EvReportCursorPos: failed to get arguments");
                 debug!("main:EvReportCursorPos: {}/{}", y, x);
             }
             _ => {}

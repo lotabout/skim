@@ -158,7 +158,8 @@ impl Model {
                 debug!("model: got {:?}", ev);
                 match ev {
                     Event::EvModelNewItem => {
-                        let items: MatchedItemGroup = *arg.downcast().unwrap();
+                        let items: MatchedItemGroup = *arg.downcast()
+                            .expect("model:EvModelNewItem: failed to get argument");
                         self.insert_new_items(items);
                     }
 
@@ -169,7 +170,8 @@ impl Model {
 
                     Event::EvModelDrawQuery => {
                         //debug!("model:EvModelDrawQuery:query");
-                        let print_query_func = *arg.downcast::<ClosureType>().unwrap();
+                        let print_query_func = *arg.downcast::<ClosureType>()
+                            .expect("model:EvModelDrawQuery: failed to get argument");
                         self.draw_query(&mut curses.win_main, &print_query_func);
                         curses.refresh();
                     }
@@ -181,7 +183,8 @@ impl Model {
 
                     Event::EvModelNotifyProcessed => {
                         //debug!("model:EvModelNotifyProcessed:items_and_status");
-                        let num_processed = *arg.downcast::<usize>().unwrap();
+                        let num_processed = *arg.downcast::<usize>()
+                            .expect("model:EvModelNotifyProcessed: failed to get argument");
                         self.num_processed = num_processed;
 
                         if !self.reader_stopped {
@@ -202,7 +205,8 @@ impl Model {
                     }
 
                     Event::EvModelNotifyMatcherMode => {
-                        self.matcher_mode = *arg.downcast().unwrap();
+                        self.matcher_mode = *arg.downcast()
+                            .expect("model:EvModelNotifyMatcherMode: failed to get argument");
                     }
 
                     Event::EvMatcherStopped => {
@@ -214,7 +218,8 @@ impl Model {
                     Event::EvReaderStopped => {
                         // if reader stopped, the num_read is freezed.
                         self.reader_stopped = true;
-                        self.num_read = *arg.downcast().unwrap();
+                        self.num_read = *arg.downcast()
+                            .expect("model:EvReaderStopped: failed to get argument");
                     }
 
                     Event::EvReaderStarted => {
@@ -233,7 +238,8 @@ impl Model {
                             String,
                             String,
                             Sender<usize>,
-                        ) = *arg.downcast().unwrap();
+                        ) = *arg.downcast()
+                            .expect("model:EvActAccept: failed to get argument");
 
                         // output query
                         if self.print_query {
@@ -253,7 +259,8 @@ impl Model {
                         let _ = tx_ack.send(self.selected.len());
                     }
                     Event::EvActAbort => {
-                        let tx_ack: Sender<bool> = *arg.downcast().unwrap();
+                        let tx_ack: Sender<bool> = *arg.downcast()
+                            .expect("model:EvActAbort: failed to get argument");
                         curses.close();
                         let _ = tx_ack.send(true);
                     }
@@ -330,7 +337,8 @@ impl Model {
 
                     Event::EvActRedraw => {
                         //debug!("model:EvActRedraw:act_redraw");
-                        let print_query_func = *arg.downcast::<ClosureType>().unwrap();
+                        let print_query_func = *arg.downcast::<ClosureType>()
+                            .expect("model:EvActRedraw: failed to get argument");
                         self.act_redarw(&mut curses, print_query_func);
                     }
 
@@ -387,7 +395,11 @@ impl Model {
             let label = if l == self.line_cursor { ">" } else { " " };
             curses.cprint(label, COLOR_CURSOR, true);
 
-            let item = Arc::clone(self.items.get(i).unwrap());
+            let item = Arc::clone(
+                self.items
+                    .get(i)
+                    .expect(format!("model:draw_items: failed to get item at {}", i).as_str()),
+            );
             self.draw_item(curses, &item, l == self.line_cursor);
             curses.attr_on(0);
         }
@@ -625,7 +637,11 @@ impl Model {
             return;
         }
 
-        let item = Arc::clone(self.items.get(current_idx).unwrap());
+        let item = Arc::clone(
+            self.items
+                .get(current_idx)
+                .expect(format!("model:draw_items: failed to get item at {}", current_idx).as_str()),
+        );
         let highlighted_content = item.item.get_text();
 
         debug!(
@@ -673,7 +689,9 @@ impl Model {
     }
 
     fn inject_preview_command<'a>(&'a self, text: &str) -> Cow<'a, str> {
-        let cmd = self.preview_cmd.as_ref().unwrap();
+        let cmd = self.preview_cmd
+            .as_ref()
+            .expect("model:inject_preview_command: invalid preview command");
         debug!("replace: {:?}, text: {:?}", cmd, text);
         RE_FILEDS.replace_all(cmd, |caps: &Captures| {
             assert!(caps[1].len() >= 2);
@@ -735,7 +753,10 @@ impl Model {
             return;
         }
 
-        let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+        let cursor = self.item_cursor + self.line_cursor;
+        let current_item = self.items
+            .get(cursor)
+            .expect(format!("model:act_toggle: failed to get item {}", cursor).as_str());
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, Arc::clone(current_item));
@@ -769,7 +790,10 @@ impl Model {
     pub fn act_output(&mut self) {
         // select the current one
         if !self.items.is_empty() {
-            let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
+            let cursor = self.item_cursor + self.line_cursor;
+            let current_item = self.items
+                .get(cursor)
+                .expect(format!("model:act_output: failed to get item {}", cursor).as_str());
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
         }

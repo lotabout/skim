@@ -43,7 +43,9 @@ lazy_static! {
 
 // register the color as color pair
 fn register_resource(key: attr_t, resource: String) {
-    let mut resource_map = RESOURCE_MAP.write().unwrap();
+    let mut resource_map = RESOURCE_MAP
+        .write()
+        .expect("curses:register_resource: failed to lock resource map");
     resource_map.entry(key).or_insert_with(|| resource);
 }
 
@@ -51,10 +53,14 @@ pub fn register_ansi(ansi: String) -> attr_t {
     //let fg = if fg == -1 { *FG.read().unwrap() } else {fg};
     //let bg = if bg == -1 { *BG.read().unwrap() } else {bg};
 
-    let mut color_map = COLOR_MAP.write().unwrap();
+    let mut color_map = COLOR_MAP
+        .write()
+        .expect("curses:register_ansi: failed to lock color map");
     let pair_num = color_map.len() as u16;
     if color_map.contains_key(&ansi) {
-        *color_map.get(&ansi).unwrap()
+        *color_map
+            .get(&ansi)
+            .expect(format!("curses:register_ansi: failed to get ansi: {}", &ansi).as_str())
     } else {
         let next_pair = COLOR_USER + pair_num;
         register_resource(next_pair, ansi.clone());
@@ -66,7 +72,9 @@ pub fn register_ansi(ansi: String) -> attr_t {
 // utility function to check if an attr_t contains background color or reset background
 
 pub fn ansi_contains_reset(key: attr_t) -> bool {
-    let resource_map = RESOURCE_MAP.read().unwrap();
+    let resource_map = RESOURCE_MAP
+        .read()
+        .expect("curses: ansi_contains_reset: failed to lock RESOURCE_MAP");
     let ansi = resource_map.get(&key);
     if ansi.is_none() {
         return false;
@@ -340,7 +348,9 @@ impl Window {
     }
 
     fn attron(&mut self, key: attr_t) {
-        let resource_map = RESOURCE_MAP.read().unwrap();
+        let resource_map = RESOURCE_MAP
+            .read()
+            .expect("curses:attron: failed to lock RESOURCE_MAP for read");
         resource_map
             .get(&key)
             .map(|s| self.stdout_buffer.push_str(s));
@@ -367,7 +377,7 @@ impl Window {
     }
 
     pub fn write_to_term(&mut self, term: &mut Write) {
-        write!(term, "{}", &self.stdout_buffer).unwrap();
+        write!(term, "{}", &self.stdout_buffer).expect("curses:write_to_term: error on writting to terminal");
         self.stdout_buffer.clear();
     }
 
@@ -449,13 +459,13 @@ impl Curses {
             .values_of("min-height")
             .and_then(|vals| vals.last())
             .map(|x| x.parse::<u16>().unwrap_or(10))
-            .unwrap();
+            .expect("min_height should have default values");
         let no_height = options.is_present("no-height");
         let height = options
             .values_of("height")
             .and_then(|vals| vals.last())
             .map(Curses::parse_margin_string)
-            .unwrap();
+            .expect("height should have default values");
 
         let height = if no_height {
             Margin::Percent(100)
@@ -469,7 +479,10 @@ impl Curses {
         let orig_stdout_fd = if !istty {
             unsafe {
                 let stdout_fd = libc::dup(libc::STDOUT_FILENO);
-                let tty = OpenOptions::new().write(true).open("/dev/tty").unwrap();
+                let tty = OpenOptions::new()
+                    .write(true)
+                    .open("/dev/tty")
+                    .expect("curses:new: failed to open /dev/tty");
                 libc::dup2(tty.into_raw_fd(), libc::STDOUT_FILENO);
                 Some(stdout_fd)
             }
@@ -481,11 +494,19 @@ impl Curses {
 
         let (term, y): (Box<Write>, u16) = if Margin::Percent(100) == height {
             (
-                Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap())),
+                Box::new(AlternateScreen::from(
+                    stdout()
+                        .into_raw_mode()
+                        .expect("failed to set terminal to raw mode"),
+                )),
                 0,
             )
         } else {
-            let term = Box::new(stdout().into_raw_mode().unwrap());
+            let term = Box::new(
+                stdout()
+                    .into_raw_mode()
+                    .expect("failed to set terminal to raw mode"),
+            );
             let (y, _) = Curses::get_cursor_pos();
 
             // reserve the necessary lines to show skim (in case current cursor is at the bottom
@@ -514,7 +535,7 @@ impl Curses {
             .values_of("margin")
             .and_then(|vals| vals.last())
             .map(Curses::parse_margin)
-            .unwrap();
+            .expect("option margin is should be specified (by default)");
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         // parse options for preview window
@@ -523,7 +544,7 @@ impl Curses {
             .values_of("preview-window")
             .and_then(|vals| vals.last())
             .map(Curses::parse_preview)
-            .unwrap();
+            .expect("option 'preview-window' should be set (by default)");
         let mut ret = Curses {
             term: Some(term),
             top: 0,
@@ -561,14 +582,20 @@ impl Curses {
         };
 
         print!("{}", "\n".repeat(max(0, rows - 1) as usize));
-        stdout().flush().unwrap();
+        stdout()
+            .flush()
+            .expect("curses:reserve_lines: failed to write to stdout");
     }
 
     fn get_cursor_pos() -> (u16, u16) {
-        let mut stdout = stdout().into_raw_mode().unwrap();
+        let mut stdout = stdout()
+            .into_raw_mode()
+            .expect("curses:get_cursor_pos: failed to set stdout to raw mode");
         let mut f = stdin();
-        write!(stdout, "\x1B[6n").unwrap();
-        stdout.flush().unwrap();
+        write!(stdout, "\x1B[6n").expect("curses:get_cursor_pos: failed to write to stdout");
+        stdout
+            .flush()
+            .expect("curses:get_cursor_pos: failed to flush stdout");
 
         let mut read_chars = Vec::new();
         loop {
@@ -579,13 +606,16 @@ impl Curses {
                 break;
             }
         }
-        let s = String::from_utf8(read_chars).unwrap();
+        let s = String::from_utf8(read_chars).expect("curses:get_cursor_pos: invalid utf8 string read");
         let t: Vec<&str> = s[2..s.len() - 1].split(';').collect();
-        stdout.flush().unwrap();
-        (
-            t[0].parse::<u16>().unwrap() - 1,
-            t[1].parse::<u16>().unwrap() - 1,
-        )
+        stdout
+            .flush()
+            .expect("curses:get_cursor_pos: failed to flush stdout");
+        let y = t[0].parse::<u16>()
+            .expect("curses:get_cursor_pos: invalid position y");
+        let x = t[1].parse::<u16>()
+            .expect("curses:get_cursor_pos: invalid position x");
+        (y - 1, x - 1)
     }
 
     fn parse_margin_string(margin: &str) -> Margin {
@@ -753,7 +783,7 @@ impl Curses {
     }
 
     fn terminal_size() -> (u16, u16) {
-        let (max_x, max_y) = termion::terminal_size().unwrap();
+        let (max_x, max_y) = termion::terminal_size().expect("curses:terminal_size: failed to get terminal size");
         (max_y, max_x)
     }
 
@@ -777,21 +807,29 @@ impl Curses {
         }
 
         // flush the previous drop, so that ToMainScreen is written before restore
-        stdout().flush().unwrap();
+        stdout()
+            .flush()
+            .expect("curses:close: failed to flush to stdout");
 
         // restore the original fd
         if self.orig_stdout_fd.is_some() {
             unsafe {
-                libc::dup2(self.orig_stdout_fd.unwrap(), libc::STDOUT_FILENO);
+                libc::dup2(
+                    self.orig_stdout_fd.expect("curses:close, failed to get fd"),
+                    libc::STDOUT_FILENO,
+                );
             }
         }
     }
 
     pub fn refresh(&mut self) {
-        let term = self.term.as_mut().unwrap();
+        let term = self.term
+            .as_mut()
+            .expect("curses:refresh: failed to get terminal");
         self.win_preview.write_to_term(term);
         self.win_main.write_to_term(term);
-        term.flush().unwrap();
+        term.flush()
+            .expect("curses:refresh: failed to flush terminal");
     }
 }
 
