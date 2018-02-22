@@ -1,15 +1,17 @@
+extern crate clap;
+extern crate env_logger;
 extern crate libc;
+#[macro_use]
+extern crate log;
 extern crate regex;
 extern crate shlex;
-extern crate utf8parse;
-extern crate unicode_width;
 extern crate termion;
-#[macro_use] extern crate log;
-extern crate env_logger;
 extern crate time;
-extern crate clap;
+extern crate unicode_width;
+extern crate utf8parse;
 
-#[macro_use] extern crate lazy_static;
+#[macro_use]
+extern crate lazy_static;
 mod item;
 mod reader;
 mod input;
@@ -27,20 +29,20 @@ mod field;
 use std::thread;
 use std::time::Duration;
 use std::env;
-use std::sync::mpsc::{sync_channel, channel, Sender, Receiver};
+use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use event::Event::*;
-use event::{EventSender, EventReceiver};
+use event::{EventReceiver, EventSender};
 use std::mem;
 use std::ptr;
-use libc::{sigemptyset, sigaddset, sigwait, pthread_sigmask};
+use libc::{pthread_sigmask, sigaddset, sigemptyset, sigwait};
 use curses::Curses;
 use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 const VERSION: &str = "0.3.2";
 
-const USAGE : &str = "
+const USAGE: &str = "
 Usage: sk [options]
 
   Options
@@ -131,17 +133,18 @@ Usage: sk [options]
 const REFRESH_DURATION: u64 = 200;
 
 fn main() {
-    use log::{LogRecord, LogLevelFilter};
+    use log::{LogLevelFilter, LogRecord};
     use env_logger::LogBuilder;
 
     let format = |record: &LogRecord| {
         let t = time::now();
-        format!("{},{:03} - {} - {}",
-                time::strftime("%Y-%m-%d %H:%M:%S", &t).unwrap(),
-                t.tm_nsec / 1_000_000,
-                record.level(),
-                record.args()
-               )
+        format!(
+            "{},{:03} - {} - {}",
+            time::strftime("%Y-%m-%d %H:%M:%S", &t).unwrap(),
+            t.tm_nsec / 1_000_000,
+            record.level(),
+            record.args()
+        )
     };
 
     let mut builder = LogBuilder::new();
@@ -157,6 +160,7 @@ fn main() {
     std::process::exit(exit_code);
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn real_main() -> i32 {
     let mut args = Vec::new();
 

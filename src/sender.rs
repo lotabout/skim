@@ -12,9 +12,8 @@ pub struct CachedSender {
 }
 
 impl CachedSender {
-    pub fn new(rx_sender: EventReceiver,
-               tx_item: SyncSender<(Event, EventArg)>) -> Self {
-        CachedSender{
+    pub fn new(rx_sender: EventReceiver, tx_item: SyncSender<(Event, EventArg)>) -> Self {
+        CachedSender {
             items: Vec::new(),
             rx_sender: rx_sender,
             tx_item: tx_item,
@@ -73,7 +72,10 @@ impl CachedSender {
             if am_i_runing {
                 // try to send a bunch of items:
                 if index < self.items.len() {
-                    if self.tx_item.try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone()))).is_ok() {
+                    if self.tx_item
+                        .try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone())))
+                        .is_ok()
+                    {
                         index += 1;
                     }
                 } else if reader_stopped {

@@ -1,14 +1,13 @@
 // Parse ANSI attr code
 
 use regex::Regex;
-use curses::{register_ansi, attr_t};
+use curses::{attr_t, register_ansi};
 use std::default::Default;
 
 pub struct ANSIParser {
     re: &'static Regex,
     last_attr: Option<attr_t>,
 }
-
 
 lazy_static! {
     static ref ANSI_RE: Regex = Regex::new(r"\x1B\[(?:([0-9]+;[0-9]+[Hf])|([0-9]+[ABCD])|(s|u|2J|K)|([0-9;]*m)|(=[0-9]+[hI]))").unwrap();
@@ -139,5 +138,3 @@ impl ANSIParser {
         //Some(attr)
     }
 }
-
-

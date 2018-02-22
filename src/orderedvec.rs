@@ -11,7 +11,10 @@ pub struct OrderedVec<T: Ord> {
     sorted: bool,
 }
 
-impl<T> OrderedVec<T> where T: Ord {
+impl<T> OrderedVec<T>
+where
+    T: Ord,
+{
     pub fn new() -> Self {
         OrderedVec {
             ordered: Vec::new(),
@@ -23,8 +26,8 @@ impl<T> OrderedVec<T> where T: Ord {
     fn ordered_insert(&mut self, item: T) {
         self.ordered.push(item);
         let mut pos = self.ordered.len() - 1;
-        while pos > 0 && self.ordered[pos] < self.ordered[pos-1] {
-            self.ordered.swap(pos, pos-1);
+        while pos > 0 && self.ordered[pos] < self.ordered[pos - 1] {
+            self.ordered.swap(pos, pos - 1);
             pos -= 1;
         }
     }
@@ -73,7 +76,7 @@ impl<T> OrderedVec<T> where T: Ord {
         self.sorted = true;
     }
 
-    pub fn iter<'a>(&'a self) -> Box<Iterator<Item=&T> + 'a> {
+    pub fn iter<'a>(&'a self) -> Box<Iterator<Item = &T> + 'a> {
         let ordered = &self.ordered;
         let unordered = &self.unordered;
         Box::new(ordered.iter().chain(unordered.iter()))
@@ -91,7 +94,7 @@ mod test {
     #[test]
     fn test_push_get() {
         let mut ordered = OrderedVec::new();
-        let data = [1,3,-2,-1,0,4,5];
+        let data = [1, 3, -2, -1, 0, 4, 5];
         for i in data.iter() {
             ordered.push(*i);
         }

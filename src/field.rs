@@ -19,9 +19,8 @@ pub fn get_string_by_field<'a>(delimiter: &Regex, text: &'a str, field: &FieldRa
     ranges.push((last, text.len()));
 
     if let Some((start, stop)) = parse_field_range(field, ranges.len()) {
-
         let &(begin, _) = &ranges[start];
-        let &(_, end) = ranges.get(stop-1).unwrap_or(&(text.len(), 0));
+        let &(_, end) = ranges.get(stop - 1).unwrap_or(&(text.len(), 0));
         Some(&text[begin..end])
     } else {
         None
@@ -34,7 +33,8 @@ pub fn get_string_by_range<'a>(delimiter: &Regex, text: &'a str, range: &str) ->
 
 // -> a vector of the matching fields.
 pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> Vec<(usize, usize)> {
-    let mut ranges =  delimiter.find_iter(text)
+    let mut ranges = delimiter
+        .find_iter(text)
         .map(|m| (m.start(), m.end()))
         .collect::<Vec<(usize, usize)>>();
     let &(_, end) = ranges.last().unwrap_or(&(0, 0));
@@ -71,7 +71,11 @@ pub fn parse_range(range: &str) -> Option<FieldRange> {
     let end = range_string.get(1).and_then(|x| x.parse::<i64>().ok());
 
     if range_string.len() == 1 {
-        return if start.is_none() {None} else {Some(Single(start.unwrap()))};
+        return if start.is_none() {
+            None
+        } else {
+            Some(Single(start.unwrap()))
+        };
     }
 
     if start.is_none() && end.is_none() {
@@ -87,12 +91,11 @@ pub fn parse_range(range: &str) -> Option<FieldRange> {
     }
 }
 
-
 fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)> {
     let length = length as i64;
     match *range {
         FieldRange::Single(index) => {
-            let index = if index >= 0 {index} else {length + index};
+            let index = if index >= 0 { index } else { length + index };
             if index < 0 || index >= length {
                 None
             } else {
@@ -100,36 +103,50 @@ fn parse_field_range(range: &FieldRange, length: usize) -> Option<(usize, usize)
             }
         }
         FieldRange::LeftInf(right) => {
-            let right = if right >= 0 {right} else {length + right};
+            let right = if right >= 0 { right } else { length + right };
             if right <= 0 {
                 None
             } else {
-                Some((0, if right > length {length as usize} else {right as usize}))
+                Some((
+                    0,
+                    if right > length {
+                        length as usize
+                    } else {
+                        right as usize
+                    },
+                ))
             }
         }
         FieldRange::RightInf(left) => {
-            let left = if left >= 0 {left} else {length + left};
+            let left = if left >= 0 { left } else { length + left };
             if left >= length {
                 None
             } else {
-                Some((if left < 0 {0} else {left} as usize, length as usize))
+                Some((if left < 0 { 0 } else { left } as usize, length as usize))
             }
         }
         FieldRange::Both(left, right) => {
-            let left = if left >= 0 {left} else {length + left};
-            let right = if right >= 0 {right} else {length + right};
+            let left = if left >= 0 { left } else { length + left };
+            let right = if right >= 0 { right } else { length + right };
             if left >= right || left >= length || right < 0 {
                 None
             } else {
-                Some((if left < 0 {0} else {left as usize},
-                      if right > length {length as usize} else {right as usize}))
+                Some((
+                    if left < 0 { 0 } else { left as usize },
+                    if right > length {
+                        length as usize
+                    } else {
+                        right as usize
+                    },
+                ))
             }
         }
     }
 }
 
 pub fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> String {
-    let mut ranges =  delimiter.find_iter(text)
+    let mut ranges = delimiter
+        .find_iter(text)
         .map(|m| (m.start(), m.end()))
         .collect::<Vec<(usize, usize)>>();
     let &(_, end) = ranges.last().unwrap_or(&(0, 0));
@@ -145,7 +162,6 @@ pub fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRang
     }
     ret
 }
-
 
 #[cfg(test)]
 mod test {
@@ -174,50 +190,50 @@ mod test {
 
     #[test]
     fn test_parse_field_range() {
-        assert_eq!(super::parse_field_range(&Single(0), 10), Some((0,1)));
-        assert_eq!(super::parse_field_range(&Single(9), 10), Some((9,10)));
+        assert_eq!(super::parse_field_range(&Single(0), 10), Some((0, 1)));
+        assert_eq!(super::parse_field_range(&Single(9), 10), Some((9, 10)));
         assert_eq!(super::parse_field_range(&Single(10), 10), None);
-        assert_eq!(super::parse_field_range(&Single(-1), 10), Some((9,10)));
-        assert_eq!(super::parse_field_range(&Single(-10), 10), Some((0,1)));
+        assert_eq!(super::parse_field_range(&Single(-1), 10), Some((9, 10)));
+        assert_eq!(super::parse_field_range(&Single(-10), 10), Some((0, 1)));
         assert_eq!(super::parse_field_range(&Single(-11), 10), None);
 
         assert_eq!(super::parse_field_range(&LeftInf(0), 10), None);
-        assert_eq!(super::parse_field_range(&LeftInf(1), 10), Some((0,1)));
-        assert_eq!(super::parse_field_range(&LeftInf(8), 10), Some((0,8)));
-        assert_eq!(super::parse_field_range(&LeftInf(10), 10), Some((0,10)));
-        assert_eq!(super::parse_field_range(&LeftInf(11), 10), Some((0,10)));
-        assert_eq!(super::parse_field_range(&LeftInf(-1), 10), Some((0,9)));
-        assert_eq!(super::parse_field_range(&LeftInf(-8), 10), Some((0,2)));
-        assert_eq!(super::parse_field_range(&LeftInf(-9), 10), Some((0,1)));
+        assert_eq!(super::parse_field_range(&LeftInf(1), 10), Some((0, 1)));
+        assert_eq!(super::parse_field_range(&LeftInf(8), 10), Some((0, 8)));
+        assert_eq!(super::parse_field_range(&LeftInf(10), 10), Some((0, 10)));
+        assert_eq!(super::parse_field_range(&LeftInf(11), 10), Some((0, 10)));
+        assert_eq!(super::parse_field_range(&LeftInf(-1), 10), Some((0, 9)));
+        assert_eq!(super::parse_field_range(&LeftInf(-8), 10), Some((0, 2)));
+        assert_eq!(super::parse_field_range(&LeftInf(-9), 10), Some((0, 1)));
         assert_eq!(super::parse_field_range(&LeftInf(-10), 10), None);
         assert_eq!(super::parse_field_range(&LeftInf(-11), 10), None);
 
-        assert_eq!(super::parse_field_range(&RightInf(0), 10), Some((0,10)));
-        assert_eq!(super::parse_field_range(&RightInf(1), 10), Some((1,10)));
-        assert_eq!(super::parse_field_range(&RightInf(8), 10), Some((8,10)));
+        assert_eq!(super::parse_field_range(&RightInf(0), 10), Some((0, 10)));
+        assert_eq!(super::parse_field_range(&RightInf(1), 10), Some((1, 10)));
+        assert_eq!(super::parse_field_range(&RightInf(8), 10), Some((8, 10)));
         assert_eq!(super::parse_field_range(&RightInf(10), 10), None);
         assert_eq!(super::parse_field_range(&RightInf(11), 10), None);
-        assert_eq!(super::parse_field_range(&RightInf(-1), 10), Some((9,10)));
-        assert_eq!(super::parse_field_range(&RightInf(-8), 10), Some((2,10)));
-        assert_eq!(super::parse_field_range(&RightInf(-9), 10), Some((1,10)));
+        assert_eq!(super::parse_field_range(&RightInf(-1), 10), Some((9, 10)));
+        assert_eq!(super::parse_field_range(&RightInf(-8), 10), Some((2, 10)));
+        assert_eq!(super::parse_field_range(&RightInf(-9), 10), Some((1, 10)));
         assert_eq!(super::parse_field_range(&RightInf(-10), 10), Some((0, 10)));
         assert_eq!(super::parse_field_range(&RightInf(-11), 10), Some((0, 10)));
 
-        assert_eq!(super::parse_field_range(&Both(0,0), 10), None);
-        assert_eq!(super::parse_field_range(&Both(0,1), 10), Some((0,1)));
-        assert_eq!(super::parse_field_range(&Both(0,10), 10), Some((0,10)));
-        assert_eq!(super::parse_field_range(&Both(0,11), 10), Some((0, 10)));
-        assert_eq!(super::parse_field_range(&Both(1,-1), 10), Some((1, 9)));
-        assert_eq!(super::parse_field_range(&Both(1,-9), 10), None);
-        assert_eq!(super::parse_field_range(&Both(1,-10), 10), None);
-        assert_eq!(super::parse_field_range(&Both(-9,-9), 10), None);
-        assert_eq!(super::parse_field_range(&Both(-9,-8), 10), Some((1, 2)));
+        assert_eq!(super::parse_field_range(&Both(0, 0), 10), None);
+        assert_eq!(super::parse_field_range(&Both(0, 1), 10), Some((0, 1)));
+        assert_eq!(super::parse_field_range(&Both(0, 10), 10), Some((0, 10)));
+        assert_eq!(super::parse_field_range(&Both(0, 11), 10), Some((0, 10)));
+        assert_eq!(super::parse_field_range(&Both(1, -1), 10), Some((1, 9)));
+        assert_eq!(super::parse_field_range(&Both(1, -9), 10), None);
+        assert_eq!(super::parse_field_range(&Both(1, -10), 10), None);
+        assert_eq!(super::parse_field_range(&Both(-9, -9), 10), None);
+        assert_eq!(super::parse_field_range(&Both(-9, -8), 10), Some((1, 2)));
         assert_eq!(super::parse_field_range(&Both(-9, 0), 10), None);
         assert_eq!(super::parse_field_range(&Both(-9, 1), 10), None);
-        assert_eq!(super::parse_field_range(&Both(-9, 2), 10), Some((1,2)));
-        assert_eq!(super::parse_field_range(&Both(-1,0), 10), None);
-        assert_eq!(super::parse_field_range(&Both(11,20), 10), None);
-        assert_eq!(super::parse_field_range(&Both(-10,-10), 10), None);
+        assert_eq!(super::parse_field_range(&Both(-9, 2), 10), Some((1, 2)));
+        assert_eq!(super::parse_field_range(&Both(-1, 0), 10), None);
+        assert_eq!(super::parse_field_range(&Both(11, 20), 10), None);
+        assert_eq!(super::parse_field_range(&Both(-10, -10), 10), None);
     }
 
     #[test]
@@ -225,32 +241,41 @@ mod test {
         // delimiter is ","
         let re = Regex::new(".*?,").unwrap();
 
-        assert_eq!(super::parse_transform_fields(&re, &"A,B,C,D,E,F",
-                                                 &vec![Single(1),
-                                                       Single(3),
-                                                       Single(-1),
-                                                       Single(-7)]),
-                   "B,D,F");
+        assert_eq!(
+            super::parse_transform_fields(
+                &re,
+                &"A,B,C,D,E,F",
+                &vec![Single(1), Single(3), Single(-1), Single(-7)]
+            ),
+            "B,D,F"
+        );
 
-        assert_eq!(super::parse_transform_fields(&re, &"A,B,C,D,E,F",
-                                                 &vec![LeftInf(3),
-                                                       LeftInf(-5),
-                                                       LeftInf(-6)]),
-                   "A,B,C,A,");
+        assert_eq!(
+            super::parse_transform_fields(
+                &re,
+                &"A,B,C,D,E,F",
+                &vec![LeftInf(3), LeftInf(-5), LeftInf(-6)]
+            ),
+            "A,B,C,A,"
+        );
 
-        assert_eq!(super::parse_transform_fields(&re, &"A,B,C,D,E,F",
-                                                 &vec![RightInf(4),
-                                                       RightInf(-2),
-                                                       RightInf(-1),
-                                                       RightInf(7)]),
-                   "E,FE,FF");
+        assert_eq!(
+            super::parse_transform_fields(
+                &re,
+                &"A,B,C,D,E,F",
+                &vec![RightInf(4), RightInf(-2), RightInf(-1), RightInf(7)]
+            ),
+            "E,FE,FF"
+        );
 
-        assert_eq!(super::parse_transform_fields(&re, &"A,B,C,D,E,F",
-                                                 &vec![Both(2,3),
-                                                       Both(-9,2),
-                                                       Both(5,10),
-                                                       Both(-9,-4)]),
-                   "C,A,B,FA,B,");
+        assert_eq!(
+            super::parse_transform_fields(
+                &re,
+                &"A,B,C,D,E,F",
+                &vec![Both(2, 3), Both(-9, 2), Both(5, 10), Both(-9, -4)]
+            ),
+            "C,A,B,FA,B,"
+        );
     }
 
     #[test]
@@ -258,32 +283,41 @@ mod test {
         // delimiter is ","
         let re = Regex::new(".*?,").unwrap();
 
-        assert_eq!(super::parse_matching_fields(&re, &"中,华,人,民,E,F",
-                                                &vec![Single(1),
-                                                      Single(3),
-                                                      Single(-1),
-                                                      Single(-7)]),
-                   vec![(2,4), (6,8), (10,11)]);
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &"中,华,人,民,E,F",
+                &vec![Single(1), Single(3), Single(-1), Single(-7)]
+            ),
+            vec![(2, 4), (6, 8), (10, 11)]
+        );
 
-        assert_eq!(super::parse_matching_fields(&re, &"中,华,人,民,E,F",
-                                                &vec![LeftInf(3),
-                                                      LeftInf(-5),
-                                                      LeftInf(-6)]),
-                   vec![(0, 6), (0, 2)]);
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &"中,华,人,民,E,F",
+                &vec![LeftInf(3), LeftInf(-5), LeftInf(-6)]
+            ),
+            vec![(0, 6), (0, 2)]
+        );
 
-        assert_eq!(super::parse_matching_fields(&re, &"中,华,人,民,E,F",
-                                                &vec![RightInf(4),
-                                                      RightInf(-2),
-                                                      RightInf(-1),
-                                                      RightInf(7)]),
-                   vec![(8, 11), (8, 11), (10, 11)]);
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &"中,华,人,民,E,F",
+                &vec![RightInf(4), RightInf(-2), RightInf(-1), RightInf(7)]
+            ),
+            vec![(8, 11), (8, 11), (10, 11)]
+        );
 
-        assert_eq!(super::parse_matching_fields(&re, &"中,华,人,民,E,F",
-                                                &vec![Both(2,3),
-                                                      Both(-9,2),
-                                                      Both(5,10),
-                                                      Both(-9,-4)]),
-                   vec![(4, 6), (0, 4), (10,11), (0, 4)]);
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &"中,华,人,民,E,F",
+                &vec![Both(2, 3), Both(-9, 2), Both(5, 10), Both(-9, -4)]
+            ),
+            vec![(4, 6), (0, 4), (10, 11), (0, 4)]
+        );
     }
 
     use super::*;
@@ -317,14 +351,23 @@ mod test {
         assert_eq!(get_string_by_field(&re, &text, &LeftInf(-2)), Some("a,b"));
         assert_eq!(get_string_by_field(&re, &text, &LeftInf(-1)), Some("a,b,c"));
 
-        assert_eq!(get_string_by_field(&re, &text, &RightInf(0)), Some("a,b,c,"));
+        assert_eq!(
+            get_string_by_field(&re, &text, &RightInf(0)),
+            Some("a,b,c,")
+        );
         assert_eq!(get_string_by_field(&re, &text, &RightInf(1)), Some("b,c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(2)), Some("c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(3)), Some(""));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(4)), None);
         assert_eq!(get_string_by_field(&re, &text, &RightInf(5)), None);
-        assert_eq!(get_string_by_field(&re, &text, &RightInf(-5)), Some("a,b,c,"));
-        assert_eq!(get_string_by_field(&re, &text, &RightInf(-4)), Some("a,b,c,"));
+        assert_eq!(
+            get_string_by_field(&re, &text, &RightInf(-5)),
+            Some("a,b,c,")
+        );
+        assert_eq!(
+            get_string_by_field(&re, &text, &RightInf(-4)),
+            Some("a,b,c,")
+        );
         assert_eq!(get_string_by_field(&re, &text, &RightInf(-3)), Some("b,c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(-2)), Some("c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(-1)), Some(""));

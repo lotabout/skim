@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 use utf8parse;
 
-use event::{Event, EventSender, parse_action};
+use event::{parse_action, Event, EventSender};
 
 pub struct Input {
     tx_input: EventSender,
@@ -33,7 +33,8 @@ impl Input {
         loop {
             match self.keyboard.get_key() {
                 Some(Key::Pos(row, col)) => {
-                    let _ = self.tx_input.send((Event::EvReportCursorPos, Box::new((row, col))));
+                    let _ = self.tx_input
+                        .send((Event::EvReportCursorPos, Box::new((row, col))));
                 }
                 Some(key) => {
                     // search event from keymap
@@ -63,7 +64,9 @@ impl Input {
     pub fn bind(&mut self, key: &str, action: &str, args: Option<String>) {
         let key = parse_key(key);
         let action = parse_action(action);
-        if key == None || action == None {return;}
+        if key == None || action == None {
+            return;
+        }
 
         let key = key.unwrap();
         let act = action.unwrap();
@@ -107,9 +110,7 @@ struct SimpleUtf8Receiver {
 
 impl SimpleUtf8Receiver {
     pub fn new(tx: Sender<char>) -> Self {
-        SimpleUtf8Receiver {
-            tx: tx,
-        }
+        SimpleUtf8Receiver { tx: tx }
     }
 }
 
@@ -122,7 +123,6 @@ impl utf8parse::Receiver for SimpleUtf8Receiver {
         // ignore it
     }
 }
-
 
 struct KeyBoard {
     rx: Receiver<char>,
@@ -204,46 +204,46 @@ impl KeyBoard {
 
             Some('\u{7F}') => Some(Key::BSpace),
 
-            Some(c) => {Some(Key::Char(c))}
-            None => None
+            Some(c) => Some(Key::Char(c)),
+            None => None,
         }
     }
 
-    fn get_escaped_key(&mut self) -> Option<Key>{
+    fn get_escaped_key(&mut self) -> Option<Key> {
         let ch = self.buf.pop_front();
         match ch {
             Some('\u{0D}') => Some(Key::AltEnter),
-            Some(' ')      => Some(Key::AltSpace),
-            Some('/')      => Some(Key::AltSlash),
+            Some(' ') => Some(Key::AltSpace),
+            Some('/') => Some(Key::AltSlash),
             Some('\u{7F}') => Some(Key::AltBS),
-            Some('a')      => Some(Key::AltA),
-            Some('b')      => Some(Key::AltB),
-            Some('c')      => Some(Key::AltC),
-            Some('d')      => Some(Key::AltD),
-            Some('e')      => Some(Key::AltE),
-            Some('f')      => Some(Key::AltF),
-            Some('g')      => Some(Key::AltG),
-            Some('h')      => Some(Key::AltH),
-            Some('i')      => Some(Key::AltI),
-            Some('j')      => Some(Key::AltJ),
-            Some('k')      => Some(Key::AltK),
-            Some('l')      => Some(Key::AltL),
-            Some('m')      => Some(Key::AltM),
-            Some('n')      => Some(Key::AltN),
-            Some('o')      => Some(Key::AltO),
-            Some('p')      => Some(Key::AltP),
-            Some('q')      => Some(Key::AltQ),
-            Some('r')      => Some(Key::AltR),
-            Some('s')      => Some(Key::AltS),
-            Some('t')      => Some(Key::AltT),
-            Some('u')      => Some(Key::AltU),
-            Some('v')      => Some(Key::AltV),
-            Some('w')      => Some(Key::AltW),
-            Some('x')      => Some(Key::AltX),
-            Some('y')      => Some(Key::AltY), // -> \u{79}
-            Some('z')      => Some(Key::AltZ),
+            Some('a') => Some(Key::AltA),
+            Some('b') => Some(Key::AltB),
+            Some('c') => Some(Key::AltC),
+            Some('d') => Some(Key::AltD),
+            Some('e') => Some(Key::AltE),
+            Some('f') => Some(Key::AltF),
+            Some('g') => Some(Key::AltG),
+            Some('h') => Some(Key::AltH),
+            Some('i') => Some(Key::AltI),
+            Some('j') => Some(Key::AltJ),
+            Some('k') => Some(Key::AltK),
+            Some('l') => Some(Key::AltL),
+            Some('m') => Some(Key::AltM),
+            Some('n') => Some(Key::AltN),
+            Some('o') => Some(Key::AltO),
+            Some('p') => Some(Key::AltP),
+            Some('q') => Some(Key::AltQ),
+            Some('r') => Some(Key::AltR),
+            Some('s') => Some(Key::AltS),
+            Some('t') => Some(Key::AltT),
+            Some('u') => Some(Key::AltU),
+            Some('v') => Some(Key::AltV),
+            Some('w') => Some(Key::AltW),
+            Some('x') => Some(Key::AltX),
+            Some('y') => Some(Key::AltY), // -> \u{79}
+            Some('z') => Some(Key::AltZ),
 
-            Some(c @ '\u{5B}') | Some( c @ '\u{4F}') => {
+            Some(c @ '\u{5B}') | Some(c @ '\u{4F}') => {
                 // try to match ^[{row};{col}R pattern first
                 if c == '\u{5B}' && self.buf.contains(&';') && self.buf.contains(&'R') {
                     let mut row = String::new();
@@ -257,7 +257,10 @@ impl KeyBoard {
                     }
                     self.buf.pop_front();
 
-                    return Some(Key::Pos(row.parse::<u16>().unwrap() - 1, col.parse::<u16>().unwrap() - 1));
+                    return Some(Key::Pos(
+                        row.parse::<u16>().unwrap() - 1,
+                        col.parse::<u16>().unwrap() - 1,
+                    ));
                 }
 
                 // other special sequence
@@ -275,73 +278,111 @@ impl KeyBoard {
                     Some('\u{51}') => Some(Key::F2),
                     Some('\u{52}') => Some(Key::F3),
                     Some('\u{53}') => Some(Key::F4),
-                    Some('\u{31}') => {
-                        match self.buf.pop_front() {
-                            Some('\u{7e}') => Some(Key::Home),
-                            Some('\u{35}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F5)} else {None}
+                    Some('\u{31}') => match self.buf.pop_front() {
+                        Some('\u{7e}') => Some(Key::Home),
+                        Some('\u{35}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F5)
+                            } else {
+                                None
                             }
-                            Some('\u{37}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F6)} else {None}
-                            }
-                            Some('\u{38}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F7)} else {None}
-                            }
-                            Some('\u{39}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F8)} else {None}
-                            }
-                            Some('\u{3B}') => {
-                                match self.buf.pop_front() {
-                                    Some('\u{32}') => {
-                                        match self.buf.pop_front() {
-                                            Some('\u{44}') => Some(Key::Home),
-                                            Some('\u{43}') => Some(Key::End),
-                                            Some(_) | None => None
-                                        }
-                                    }
-                                    Some('\u{35}') => {
-                                        match self.buf.pop_front() {
-                                            Some('\u{44}') => Some(Key::SLeft),
-                                            Some('\u{43}') => Some(Key::SRight),
-                                            Some(_) | None => None
-                                        }
-                                    }
-                                    Some(_) | None => None
-                                }
-                            }
-                            Some(_) | None => None
                         }
-                    }
-                    Some('\u{32}') => {
-                        match self.buf.pop_front() {
-                            Some('\u{30}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F9)} else {None}
+                        Some('\u{37}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F6)
+                            } else {
+                                None
                             }
-                            Some('\u{31}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F10)} else {None}
-                            }
-                            Some('\u{33}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F11)} else {None}
-                            }
-                            Some('\u{34}') => {
-                                if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::F12)} else {None}
-                            }
-                            Some(_) | None => None
                         }
-                    }
+                        Some('\u{38}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F7)
+                            } else {
+                                None
+                            }
+                        }
+                        Some('\u{39}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F8)
+                            } else {
+                                None
+                            }
+                        }
+                        Some('\u{3B}') => match self.buf.pop_front() {
+                            Some('\u{32}') => match self.buf.pop_front() {
+                                Some('\u{44}') => Some(Key::Home),
+                                Some('\u{43}') => Some(Key::End),
+                                Some(_) | None => None,
+                            },
+                            Some('\u{35}') => match self.buf.pop_front() {
+                                Some('\u{44}') => Some(Key::SLeft),
+                                Some('\u{43}') => Some(Key::SRight),
+                                Some(_) | None => None,
+                            },
+                            Some(_) | None => None,
+                        },
+                        Some(_) | None => None,
+                    },
+                    Some('\u{32}') => match self.buf.pop_front() {
+                        Some('\u{30}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F9)
+                            } else {
+                                None
+                            }
+                        }
+                        Some('\u{31}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F10)
+                            } else {
+                                None
+                            }
+                        }
+                        Some('\u{33}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F11)
+                            } else {
+                                None
+                            }
+                        }
+                        Some('\u{34}') => {
+                            if let Some('\u{7e}') = self.buf.pop_front() {
+                                Some(Key::F12)
+                            } else {
+                                None
+                            }
+                        }
+                        Some(_) | None => None,
+                    },
                     Some('\u{33}') => {
-                        if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::Del)} else {None}
+                        if let Some('\u{7e}') = self.buf.pop_front() {
+                            Some(Key::Del)
+                        } else {
+                            None
+                        }
                     }
                     Some('\u{34}') => {
-                        if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::End)} else {None}
+                        if let Some('\u{7e}') = self.buf.pop_front() {
+                            Some(Key::End)
+                        } else {
+                            None
+                        }
                     }
                     Some('\u{35}') => {
-                        if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::PgUp)} else {None}
+                        if let Some('\u{7e}') = self.buf.pop_front() {
+                            Some(Key::PgUp)
+                        } else {
+                            None
+                        }
                     }
                     Some('\u{36}') => {
-                        if let Some('\u{7e}') = self.buf.pop_front() {Some(Key::PgDn)} else {None}
+                        if let Some('\u{7e}') = self.buf.pop_front() {
+                            Some(Key::PgDn)
+                        } else {
+                            None
+                        }
                     }
-                    Some(_) | None => None
+                    Some(_) | None => None,
                 }
             }
             Some(c) => {
@@ -354,7 +395,7 @@ impl KeyBoard {
     }
 }
 
-
+#[cfg_attr(rustfmt, rustfmt_skip)]
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Key {
     CtrlA, CtrlB, CtrlC, CtrlD, CtrlE, CtrlF, CtrlG, CtrlH, Tab,   CtrlJ, CtrlK, CtrlL, Enter,
@@ -386,6 +427,7 @@ pub enum Key {
     Pos(u16, u16),
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 pub fn parse_key(key: &str) -> Option<Key> {
     match key.to_lowercase().as_ref() {
         "ctrl-a" => Some(Key::CtrlA),
@@ -483,66 +525,66 @@ pub fn parse_key(key: &str) -> Option<Key> {
 
 fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     let mut ret = HashMap::new();
-    ret.insert(Key::ESC,   (Event::EvActAbort, None));
+    ret.insert(Key::ESC, (Event::EvActAbort, None));
     ret.insert(Key::CtrlC, (Event::EvActAbort, None));
     ret.insert(Key::CtrlG, (Event::EvActAbort, None));
 
     ret.insert(Key::Enter, (Event::EvActAccept, None));
 
-    ret.insert(Key::Left,  (Event::EvActBackwardChar, None));
+    ret.insert(Key::Left, (Event::EvActBackwardChar, None));
     ret.insert(Key::CtrlB, (Event::EvActBackwardChar, None));
 
     ret.insert(Key::CtrlH, (Event::EvActBackwardDeleteChar, None));
-    ret.insert(Key::BSpace,(Event::EvActBackwardDeleteChar, None));
+    ret.insert(Key::BSpace, (Event::EvActBackwardDeleteChar, None));
 
     ret.insert(Key::AltBS, (Event::EvActBackwardKillWord, None));
 
-    ret.insert(Key::AltB,  (Event::EvActBackwardWord, None));
+    ret.insert(Key::AltB, (Event::EvActBackwardWord, None));
     ret.insert(Key::SLeft, (Event::EvActBackwardWord, None));
 
     ret.insert(Key::CtrlA, (Event::EvActBeginningOfLine, None));
     //ret.insert(Key::AltB,  (Event::EvActCancel, None));
     ret.insert(Key::CtrlL, (Event::EvActClearScreen, None));
-    ret.insert(Key::Del,   (Event::EvActDeleteChar, None));
+    ret.insert(Key::Del, (Event::EvActDeleteChar, None));
     ret.insert(Key::CtrlD, (Event::EvActDeleteCharEOF, None));
     //ret.insert(Key::AltZ,  (Event::EvActDeselectAll, None));
 
     ret.insert(Key::CtrlJ, (Event::EvActDown, None));
     ret.insert(Key::CtrlN, (Event::EvActDown, None));
-    ret.insert(Key::Down,  (Event::EvActDown, None));
+    ret.insert(Key::Down, (Event::EvActDown, None));
 
     ret.insert(Key::CtrlE, (Event::EvActEndOfLine, None));
-    ret.insert(Key::End,   (Event::EvActEndOfLine, None));
+    ret.insert(Key::End, (Event::EvActEndOfLine, None));
 
     ret.insert(Key::CtrlF, (Event::EvActForwardChar, None));
     ret.insert(Key::Right, (Event::EvActForwardChar, None));
 
-    ret.insert(Key::AltF,  (Event::EvActForwardWord, None));
-    ret.insert(Key::SRight,(Event::EvActForwardWord, None));
+    ret.insert(Key::AltF, (Event::EvActForwardWord, None));
+    ret.insert(Key::SRight, (Event::EvActForwardWord, None));
 
     //ret.insert(Key::AltZ,  (Event::EvActIgnore, None));
 
-    ret.insert(Key::AltD,  (Event::EvActKillWord, None));
+    ret.insert(Key::AltD, (Event::EvActKillWord, None));
     //ret.insert(Key::CtrlN, (Event::EvActNextHistory, None));
-    ret.insert(Key::PgDn,  (Event::EvActPageDown, None));
-    ret.insert(Key::PgUp,  (Event::EvActPageUp, None));
+    ret.insert(Key::PgDn, (Event::EvActPageDown, None));
+    ret.insert(Key::PgUp, (Event::EvActPageUp, None));
     ret.insert(Key::CtrlR, (Event::EvActRotateMode, None));
-    ret.insert(Key::AltH,  (Event::EvActScrollLeft, None));
-    ret.insert(Key::AltL,  (Event::EvActScrollRight, None));
+    ret.insert(Key::AltH, (Event::EvActScrollLeft, None));
+    ret.insert(Key::AltL, (Event::EvActScrollRight, None));
     //ret.insert(Key::AltZ,  (Event::EvActSelectAll, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggle, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleAll, None));
-    ret.insert(Key::Tab,   (Event::EvActToggleDown, None));
+    ret.insert(Key::Tab, (Event::EvActToggleDown, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleIn, None));
-    ret.insert(Key::CtrlQ,  (Event::EvActToggleInteractive, None));
+    ret.insert(Key::CtrlQ, (Event::EvActToggleInteractive, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleOut, None));
     //ret.insert(Key::AltZ,  (Event::EvActToggleSort, None));
-    ret.insert(Key::BTab,  (Event::EvActToggleUp, None));
+    ret.insert(Key::BTab, (Event::EvActToggleUp, None));
     ret.insert(Key::CtrlU, (Event::EvActUnixLineDiscard, None));
     ret.insert(Key::CtrlW, (Event::EvActUnixWordRubout, None));
     ret.insert(Key::CtrlP, (Event::EvActUp, None));
     ret.insert(Key::CtrlK, (Event::EvActUp, None));
-    ret.insert(Key::Up,    (Event::EvActUp, None));
+    ret.insert(Key::Up, (Event::EvActUp, None));
     ret.insert(Key::CtrlY, (Event::EvActYank, None));
     ret
 }

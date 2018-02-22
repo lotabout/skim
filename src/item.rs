@@ -45,12 +45,14 @@ pub struct Item {
 }
 
 impl<'a> Item {
-    pub fn new(orig_text: Cow<str>,
-               ansi_enabled: bool,
-               trans_fields: &[FieldRange],
-               matching_fields: &[FieldRange],
-               delimiter: &Regex,
-               index: (usize, usize)) -> Self {
+    pub fn new(
+        orig_text: Cow<str>,
+        ansi_enabled: bool,
+        trans_fields: &[FieldRange],
+        matching_fields: &[FieldRange],
+        delimiter: &Regex,
+        index: (usize, usize),
+    ) -> Self {
         let using_transform_fields = !trans_fields.is_empty();
 
         //        transformed | ANSI             | output
@@ -70,7 +72,10 @@ impl<'a> Item {
             ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
-            (parse_transform_fields(delimiter, &orig_text, trans_fields), Vec::new())
+            (
+                parse_transform_fields(delimiter, &orig_text, trans_fields),
+                Vec::new(),
+            )
         } else if ansi_enabled {
             // not transformed, ansi
             ansi_parser.parse_ansi(&orig_text)
@@ -175,7 +180,7 @@ pub enum MatchedRange {
 pub struct MatchedItem {
     pub item: Arc<Item>,
     pub rank: Rank,
-    pub matched_range: Option<MatchedRange>,  // range of chars that metched the pattern
+    pub matched_range: Option<MatchedRange>, // range of chars that metched the pattern
 }
 
 impl MatchedItem {
@@ -187,7 +192,7 @@ impl MatchedItem {
         }
     }
 
-    pub fn matched_range(mut self, range: MatchedRange) -> Self{
+    pub fn matched_range(mut self, range: MatchedRange) -> Self {
         self.matched_range = Some(range);
         self
     }

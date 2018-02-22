@@ -11,7 +11,7 @@ use std::process::Command;
 use std::error::Error;
 use ansi::ANSIParser;
 use std::default::Default;
-use regex::{Regex, Captures};
+use regex::{Captures, Regex};
 use field::get_string_by_range;
 use std::borrow::Cow;
 use std::convert::From;
@@ -51,7 +51,6 @@ pub struct Model {
     preview_hidden: bool,
 
     // Options
-
     multi_selection: bool,
     reverse: bool,
     preview_cmd: Option<String>,
@@ -114,13 +113,15 @@ impl Model {
             self.preview_cmd = Some(preview_cmd.to_string());
         }
 
-        if let Some(preview_window) = options.values_of("preview-window").and_then(|vals| vals.last()) {
+        if let Some(preview_window) = options
+            .values_of("preview-window")
+            .and_then(|vals| vals.last())
+        {
             self.preview_hidden = preview_window.find("hidden").is_some();
         }
 
         if let Some(delimiter) = options.values_of("delimiter").and_then(|vals| vals.last()) {
-            self.delimiter = Regex::new(delimiter)
-                .unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
+            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
         }
 
         if options.is_present("print0") {
@@ -183,7 +184,7 @@ impl Model {
                         let num_processed = *arg.downcast::<usize>().unwrap();
                         self.num_processed = num_processed;
 
-                        if ! self.reader_stopped {
+                        if !self.reader_stopped {
                             // if the reader is still running, the number of processed items equals
                             // to the number of read items
                             self.num_read = num_processed;
@@ -198,7 +199,6 @@ impl Model {
                                 last_refresh = now;
                             }
                         }
-
                     }
 
                     Event::EvModelNotifyMatcherMode => {
@@ -224,12 +224,16 @@ impl Model {
 
                     //---------------------------------------------------------
                     // Actions
-
                     Event::EvActAccept => {
                         curses.close();
 
                         // output the expect key
-                        let (accept_key, query, cmd, tx_ack): (Option<String>, String, String, Sender<usize>) = *arg.downcast().unwrap();
+                        let (accept_key, query, cmd, tx_ack): (
+                            Option<String>,
+                            String,
+                            String,
+                            Sender<usize>,
+                        ) = *arg.downcast().unwrap();
 
                         // output query
                         if self.print_query {
@@ -297,7 +301,7 @@ impl Model {
                     }
                     Event::EvActPageDown => {
                         //debug!("model:redraw_items_and_status");
-                        let height = 1- i32::from(self.height);
+                        let height = 1 - i32::from(self.height);
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
@@ -350,8 +354,8 @@ impl Model {
     fn update_size(&mut self, curses: &mut Window) {
         // update the (height, width)
         let (h, w) = curses.get_maxyx();
-        self.height = h-2;
-        self.width = w-2;
+        self.height = h - 2;
+        self.width = w - 2;
     }
 
     fn insert_new_items(&mut self, items: MatchedItemGroup) {
@@ -373,14 +377,14 @@ impl Model {
         // screen-line: (h-l-1)   <--->   item-line: l
 
         let lower = self.item_cursor;
-        let max_upper = self.item_cursor + h-2;
+        let max_upper = self.item_cursor + h - 2;
         let upper = min(max_upper, self.items.len());
 
         for i in lower..upper {
             let l = i - lower;
-            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as u16, 0);
+            curses.mv((if self.reverse { l + 2 } else { h - 3 - l }) as u16, 0);
             // print the cursor label
-            let label = if l == self.line_cursor {">"} else {" "};
+            let label = if l == self.line_cursor { ">" } else { " " };
             curses.cprint(label, COLOR_CURSOR, true);
 
             let item = Arc::clone(self.items.get(i).unwrap());
@@ -393,7 +397,7 @@ impl Model {
         // ones
         for i in upper..max_upper {
             let l = i - lower;
-            curses.mv((if self.reverse {l+2} else {h-3 - l} ) as u16, 0);
+            curses.mv((if self.reverse { l + 2 } else { h - 3 - l }) as u16, 0);
             curses.clrtoeol();
         }
 
@@ -405,7 +409,7 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
-        curses.mv(if self.reverse {1} else {self.height} , 0);
+        curses.mv(if self.reverse { 1 } else { self.height }, 0);
         curses.clrtoeol();
 
         // display spinner
@@ -413,32 +417,51 @@ impl Model {
             self.print_char(curses, ' ', COLOR_NORMAL, false);
         } else {
             let time = self.timer.elapsed();
-            let mills = (time.as_secs()*1000) as u32 + time.subsec_nanos()/1000/1000;
+            let mills = (time.as_secs() * 1000) as u32 + time.subsec_nanos() / 1000 / 1000;
             let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
             self.print_char(curses, SPINNERS[index as usize], COLOR_SPINNER, true);
         }
 
         // display matched/total number
-        curses.cprint(format!(" {}/{}", self.items.len(), self.num_read).as_ref(), COLOR_INFO, false);
+        curses.cprint(
+            format!(" {}/{}", self.items.len(), self.num_read).as_ref(),
+            COLOR_INFO,
+            false,
+        );
 
         // display the matcher mode
         if !self.matcher_mode.is_empty() {
-            curses.cprint(format!("/{}", &self.matcher_mode).as_ref(), COLOR_INFO, false);
+            curses.cprint(
+                format!("/{}", &self.matcher_mode).as_ref(),
+                COLOR_INFO,
+                false,
+            );
         }
 
         // display the percentage of the number of processed items
         if self.num_processed < self.num_read {
-            curses.cprint(format!(" ({}%) ", self.num_processed*100 / self.num_read).as_ref(), COLOR_INFO, false)
+            curses.cprint(
+                format!(" ({}%) ", self.num_processed * 100 / self.num_read).as_ref(),
+                COLOR_INFO,
+                false,
+            )
         }
 
         // selected number
         if self.multi_selection && !self.selected.is_empty() {
-            curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
+            curses.cprint(
+                format!(" [{}]", self.selected.len()).as_ref(),
+                COLOR_INFO,
+                true,
+            );
         }
 
         // item cursor
-        let line_num_str = format!(" {} ", self.item_cursor+self.line_cursor);
-        curses.mv(if self.reverse {1} else {self.height}, self.width - (line_num_str.len() as u16));
+        let line_num_str = format!(" {} ", self.item_cursor + self.line_cursor);
+        curses.mv(
+            if self.reverse { 1 } else { self.height },
+            self.width - (line_num_str.len() as u16),
+        );
         curses.cprint(&line_num_str, COLOR_INFO, true);
 
         // restore cursor
@@ -452,7 +475,7 @@ impl Model {
         //debug!("model:draw_query");
 
         // print query
-        curses.mv((if self.reverse {0} else {h-1}) as u16, 0);
+        curses.mv((if self.reverse { 0 } else { h - 1 }) as u16, 0);
         curses.clrtoeol();
         print_query_func(curses);
     }
@@ -463,7 +486,15 @@ impl Model {
         if self.selected.contains_key(&index) {
             curses.cprint(">", COLOR_SELECTED, true);
         } else {
-            curses.cprint(" ", if is_current {COLOR_CURRENT} else {COLOR_NORMAL}, false);
+            curses.cprint(
+                " ",
+                if is_current {
+                    COLOR_CURRENT
+                } else {
+                    COLOR_NORMAL
+                },
+                false,
+            );
         }
 
         let (y, x) = curses.getyx();
@@ -472,7 +503,10 @@ impl Model {
         let (match_start, match_end) = match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
                 if !matched_indics.is_empty() {
-                    (matched_indics[0], matched_indics[matched_indics.len()-1] + 1)
+                    (
+                        matched_indics[0],
+                        matched_indics[matched_indics.len() - 1] + 1,
+                    )
                 } else {
                     (0, 0)
                 }
@@ -483,13 +517,22 @@ impl Model {
 
         let item = &matched_item.item;
         let text: Vec<_> = item.get_text().chars().collect();
-        let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
+        let (shift, full_width) = reshape_string(
+            &text,
+            self.width as usize,
+            match_start,
+            match_end,
+            self.tabstop,
+        );
 
-        debug!("model:draw_item: shfit: {:?}, width:{:?}, full_width: {:?}", shift, self.width, full_width);
+        debug!(
+            "model:draw_item: shfit: {:?}, width:{:?}, full_width: {:?}",
+            shift, self.width, full_width
+        );
         let mut printer = LinePrinter::builder()
             .tabstop(self.tabstop)
             .container_width(self.width as usize)
-            .shift(if self.no_hscroll {0} else {shift})
+            .shift(if self.no_hscroll { 0 } else { shift })
             .text_width(full_width)
             .hscroll_offset(self.hscroll_offset)
             .build();
@@ -546,7 +589,13 @@ impl Model {
 
             Some(MatchedRange::Range(start, end)) => {
                 for (idx, &ch) in text.iter().enumerate() {
-                    printer.print_char(curses, ch, COLOR_MATCHED, is_current, !(idx>=start && idx<end));
+                    printer.print_char(
+                        curses,
+                        ch,
+                        COLOR_MATCHED,
+                        is_current,
+                        !(idx >= start && idx < end),
+                    );
                 }
                 curses.attr_on(0);
             }
@@ -579,7 +628,10 @@ impl Model {
         let item = Arc::clone(self.items.get(current_idx).unwrap());
         let highlighted_content = item.item.get_text();
 
-        debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
+        debug!(
+            "model:draw_preview: highlighted_content: '{:?}'",
+            highlighted_content
+        );
         let cmd = self.inject_preview_command(highlighted_content);
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
@@ -593,11 +645,14 @@ impl Model {
         let (strip_string, ansi_states) = ansi_parser.parse_ansi(&output);
 
         debug!("model:draw_preview: output = {:?}", &output);
-        debug!("model:draw_preview: strip_string: {:?}\nansi_states: {:?}", strip_string, ansi_states);
+        debug!(
+            "model:draw_preview: strip_string: {:?}\nansi_states: {:?}",
+            strip_string, ansi_states
+        );
 
         let mut ansi_states = ansi_states.iter().peekable();
 
-        curses.mv(0,0);
+        curses.mv(0, 0);
         for (ch_idx, ch) in strip_string.chars().enumerate() {
             // print ansi color codes.
             while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
@@ -611,7 +666,6 @@ impl Model {
                 }
             }
             curses.addch(ch);
-
         }
         curses.attr_on(0);
 
@@ -623,15 +677,17 @@ impl Model {
         debug!("replace: {:?}, text: {:?}", cmd, text);
         RE_FILEDS.replace_all(cmd, |caps: &Captures| {
             assert!(caps[1].len() >= 2);
-            let range = &caps[1][1..caps[1].len()-1];
+            let range = &caps[1][1..caps[1].len() - 1];
             if range == "" {
                 format!("'{}'", text)
             } else {
-                format!("'{}'", get_string_by_range(&self.delimiter, text, range).unwrap_or(""))
+                format!(
+                    "'{}'",
+                    get_string_by_range(&self.delimiter, text, range).unwrap_or("")
+                )
             }
         })
     }
-
 
     fn print_char(&self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
         if ch != '\t' {
@@ -639,7 +695,7 @@ impl Model {
         } else {
             // handle tabstop
             let (_, x) = curses.getyx();
-            let rest = self.tabstop - (x as usize -2)%self.tabstop;
+            let rest = self.tabstop - (x as usize - 2) % self.tabstop;
             for _ in 0..rest {
                 curses.caddch(' ', color, is_bold);
             }
@@ -650,7 +706,7 @@ impl Model {
     // Actions
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
-        let diff = if self.reverse {-diff} else {diff};
+        let diff = if self.reverse { -diff } else { diff };
         let mut line_cursor = self.line_cursor as i32;
         let mut item_cursor = self.item_cursor as i32;
         let item_len = self.items.len() as i32;
@@ -661,13 +717,13 @@ impl Model {
         if line_cursor >= height {
             item_cursor += line_cursor - height + 1;
             item_cursor = max(0, min(item_cursor, item_len - height));
-            line_cursor = min(height-1, item_len - item_cursor);
+            line_cursor = min(height - 1, item_len - item_cursor);
         } else if line_cursor < 0 {
             item_cursor += line_cursor;
             item_cursor = max(item_cursor, 0);
             line_cursor = 0;
         } else {
-            line_cursor = max(0, min(line_cursor, item_len-1 - item_cursor));
+            line_cursor = max(0, min(line_cursor, item_len - 1 - item_cursor));
         }
 
         self.item_cursor = item_cursor as usize;
@@ -675,7 +731,9 @@ impl Model {
     }
 
     pub fn act_toggle(&mut self) {
-        if !self.multi_selection || self.items.is_empty() {return;}
+        if !self.multi_selection || self.items.is_empty() {
+            return;
+        }
 
         let current_item = self.items.get(self.item_cursor + self.line_cursor).unwrap();
         let index = current_item.item.get_full_index();
@@ -753,17 +811,15 @@ impl Model {
         curses.win_main.show_cursor();
         curses.refresh();
     }
-
 }
 
-
 fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Error>> {
-    let output= Command::new("sh")
-                       .env("LINES", lines.to_string())
-                       .env("COLUMNS", cols.to_string())
-                       .arg("-c")
-                       .arg(cmd)
-                       .output()?;
+    let output = Command::new("sh")
+        .env("LINES", lines.to_string())
+        .env("COLUMNS", cols.to_string())
+        .arg("-c")
+        .arg(cmd)
+        .output()?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
@@ -924,27 +980,37 @@ fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
 //                shift ->|               |
 //
 // return (left_shift, full_print_width)
-fn reshape_string(text: &[char],
-                  container_width: usize,
-                  match_start: usize,
-                  match_end: usize,
-                  tabstop: usize) -> (usize, usize) {
+fn reshape_string(
+    text: &[char],
+    container_width: usize,
+    match_start: usize,
+    match_end: usize,
+    tabstop: usize,
+) -> (usize, usize) {
     if text.is_empty() {
         return (0, 0);
     }
 
     let acc_width = accumulate_text_width(text, tabstop);
-    let full_width = acc_width[acc_width.len()-1];
+    let full_width = acc_width[acc_width.len() - 1];
     if full_width <= container_width {
         return (0, full_width);
     }
 
     // w1, w2, w3 = len_before_matched, len_matched, len_after_matched
-    let w1 = if match_start == 0 {0} else {acc_width[match_start-1]};
-    let w2 = if match_end >= text.len() {full_width - w1} else {acc_width[match_end] - w1};
-    let w3 = acc_width[acc_width.len()-1] - w1 - w2;
+    let w1 = if match_start == 0 {
+        0
+    } else {
+        acc_width[match_start - 1]
+    };
+    let w2 = if match_end >= text.len() {
+        full_width - w1
+    } else {
+        acc_width[match_end] - w1
+    };
+    let w3 = acc_width[acc_width.len() - 1] - w1 - w2;
 
-    if (w1 > w3 && w2+w3 <= container_width) || (w3 <= 2) {
+    if (w1 > w3 && w2 + w3 <= container_width) || (w3 <= 2) {
         // right-fixed
         //(right_fixed(&acc_width, container_width), full_width)
         (full_width - container_width, full_width)
@@ -967,24 +1033,37 @@ mod tests {
 
     #[test]
     fn test_accumulate_text_width() {
-        assert_eq!(accumulate_text_width(&to_chars(&"abcdefg"), 8), vec![1,2,3,4,5,6,7]);
-        assert_eq!(accumulate_text_width(&to_chars(&"ab中de国g"), 8), vec![1,2,4,5,6,8,9]);
-        assert_eq!(accumulate_text_width(&to_chars(&"ab\tdefg"), 8), vec![1,2,8,9,10,11,12]);
-        assert_eq!(accumulate_text_width(&to_chars(&"ab中\te国g"), 8), vec![1,2,4,8,9,11,12]);
+        assert_eq!(
+            accumulate_text_width(&to_chars(&"abcdefg"), 8),
+            vec![1, 2, 3, 4, 5, 6, 7]
+        );
+        assert_eq!(
+            accumulate_text_width(&to_chars(&"ab中de国g"), 8),
+            vec![1, 2, 4, 5, 6, 8, 9]
+        );
+        assert_eq!(
+            accumulate_text_width(&to_chars(&"ab\tdefg"), 8),
+            vec![1, 2, 8, 9, 10, 11, 12]
+        );
+        assert_eq!(
+            accumulate_text_width(&to_chars(&"ab中\te国g"), 8),
+            vec![1, 2, 4, 8, 9, 11, 12]
+        );
     }
 
     #[test]
     fn test_reshape_string() {
         // no match, left fixed to 0
-        assert_eq!(reshape_string(&to_chars(&"abc"), 10, 0, 0, 8)
-                   , (0, 3));
-        assert_eq!(reshape_string(&to_chars(&"a\tbc"), 8, 0, 0, 8)
-                   , (0, 10));
-        assert_eq!(reshape_string(&to_chars(&"a\tb\tc"), 10, 0, 0, 8)
-                   , (0, 17));
-        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc"), 8, 0, 0, 8)
-                   , (0, 17));
-        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc012345"), 8, 0, 0, 8)
-                   , (0, 23));
+        assert_eq!(reshape_string(&to_chars(&"abc"), 10, 0, 0, 8), (0, 3));
+        assert_eq!(reshape_string(&to_chars(&"a\tbc"), 8, 0, 0, 8), (0, 10));
+        assert_eq!(reshape_string(&to_chars(&"a\tb\tc"), 10, 0, 0, 8), (0, 17));
+        assert_eq!(
+            reshape_string(&to_chars(&"a\t中b\tc"), 8, 0, 0, 8),
+            (0, 17)
+        );
+        assert_eq!(
+            reshape_string(&to_chars(&"a\t中b\tc012345"), 8, 0, 0, 8),
+            (0, 23)
+        );
     }
 }

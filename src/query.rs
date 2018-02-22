@@ -52,8 +52,8 @@ impl Query {
     }
 
     //pub fn cmd(mut self, cmd: &str) -> Self {
-        //self.cmd_before = cmd.chars().collect();
-        //self
+    //self.cmd_before = cmd.chars().collect();
+    //self
     //}
 
     pub fn build(self) -> Self {
@@ -93,28 +93,40 @@ impl Query {
     }
 
     pub fn get_query(&self) -> String {
-        self.query_before.iter().cloned().chain(self.query_after.iter().cloned().rev()).collect()
+        self.query_before
+            .iter()
+            .cloned()
+            .chain(self.query_after.iter().cloned().rev())
+            .collect()
     }
 
     pub fn get_cmd(&self) -> String {
-        let arg: String = self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect();
+        let arg: String = self.cmd_before
+            .iter()
+            .cloned()
+            .chain(self.cmd_after.iter().cloned().rev())
+            .collect();
         self.base_cmd.replace(&self.replstr, &arg)
     }
 
     pub fn get_cmd_query(&self) -> String {
-        self.cmd_before.iter().cloned().chain(self.cmd_after.iter().cloned().rev()).collect()
+        self.cmd_before
+            .iter()
+            .cloned()
+            .chain(self.cmd_after.iter().cloned().rev())
+            .collect()
     }
 
     fn get_before(&self) -> String {
         match self.mode {
-            QueryMode::CMD   => self.cmd_before.iter().cloned().collect(),
+            QueryMode::CMD => self.cmd_before.iter().cloned().collect(),
             QueryMode::QUERY => self.query_before.iter().cloned().collect(),
         }
     }
 
     fn get_after(&self) -> String {
         match self.mode {
-            QueryMode::CMD   => self.cmd_after.iter().cloned().rev().collect(),
+            QueryMode::CMD => self.cmd_after.iter().cloned().rev().collect(),
             QueryMode::QUERY => self.query_after.iter().cloned().rev().collect(),
         }
     }
@@ -128,7 +140,7 @@ impl Query {
 
         Box::new(move |curses| {
             match mode {
-                QueryMode::CMD   => {
+                QueryMode::CMD => {
                     curses.cprint(&cmd_prompt, COLOR_PROMPT, false);
                 }
                 QueryMode::QUERY => {
@@ -146,7 +158,7 @@ impl Query {
     fn get_ref(&mut self) -> (&mut Vec<char>, &mut Vec<char>) {
         match self.mode {
             QueryMode::QUERY => (&mut self.query_before, &mut self.query_after),
-            QueryMode::CMD   => (&mut self.cmd_before, &mut self.cmd_after)
+            QueryMode::CMD => (&mut self.cmd_before, &mut self.cmd_after),
         }
     }
 
@@ -164,13 +176,13 @@ impl Query {
         }
     }
 
-//------------------------------------------------------------------------------
-// Actions
-//
+    //------------------------------------------------------------------------------
+    // Actions
+    //
     pub fn act_query_toggle_interactive(&mut self) {
         self.mode = match self.mode {
             QueryMode::QUERY => QueryMode::CMD,
-            QueryMode::CMD   => QueryMode::QUERY,
+            QueryMode::CMD => QueryMode::QUERY,
         }
     }
 
@@ -210,12 +222,12 @@ impl Query {
         {
             let (before, _) = self.get_ref();
             // kill things other than whitespace
-            while !before.is_empty() && before[before.len()-1].is_whitespace() {
+            while !before.is_empty() && before[before.len() - 1].is_whitespace() {
                 yank.push(before.pop().unwrap());
             }
 
             // kill word until whitespace
-            while !before.is_empty() && !before[before.len()-1].is_whitespace() {
+            while !before.is_empty() && !before[before.len() - 1].is_whitespace() {
                 yank.push(before.pop().unwrap());
             }
         }
@@ -229,12 +241,12 @@ impl Query {
         {
             let (before, _) = self.get_ref();
             // kill things other than alphanumeric
-            while !before.is_empty() && !before[before.len()-1].is_alphanumeric() {
+            while !before.is_empty() && !before[before.len() - 1].is_alphanumeric() {
                 yank.push(before.pop().unwrap());
             }
 
             // kill word until whitespace (not alphanumeric)
-            while !before.is_empty() && before[before.len()-1].is_alphanumeric() {
+            while !before.is_empty() && before[before.len() - 1].is_alphanumeric() {
                 yank.push(before.pop().unwrap());
             }
         }
@@ -249,11 +261,11 @@ impl Query {
             let (_, after) = self.get_ref();
 
             // kill non alphanumeric
-            while !after.is_empty() && !after[after.len()-1].is_alphanumeric() {
+            while !after.is_empty() && !after[after.len() - 1].is_alphanumeric() {
                 yank.push(after.pop().unwrap());
             }
             // kill alphanumeric
-            while !after.is_empty() && after[after.len()-1].is_alphanumeric() {
+            while !after.is_empty() && after[after.len() - 1].is_alphanumeric() {
                 yank.push(after.pop().unwrap());
             }
         }
@@ -263,14 +275,14 @@ impl Query {
     pub fn act_backward_word(&mut self) {
         let (before, after) = self.get_ref();
         // skip whitespace
-        while !before.is_empty() && !before[before.len()-1].is_alphanumeric() {
+        while !before.is_empty() && !before[before.len() - 1].is_alphanumeric() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
         }
 
         // backword char until whitespace
-        while !before.is_empty() && before[before.len()-1].is_alphanumeric() {
+        while !before.is_empty() && before[before.len() - 1].is_alphanumeric() {
             before.pop().map(|ch| {
                 after.push(ch);
             });
@@ -281,13 +293,13 @@ impl Query {
         let (before, after) = self.get_ref();
         // backword char until whitespace
         // skip whitespace
-        while !after.is_empty() && after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && after[after.len() - 1].is_whitespace() {
             after.pop().map(|ch| {
                 before.push(ch);
             });
         }
 
-        while !after.is_empty() && !after[after.len()-1].is_whitespace() {
+        while !after.is_empty() && !after[after.len() - 1].is_whitespace() {
             after.pop().map(|ch| {
                 before.push(ch);
             });

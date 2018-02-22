@@ -9,7 +9,7 @@ use std::io::prelude::*;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion;
-use std::cmp::{min, max};
+use std::cmp::{max, min};
 use termion::{color, style};
 use std::fmt;
 use unicode_width::UnicodeWidthChar;
@@ -18,18 +18,18 @@ use std::os::unix::io::{IntoRawFd, RawFd};
 use libc;
 use clap::ArgMatches;
 
-pub static COLOR_NORMAL:        u16 = 0;
-pub static COLOR_PROMPT:        u16 = 1;
-pub static COLOR_MATCHED:       u16 = 2;
-pub static COLOR_CURRENT:       u16 = 3;
+pub static COLOR_NORMAL: u16 = 0;
+pub static COLOR_PROMPT: u16 = 1;
+pub static COLOR_MATCHED: u16 = 2;
+pub static COLOR_CURRENT: u16 = 3;
 pub static COLOR_CURRENT_MATCH: u16 = 4;
-pub static COLOR_SPINNER:       u16 = 5;
-pub static COLOR_INFO:          u16 = 6;
-pub static COLOR_CURSOR:        u16 = 7;
-pub static COLOR_SELECTED:      u16 = 8;
-pub static COLOR_HEADER:        u16 = 9;
-pub static COLOR_BORDER:        u16 = 10;
-static COLOR_USER:              u16 = 11;
+pub static COLOR_SPINNER: u16 = 5;
+pub static COLOR_INFO: u16 = 6;
+pub static COLOR_CURSOR: u16 = 7;
+pub static COLOR_SELECTED: u16 = 8;
+pub static COLOR_HEADER: u16 = 9;
+pub static COLOR_BORDER: u16 = 10;
+static COLOR_USER: u16 = 11;
 
 pub type attr_t = u16;
 
@@ -44,7 +44,7 @@ lazy_static! {
 // register the color as color pair
 fn register_resource(key: attr_t, resource: String) {
     let mut resource_map = RESOURCE_MAP.write().unwrap();
-    resource_map.entry(key).or_insert_with(|| {resource});
+    resource_map.entry(key).or_insert_with(|| resource);
 }
 
 pub fn register_ansi(ansi: String) -> attr_t {
@@ -75,117 +75,6 @@ pub fn ansi_contains_reset(key: attr_t) -> bool {
     let text = ansi.as_ref().unwrap();
     text == &"\x1B[m" || text == &"\x1B[0m" || text.ends_with(";0m")
 }
-
-// return (contains-background?, reset-background?)
-//pub fn ansi_contains_background(key: attr_t) -> (bool, bool) {
-    //let resource_map = RESOURCE_MAP.read().unwrap();
-    //let ansi = resource_map.get(&key);
-    //if ansi.is_none() {
-        //return (false, false);
-    //}
-
-    //let text = ansi.as_ref().unwrap();
-
-    //let mut contains_background = false;
-    //let mut reset_background = false;
-    //for mat in RE_ANSI_COLOR.find_iter(text) {
-        //let (start, end) = (mat.start(), mat.end());
-
-        //// ^[[1;30;40m -> 1;30;40
-        //let code = &text[start+2..end-1];
-        //if code.len() <= 0 {
-            //// ^[[m
-            //contains_background = false;
-            //reset_background = true;
-            //continue;
-        //}
-
-        //// 1;30;40 -> [1, 30, 40]
-        ////  z
-        //let mut nums = code.split(';').map(|x|x.parse::<u16>().unwrap_or(1000)).peekable();
-        //while let Some(&num) = nums.peek() {
-            //let _ = nums.next();
-            //match num {
-                //0 => {reset_background = true;}
-                //40 ... 47 => {
-                    //contains_background = true;
-                    //reset_background = false;
-                //}
-                //48 => {
-                    //contains_background = true;
-                    //reset_background = false;
-
-                    //// skip RGB
-                    //let _ = nums.next();
-                    //let _ = nums.next();
-                    //let _ = nums.next();
-                    //let _ = nums.next();
-                //}
-                //49 => {
-                    //contains_background = false;
-                    //reset_background = true;
-                //}
-                //_ => {}
-            //}
-        //}
-    //}
-    //(contains_background, reset_background)
-//}
-
-//// return (contains-foreground?, reset-foreground?)
-//pub fn ansi_contains_foreground(key: attr_t) -> (bool, bool) {
-    //let resource_map = RESOURCE_MAP.read().unwrap();
-    //let ansi = resource_map.get(&key);
-    //if ansi.is_none() {
-        //return (false, false);
-    //}
-
-    //let text = ansi.as_ref().unwrap();
-
-    //let mut contains_foreground = false;
-    //let mut reset_foreground = false;
-    //for mat in RE_ANSI_COLOR.find_iter(text) {
-        //let (start, end) = (mat.start(), mat.end());
-
-        //// ^[[1;30;40m -> 1;30;40
-        //let code = &text[start+2..end-1];
-        //if code.len() <= 0 {
-            //// ^[[m
-            //contains_foreground = false;
-            //reset_foreground = true;
-        //}
-
-        //// 1;30;40 -> [1, 30, 40]
-        ////  z
-        //let mut nums = code.split(';').map(|x|x.parse::<u16>().unwrap_or(1000)).peekable();
-        //while let Some(&num) = nums.peek() {
-            //let _ = nums.next();
-            //match num {
-                //0 => {reset_foreground = true;}
-                //30 ... 37 => {
-                    //contains_foreground = true;
-                    //reset_foreground = false;
-                //}
-                //38 => {
-                    //contains_foreground = true;
-                    //reset_foreground = false;
-
-                    //// skip RGB
-                    //let _ = nums.next();
-                    //let _ = nums.next();
-                    //let _ = nums.next();
-                    //let _ = nums.next();
-                //}
-                //39 => {
-                    //contains_foreground = false;
-                    //reset_foreground = true;
-                //}
-                //_ => {}
-            //}
-        //}
-    //}
-    //(contains_foreground, reset_foreground)
-//}
 
 //==============================================================================
 
@@ -270,31 +159,34 @@ impl Window {
         self.attron(COLOR_BORDER);
         match self.border {
             Some(Direction::Up) => {
-                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left +1, self.top +1)).as_str());
-                self.stdout_buffer.push_str(&"─".repeat((self.right-self.left) as usize));
+                self.stdout_buffer
+                    .push_str(format!("{}", termion::cursor::Goto(self.left + 1, self.top + 1)).as_str());
+                self.stdout_buffer
+                    .push_str(&"─".repeat((self.right - self.left) as usize));
             }
             Some(Direction::Down) => {
-                self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left +1, self.bottom)).as_str());
-                self.stdout_buffer.push_str(&"─".repeat((self.right-self.left) as usize));
+                self.stdout_buffer
+                    .push_str(format!("{}", termion::cursor::Goto(self.left + 1, self.bottom)).as_str());
+                self.stdout_buffer
+                    .push_str(&"─".repeat((self.right - self.left) as usize));
             }
-            Some(Direction::Left) => {
-                for i in self.top..self.bottom {
-                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left +1, i+1)).as_str());
-                    self.stdout_buffer.push('│')
-                }
-            }
-            Some(Direction::Right) => {
-                for i in self.top..self.bottom {
-                    self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.right, i+1)).as_str());
-                    self.stdout_buffer.push('│')
-                }
-            }
+            Some(Direction::Left) => for i in self.top..self.bottom {
+                self.stdout_buffer
+                    .push_str(format!("{}", termion::cursor::Goto(self.left + 1, i + 1)).as_str());
+                self.stdout_buffer.push('│')
+            },
+            Some(Direction::Right) => for i in self.top..self.bottom {
+                self.stdout_buffer
+                    .push_str(format!("{}", termion::cursor::Goto(self.right, i + 1)).as_str());
+                self.stdout_buffer.push('│')
+            },
             _ => {}
         }
         self.attroff(COLOR_BORDER);
         self.mv(y, x);
     }
 
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     pub fn mv(&mut self, y: u16, x: u16) {
         self.current_y = y;
         self.current_x = x;
@@ -311,7 +203,7 @@ impl Window {
     pub fn get_maxyx(&self) -> (u16, u16) {
         assert!(self.bottom >= self.top);
         assert!(self.right >= self.left);
-        let (max_y, max_x) = (self.bottom-self.top, self.right-self.left);
+        let (max_y, max_x) = (self.bottom - self.top, self.right - self.left);
 
         // window is hidden
         if max_y == 0 || max_x == 0 {
@@ -319,8 +211,8 @@ impl Window {
         }
 
         match self.border {
-            Some(Direction::Up) | Some(Direction::Down) => (max_y-1, max_x),
-            Some(Direction::Left) | Some(Direction::Right) => (max_y, max_x-1),
+            Some(Direction::Up) | Some(Direction::Down) => (max_y - 1, max_x),
+            Some(Direction::Left) | Some(Direction::Right) => (max_y, max_x - 1),
             _ => (max_y, max_x),
         }
     }
@@ -337,7 +229,8 @@ impl Window {
         }
 
         self.attron(COLOR_NORMAL);
-        self.stdout_buffer.push_str(&" ".repeat((max_x - x) as usize));
+        self.stdout_buffer
+            .push_str(&" ".repeat((max_x - x) as usize));
         self.mv(y, x);
     }
 
@@ -348,7 +241,7 @@ impl Window {
         //debug!("curses:window:clrtoend: y/x: {}/{}, max_y/max_x: {}/{}", y, x, max_y, max_x);
 
         self.clrtoeol();
-        for row in y+1..max_y {
+        for row in y + 1..max_y {
             self.mv(row, 0);
             self.clrtoeol();
         }
@@ -401,7 +294,7 @@ impl Window {
             '\n' => {
                 let (y, _) = self.getyx();
                 self.clrtoeol();
-                self.mv(y+1, 0);
+                self.mv(y + 1, 0);
             }
             ch => {
                 self.add_char_raw(ch);
@@ -415,14 +308,13 @@ impl Window {
         let text_width = ch.width().unwrap_or(2) as u16;
         let target_x = x + text_width;
 
-
         // no enough space to print
-        if (y >= max_y) || (target_x > max_x && y == max_y-1) || (!self.wrap && target_x > max_x) {
+        if (y >= max_y) || (target_x > max_x && y == max_y - 1) || (!self.wrap && target_x > max_x) {
             return;
         }
 
         if target_x > max_x {
-            self.mv(y+1, 0);
+            self.mv(y + 1, 0);
         }
 
         self.stdout_buffer.push(ch);
@@ -430,8 +322,12 @@ impl Window {
         let (y, x) = self.getyx();
         let target_x = x + text_width;
 
-        let final_x = if self.wrap {target_x % max_x} else {target_x};
-        let final_y = y + if self.wrap {target_x/max_x} else {0};
+        let final_x = if self.wrap {
+            target_x % max_x
+        } else {
+            target_x
+        };
+        let final_y = y + if self.wrap { target_x / max_x } else { 0 };
         self.mv(final_y, final_x);
     }
 
@@ -445,7 +341,9 @@ impl Window {
 
     fn attron(&mut self, key: attr_t) {
         let resource_map = RESOURCE_MAP.read().unwrap();
-        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
+        resource_map
+            .get(&key)
+            .map(|s| self.stdout_buffer.push_str(s));
     }
 
     fn attroff(&mut self, key: attr_t) {
@@ -453,11 +351,19 @@ impl Window {
             return;
         }
 
-        self.stdout_buffer.push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
+        self.stdout_buffer
+            .push_str(format!("{}{}", color::Fg(color::Reset), color::Bg(color::Reset)).as_str());
     }
 
     fn attrclear(&mut self) {
-        self.stdout_buffer.push_str(format!("{}{}{}", color::Fg(color::Reset), color::Bg(color::Reset), style::Reset).as_str());
+        self.stdout_buffer.push_str(
+            format!(
+                "{}{}{}",
+                color::Fg(color::Reset),
+                color::Bg(color::Reset),
+                style::Reset
+            ).as_str(),
+        );
     }
 
     pub fn write_to_term(&mut self, term: &mut Write) {
@@ -466,14 +372,17 @@ impl Window {
     }
 
     pub fn hide_cursor(&mut self) {
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Hide).as_str());
+        self.stdout_buffer
+            .push_str(format!("{}", termion::cursor::Hide).as_str());
     }
     pub fn show_cursor(&mut self) {
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Show).as_str());
+        self.stdout_buffer
+            .push_str(format!("{}", termion::cursor::Show).as_str());
     }
 
     pub fn move_cursor_right(&mut self, offset: u16) {
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Right(offset)).as_str());
+        self.stdout_buffer
+            .push_str(format!("{}", termion::cursor::Right(offset)).as_str());
         let (_, max_x) = self.get_maxyx();
         self.current_x = min(self.current_x + offset, max_x);
     }
@@ -482,13 +391,14 @@ impl Window {
         // to erase all contents, including border
         let spaces = " ".repeat((self.right - self.left) as usize);
         for row in (self.top..self.bottom).rev() {
-            self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left + 1, row + 1)).as_str());
+            self.stdout_buffer
+                .push_str(format!("{}", termion::cursor::Goto(self.left + 1, row + 1)).as_str());
             self.stdout_buffer.push_str(&spaces);
         }
-        self.stdout_buffer.push_str(format!("{}", termion::cursor::Goto(self.left + 1, self.top + 1)).as_str());
+        self.stdout_buffer
+            .push_str(format!("{}", termion::cursor::Goto(self.left + 1, self.top + 1)).as_str());
     }
 }
-
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 pub enum Direction {
@@ -497,7 +407,6 @@ pub enum Direction {
     Left,
     Right,
 }
-
 
 pub struct Curses {
     //screen: SCREEN,
@@ -536,14 +445,23 @@ impl Curses {
 
         // parse the option of window height of skim
 
-        let min_height = options.values_of("min-height")
+        let min_height = options
+            .values_of("min-height")
             .and_then(|vals| vals.last())
-            .map(|x| x.parse::<u16>().unwrap_or(10)).unwrap();
+            .map(|x| x.parse::<u16>().unwrap_or(10))
+            .unwrap();
         let no_height = options.is_present("no-height");
-        let height = options.values_of("height").and_then(|vals| vals.last())
-            .map(Curses::parse_margin_string).unwrap();
+        let height = options
+            .values_of("height")
+            .and_then(|vals| vals.last())
+            .map(Curses::parse_margin_string)
+            .unwrap();
 
-        let height = if no_height {Margin::Percent(100)} else {height};
+        let height = if no_height {
+            Margin::Percent(100)
+        } else {
+            height
+        };
 
         // If skim is invoked by pipeline `echo 'abc' | sk | awk ...`
         // The the output is redirected. We need to open /dev/tty for output.
@@ -562,7 +480,10 @@ impl Curses {
         let (max_y, _) = Curses::terminal_size();
 
         let (term, y): (Box<Write>, u16) = if Margin::Percent(100) == height {
-            (Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap())), 0)
+            (
+                Box::new(AlternateScreen::from(stdout().into_raw_mode().unwrap())),
+                0,
+            )
         } else {
             let term = Box::new(stdout().into_raw_mode().unwrap());
             let (y, _) = Curses::get_cursor_pos();
@@ -578,20 +499,28 @@ impl Curses {
             0
         } else {
             let height = match height {
-                Margin::Percent(p) => max(p*max_y/100, min_height),
+                Margin::Percent(p) => max(p * max_y / 100, min_height),
                 Margin::Fixed(rows) => rows,
             };
-            if y + height >= max_y {- i32::from(height)} else {i32::from(y)}
+            if y + height >= max_y {
+                -i32::from(height)
+            } else {
+                i32::from(y)
+            }
         };
 
         // parse options for margin
-        let margins = options.values_of("margin").and_then(|vals| vals.last())
-            .map(Curses::parse_margin).unwrap();
+        let margins = options
+            .values_of("margin")
+            .and_then(|vals| vals.last())
+            .map(Curses::parse_margin)
+            .unwrap();
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         // parse options for preview window
         let preview_cmd_exist = options.is_present("preview");
-        let (preview_direction, preview_size, preview_wrap, preview_shown) = options.values_of("preview-window")
+        let (preview_direction, preview_size, preview_wrap, preview_shown) = options
+            .values_of("preview-window")
             .and_then(|vals| vals.last())
             .map(Curses::parse_preview)
             .unwrap();
@@ -613,8 +542,8 @@ impl Curses {
             preview_size,
             preview_shown: preview_cmd_exist && preview_shown,
 
-            win_main: Window::new(0,0,0,0, false, None),
-            win_preview: Window::new(0,0,0,0, preview_wrap, None),
+            win_main: Window::new(0, 0, 0, 0, false, None),
+            win_preview: Window::new(0, 0, 0, 0, preview_wrap, None),
 
             orig_stdout_fd,
         };
@@ -624,12 +553,14 @@ impl Curses {
 
     fn reserve_lines(max_y: u16, height: Margin, min_height: u16) {
         let rows = match height {
-            Margin::Percent(100) => {return;}
-            Margin::Percent(percent) => max(min_height, max_y*percent/100),
+            Margin::Percent(100) => {
+                return;
+            }
+            Margin::Percent(percent) => max(min_height, max_y * percent / 100),
             Margin::Fixed(rows) => rows,
         };
 
-        print!("{}", "\n".repeat(max(0, rows-1) as usize));
+        print!("{}", "\n".repeat(max(0, rows - 1) as usize));
         stdout().flush().unwrap();
     }
 
@@ -649,23 +580,27 @@ impl Curses {
             }
         }
         let s = String::from_utf8(read_chars).unwrap();
-        let t: Vec<&str> = s[2..s.len()-1].split(';').collect();
+        let t: Vec<&str> = s[2..s.len() - 1].split(';').collect();
         stdout.flush().unwrap();
-        (t[0].parse::<u16>().unwrap() - 1, t[1].parse::<u16>().unwrap() - 1)
+        (
+            t[0].parse::<u16>().unwrap() - 1,
+            t[1].parse::<u16>().unwrap() - 1,
+        )
     }
 
     fn parse_margin_string(margin: &str) -> Margin {
         if margin.ends_with('%') {
-            Margin::Percent(min(100, margin[0..margin.len()-1].parse::<u16>().unwrap_or(100)))
+            Margin::Percent(min(
+                100,
+                margin[0..margin.len() - 1].parse::<u16>().unwrap_or(100),
+            ))
         } else {
             Margin::Fixed(margin.parse::<u16>().unwrap_or(0))
         }
     }
 
     pub fn parse_margin(margin_option: &str) -> (Margin, Margin, Margin, Margin) {
-        let margins = margin_option
-            .split(',')
-            .collect::<Vec<&str>>();
+        let margins = margin_option.split(',').collect::<Vec<&str>>();
 
         match margins.len() {
             1 => {
@@ -690,15 +625,18 @@ impl Curses {
                 let margin_left = Curses::parse_margin_string(margins[3]);
                 (margin_top, margin_right, margin_bottom, margin_left)
             }
-            _ => (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0))
+            _ => (
+                Margin::Fixed(0),
+                Margin::Fixed(0),
+                Margin::Fixed(0),
+                Margin::Fixed(0),
+            ),
         }
     }
 
     // -> (direction, size, wrap, shown)
     fn parse_preview(preview_option: &str) -> (Direction, Margin, bool, bool) {
-        let options = preview_option
-            .split(':')
-            .collect::<Vec<&str>>();
+        let options = preview_option.split(':').collect::<Vec<&str>>();
 
         let mut direction = Direction::Right;
         let mut shown = true;
@@ -718,13 +656,13 @@ impl Curses {
                 size = Curses::parse_margin_string(option);
             } else {
                 match option.to_uppercase().as_str() {
-                    "UP"     => {direction = Direction::Up}
-                    "DOWN"   => {direction = Direction::Down}
-                    "LEFT"   => {direction = Direction::Left}
-                    "RIGHT"  => {direction = Direction::Right}
-                    "HIDDEN" => {shown = false}
-                    "WRAP"   => {wrap = true}
-                    _        => {}
+                    "UP" => direction = Direction::Up,
+                    "DOWN" => direction = Direction::Down,
+                    "LEFT" => direction = Direction::Left,
+                    "RIGHT" => direction = Direction::Right,
+                    "HIDDEN" => shown = false,
+                    "WRAP" => wrap = true,
+                    _ => {}
                 }
             }
         }
@@ -732,6 +670,7 @@ impl Curses {
         (direction, size, wrap, shown)
     }
 
+    #[cfg_attr(rustfmt, rustfmt_skip)]
     pub fn resize(&mut self) {
         let (max_y, max_x) = Curses::terminal_size();
         let height = self.height();
@@ -822,7 +761,7 @@ impl Curses {
         let (max_y, _) = Curses::terminal_size();
         match self.height {
             Margin::Percent(100) => max_y,
-            Margin::Percent(p) => min(max_y, max(p*max_y/100, self.min_height)),
+            Margin::Percent(p) => min(max_y, max(p * max_y / 100, self.min_height)),
             Margin::Fixed(rows) => min(max_y, rows),
         }
     }
@@ -856,31 +795,6 @@ impl Curses {
     }
 }
 
-//fn attr_color(pair: u16, is_bold: bool) -> attr_t {
-    //let attr = if pair > COLOR_NORMAL {COLOR_PAIR(pair)} else {0};
-
-    //attr | if is_bold {A_BOLD()} else {0}
-//}
-
-//fn attr_mono(pair: u16, is_bold: bool) -> attr_t {
-    //let mut attr = 0;
-    //match pair {
-        //x if x == COLOR_NORMAL => {
-            //if is_bold {
-                //attr = A_REVERSE();
-            //}
-        //}
-        //x if x == COLOR_MATCHED => {
-            //attr = A_UNDERLINE();
-        //}
-        //x if x == COLOR_CURRENT_MATCH => {
-            //attr = A_UNDERLINE() | A_REVERSE()
-        //}
-        //_ => {}
-    //}
-    //attr | if is_bold {A_BOLD()} else {0}
-//}
-
 struct ColorWrapper(Box<color::Color>);
 
 impl color::Color for ColorWrapper {
@@ -901,6 +815,7 @@ impl<'a> color::Color for &'a ColorWrapper {
     }
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 pub struct ColorTheme {
     fg:               ColorWrapper, // text fg
     bg:               ColorWrapper, // text bg
@@ -919,7 +834,7 @@ pub struct ColorTheme {
     border:           ColorWrapper,
 }
 
-
+#[cfg_attr(rustfmt, rustfmt_skip)]
 impl ColorTheme {
     pub fn init_from_options(options: &ArgMatches) {
         // register
@@ -1071,4 +986,3 @@ impl ColorTheme {
         register_resource(COLOR_BORDER,        format!("{}{}", color::Fg(&self.border),        color::Bg(&self.bg)));
     }
 }
-
