@@ -24,7 +24,7 @@ const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 
 lazy_static! {
-    static ref RE_FILEDS: Regex = Regex::new(r"(\{[0-9.,q]*?})").unwrap();
+    static ref RE_FILEDS: Regex = Regex::new(r"(\{-?[0-9.,q]*?})").unwrap();
     static ref REFRESH_DURATION: Duration = Duration::from_millis(200);
 }
 
