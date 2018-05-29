@@ -15,7 +15,7 @@ use std::fs::File;
 use regex::Regex;
 use sender::CachedSender;
 use field::{parse_range, FieldRange};
-use clap::ArgMatches;
+use options::SkimOptions;
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -40,31 +40,31 @@ impl ReaderOption {
         }
     }
 
-    pub fn parse_options(&mut self, options: &ArgMatches) {
-        if options.is_present("ansi") {
+    pub fn parse_options(&mut self, options: &SkimOptions) {
+        if options.ansi {
             self.use_ansi_color = true;
         }
 
-        if let Some(delimiter) = options.values_of("delimiter").and_then(|vals| vals.last()) {
+        if let Some(delimiter) = options.delimiter {
             self.delimiter =
                 Regex::new(&(".*?".to_string() + delimiter)).unwrap_or_else(|_| Regex::new(r".*?[\t ]").unwrap());
         }
 
-        if let Some(transform_fields) = options.values_of("with-nth").and_then(|vals| vals.last()) {
+        if let Some(transform_fields) = options.with_nth {
             self.transform_fields = transform_fields
                 .split(',')
                 .filter_map(|string| parse_range(string))
                 .collect();
         }
 
-        if let Some(matching_fields) = options.values_of("nth").and_then(|vals| vals.last()) {
+        if let Some(matching_fields) = options.nth {
             self.matching_fields = matching_fields
                 .split(',')
                 .filter_map(|string| parse_range(string))
                 .collect();
         }
 
-        if options.is_present("read0") {
+        if options.read0 {
             self.line_ending = b'\0';
         }
     }
@@ -87,7 +87,7 @@ impl Reader {
         }
     }
 
-    pub fn parse_options(&mut self, options: &ArgMatches) {
+    pub fn parse_options(&mut self, options: &SkimOptions) {
         let mut option = self.option
             .write()
             .expect("reader:parse_options: failed to lock option");

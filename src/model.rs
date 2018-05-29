@@ -15,8 +15,8 @@ use regex::{Captures, Regex};
 use field::get_string_by_range;
 use std::borrow::Cow;
 use std::convert::From;
-use clap::ArgMatches;
 use std::time::{Duration, Instant};
+use options::SkimOptions;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -96,51 +96,44 @@ impl Model {
         }
     }
 
-    pub fn parse_options(&mut self, options: &ArgMatches) {
-        if options.is_present("multi") {
+    pub fn parse_options(&mut self, options: &SkimOptions) {
+        if options.multi {
             self.multi_selection = true;
         }
 
-        if options.is_present("no-multi") {
-            self.multi_selection = false;
-        }
-
-        if options.is_present("reverse") {
+        if options.reverse {
             self.reverse = true;
         }
 
-        if let Some(preview_cmd) = options.values_of("preview").and_then(|vals| vals.last()) {
+        if let Some(preview_cmd) = options.preview {
             self.preview_cmd = Some(preview_cmd.to_string());
         }
 
-        if let Some(preview_window) = options
-            .values_of("preview-window")
-            .and_then(|vals| vals.last())
-        {
+        if let Some(preview_window) = options.preview_window {
             self.preview_hidden = preview_window.find("hidden").is_some();
         }
 
-        if let Some(delimiter) = options.values_of("delimiter").and_then(|vals| vals.last()) {
+        if let Some(delimiter) = options.delimiter {
             self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
         }
 
-        if options.is_present("print0") {
+        if options.print0 {
             self.output_ending = "\0";
         }
 
-        if options.is_present("print-query") {
+        if options.print_query {
             self.print_query = true;
         }
 
-        if options.is_present("print-cmd") {
+        if options.print_cmd {
             self.print_cmd = true;
         }
 
-        if options.is_present("no-hscroll") {
+        if options.no_hscroll {
             self.no_hscroll = true;
         }
 
-        if let Some(tabstop_str) = options.values_of("tabstop").and_then(|vals| vals.last()) {
+        if let Some(tabstop_str) = options.tabstop {
             let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
             self.tabstop = max(1, tabstop);
         }

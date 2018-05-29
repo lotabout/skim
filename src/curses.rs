@@ -16,7 +16,7 @@ use unicode_width::UnicodeWidthChar;
 use std::fs::OpenOptions;
 use std::os::unix::io::{IntoRawFd, RawFd};
 use libc;
-use clap::ArgMatches;
+use options::SkimOptions;
 
 pub static COLOR_NORMAL: u16 = 0;
 pub static COLOR_PROMPT: u16 = 1;
@@ -450,28 +450,17 @@ unsafe impl Send for Curses {}
 const CURSES_BUF_SIZE: usize = 100 * 1024;
 
 impl Curses {
-    pub fn new(options: &ArgMatches) -> Self {
+    pub fn new(options: &SkimOptions) -> Self {
         ColorTheme::init_from_options(options);
 
         // parse the option of window height of skim
 
-        let min_height = options
-            .values_of("min-height")
-            .and_then(|vals| vals.last())
+        let min_height = options.min_height
             .map(|x| x.parse::<u16>().unwrap_or(10))
             .expect("min_height should have default values");
-        let no_height = options.is_present("no-height");
-        let height = options
-            .values_of("height")
-            .and_then(|vals| vals.last())
+        let height = options.height
             .map(Curses::parse_margin_string)
             .expect("height should have default values");
-
-        let height = if no_height {
-            Margin::Percent(100)
-        } else {
-            height
-        };
 
         // If skim is invoked by pipeline `echo 'abc' | sk | awk ...`
         // The the output is redirected. We need to open /dev/tty for output.
@@ -531,18 +520,15 @@ impl Curses {
         };
 
         // parse options for margin
-        let margins = options
-            .values_of("margin")
-            .and_then(|vals| vals.last())
+        let margins = options.margin
             .map(Curses::parse_margin)
             .expect("option margin is should be specified (by default)");
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         // parse options for preview window
-        let preview_cmd_exist = options.is_present("preview");
+        let preview_cmd_exist = options.preview != None;
         let (preview_direction, preview_size, preview_wrap, preview_shown) = options
-            .values_of("preview-window")
-            .and_then(|vals| vals.last())
+            .preview_window
             .map(Curses::parse_preview)
             .expect("option 'preview-window' should be set (by default)");
         let mut ret = Curses {
@@ -874,9 +860,9 @@ pub struct ColorTheme {
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
 impl ColorTheme {
-    pub fn init_from_options(options: &ArgMatches) {
+    pub fn init_from_options(options: &SkimOptions) {
         // register
-        let theme = if let Some(color) = options.values_of("color").and_then(|vals| vals.last()) {
+        let theme = if let Some(color) = options.color {
             ColorTheme::from_options(color)
         } else {
             ColorTheme::dark256()

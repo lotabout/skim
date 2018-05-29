@@ -9,6 +9,8 @@ extern crate termion;
 extern crate time;
 extern crate unicode_width;
 extern crate utf8parse;
+#[macro_use]
+extern crate derive_builder;
 
 #[macro_use]
 extern crate lazy_static;
@@ -25,6 +27,7 @@ mod query;
 mod ansi;
 mod sender;
 mod field;
+mod options;
 
 use std::thread;
 use std::time::Duration;
@@ -39,6 +42,7 @@ use curses::Curses;
 use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use clap::{App, Arg};
+use options::SkimOptions;
 
 const VERSION: &str = "0.3.2";
 
@@ -176,7 +180,7 @@ fn real_main() -> i32 {
 
     //------------------------------------------------------------------------------
     // parse options
-    let options = App::new("sk")
+    let opts = App::new("sk")
         .author("Jinzhou Zhang<lotabout@gmail.com")
         .arg(Arg::with_name("help").long("help").short("h"))
         .arg(Arg::with_name("version").long("version").short("v"))
@@ -236,15 +240,17 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("filter").long("filter").short("f").multiple(true))
         .get_matches_from(args);
 
-    if options.is_present("help") {
+    if opts.is_present("help") {
         print!("{}", USAGE);
         return 0;
     }
 
-    if options.is_present("version") {
+    if opts.is_present("version") {
         println!("{}", VERSION);
         return 0;
     }
+
+    let options = SkimOptions::from_options(&opts);
 
     let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
     //------------------------------------------------------------------------------
@@ -314,11 +320,9 @@ fn real_main() -> i32 {
     let tx_input_clone = tx_input.clone();
     let mut input = input::Input::new(tx_input_clone);
 
-    let keymaps = options.values_of("bind").map(|x| x.collect::<Vec<_>>()).unwrap_or_default();
-    input.parse_keymaps(&keymaps);
+    input.parse_keymaps(&options.bind);
 
-    let expect_keys = options.values_of("expect").map(|x| x.collect::<Vec<_>>().join(","));
-    input.parse_expect_keys(expect_keys.as_ref().map(|x| &**x));
+    input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
     thread::spawn(move || {
         input.run();
     });

@@ -1,7 +1,7 @@
 use model::ClosureType;
 use curses::*;
 use std::mem;
-use clap::ArgMatches;
+use options::SkimOptions;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -60,34 +60,34 @@ impl Query {
         self
     }
 
-    pub fn parse_options(&mut self, options: &ArgMatches) {
+    pub fn parse_options(&mut self, options: &SkimOptions) {
         // some options accept multiple values, thus take the last one
 
-        if let Some(base_cmd) = options.values_of("cmd").and_then(|vals| vals.last()) {
+        if let Some(base_cmd) = options.cmd {
             self.base_cmd = base_cmd.to_string();
         }
 
-        if let Some(query) = options.values_of("query").and_then(|vals| vals.last()) {
+        if let Some(query) = options.query {
             self.query_before = query.chars().collect();
         }
 
-        if let Some(cmd_query) = options.values_of("cmd-query").and_then(|vals| vals.last()) {
+        if let Some(cmd_query) = options.cmd_query {
             self.cmd_before = cmd_query.chars().collect();
         }
 
-        if let Some(replstr) = options.values_of("replstr").and_then(|vals| vals.last()) {
+        if let Some(replstr) = options.replstr {
             self.replstr = replstr.to_string();
         }
 
-        if options.is_present("interactive") {
+        if options.interactive {
             self.mode = QueryMode::CMD;
         }
 
-        if let Some(query_prompt) = options.values_of("prompt").and_then(|vals| vals.last()) {
+        if let Some(query_prompt) = options.prompt {
             self.query_prompt = query_prompt.to_string();
         }
 
-        if let Some(cmd_prompt) = options.values_of("cmd-prompt").and_then(|vals| vals.last()) {
+        if let Some(cmd_prompt) = options.cmd_prompt {
             self.cmd_prompt = cmd_prompt.to_string();
         }
     }

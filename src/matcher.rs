@@ -8,7 +8,7 @@ use score;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use clap::ArgMatches;
+use options::SkimOptions;
 
 lazy_static! {
     static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End]);
@@ -45,11 +45,8 @@ impl Matcher {
         }
     }
 
-    pub fn parse_options(&mut self, options: &ArgMatches) {
-        if let Some(tie_breaker) = options
-            .values_of("tiebreak")
-            .map(|x| x.collect::<Vec<_>>().join(","))
-        {
+    pub fn parse_options(&mut self, options: &SkimOptions) {
+        if let Some(ref tie_breaker) = options.tiebreak {
             let mut vec = Vec::new();
             for criteria in tie_breaker.split(',') {
                 if let Some(c) = parse_criteria(criteria) {
@@ -61,7 +58,7 @@ impl Matcher {
                 .expect("matcher:parse_options: failed to lock RANK_CRITERION") = vec;
         }
 
-        if options.is_present("tac") {
+        if options.tac {
             let mut ranks = RANK_CRITERION
                 .write()
                 .expect("matcher:parse_options: failed to lock RANK_CRITERION");
@@ -74,11 +71,11 @@ impl Matcher {
             }
         }
 
-        if options.is_present("exact") {
+        if options.exact {
             self.mode = MatcherMode::Exact;
         }
 
-        if options.is_present("regex") {
+        if options.regex {
             self.mode = MatcherMode::Regex;
         }
     }
