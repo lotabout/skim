@@ -74,16 +74,18 @@ pub struct Reader {
     rx_cmd: EventReceiver,
     tx_item: SyncSender<(Event, EventArg)>,
     option: Arc<RwLock<ReaderOption>>,
-    real_stdin: Option<File>, // used to support piped output
+    data_source: Option<Box<BufRead + Send>>, // used to support piped output
 }
 
 impl Reader {
-    pub fn new(rx_cmd: EventReceiver, tx_item: SyncSender<(Event, EventArg)>, real_stdin: Option<File>) -> Self {
+    pub fn new(rx_cmd: EventReceiver,
+               tx_item: SyncSender<(Event, EventArg)>,
+               data_source: Option<Box<BufRead + Send>>) -> Self {
         Reader {
             rx_cmd: rx_cmd,
             tx_item: tx_item,
             option: Arc::new(RwLock::new(ReaderOption::new())),
-            real_stdin,
+            data_source,
         }
     }
 
@@ -133,7 +135,7 @@ impl Reader {
                         let option_clone = Arc::clone(&self.option);
                         let tx_sender_clone = tx_sender.clone();
                         let query_clone = query.clone();
-                        let real_stdin = self.real_stdin.take();
+                        let data_source = self.data_source.take();
 
                         // start the new command
                         thread_reader = Some(thread::spawn(move || {
@@ -145,7 +147,7 @@ impl Reader {
                                 rx_reader,
                                 &tx_sender_clone,
                                 option_clone,
-                                real_stdin,
+                                data_source,
                             );
 
                             let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
@@ -176,7 +178,7 @@ impl Reader {
     }
 }
 
-fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead>), Box<Error>> {
+fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
     let mut command = try!(
         Command::new("sh")
             .arg("-c")
@@ -209,19 +211,11 @@ fn reader(
     rx_cmd: Receiver<bool>,
     tx_sender: &EventSender,
     option: Arc<RwLock<ReaderOption>>,
-    source_file: Option<File>,
+    source_file: Option<Box<BufRead + Send>>,
 ) {
     debug!("reader:reader: called");
-    let (command, mut source): (Option<Child>, Box<BufRead>) = if source_file.is_some() {
-        (
-            None,
-            Box::new(BufReader::new(
-                source_file.expect("reader: input file not available"),
-            )),
-        )
-    } else {
-        get_command_output(cmd).expect("command not found")
-    };
+    let (command, mut source) = source_file.map(|f| (None, f))
+        .unwrap_or_else(|| get_command_output(cmd).expect("command not found"));
 
     let (tx_control, rx_control) = channel();
 
