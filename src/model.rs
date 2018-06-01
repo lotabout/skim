@@ -17,6 +17,7 @@ use std::borrow::Cow;
 use std::convert::From;
 use std::time::{Duration, Instant};
 use options::SkimOptions;
+use output::SkimOutput;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -226,30 +227,20 @@ impl Model {
                         curses.close();
 
                         // output the expect key
-                        let (accept_key, query, cmd, tx_ack): (
-                            Option<String>,
-                            String,
-                            String,
-                            Sender<usize>,
-                        ) = *arg.downcast()
+                        let tx_ack: Sender<Vec<Arc<MatchedItem>>> = *arg.downcast()
                             .expect("model:EvActAccept: failed to get argument");
 
-                        // output query
-                        if self.print_query {
-                            print!("{}{}", query, self.output_ending);
-                        }
-
-                        if self.print_cmd {
-                            print!("{}{}", cmd, self.output_ending);
-                        }
-
-                        accept_key.map(|key| {
-                            print!("{}{}", key, self.output_ending);
-                        });
-
+                        // do the final dirty work
                         self.act_output();
 
-                        let _ = tx_ack.send(self.selected.len());
+                        let mut selected: Vec<Arc<MatchedItem>> = self.selected.values()
+                            .map(|item| item.clone())
+                            .collect();
+
+                        selected.sort_by_key(|item| item.item.get_full_index());
+
+                        // return the selected items
+                        let _ = tx_ack.send(selected);
                     }
                     Event::EvActAbort => {
                         let tx_ack: Sender<bool> = *arg.downcast()
@@ -789,12 +780,6 @@ impl Model {
                 .expect(format!("model:act_output: failed to get item {}", cursor).as_str());
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
-        }
-
-        let mut output: Vec<_> = self.selected.iter_mut().collect::<Vec<_>>();
-        output.sort_by_key(|k| k.0);
-        for (_, item) in output {
-            print!("{}{}", item.item.get_output_text(), self.output_ending);
         }
     }
 
