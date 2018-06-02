@@ -16,5 +16,6 @@ case $TRAVIS_OS_NAME in
         brew install tmux
         tmux -V
         brew install zsh
+        stty cols 80
         ;;
 esac
