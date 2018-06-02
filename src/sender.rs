@@ -66,6 +66,14 @@ impl CachedSender {
                             .expect("sender:EvReaderNewItem: failed to get argument"));
                     }
 
+                    ev @ Event::EvActAccept | ev @ Event::EvActAbort => {
+                        // pass the event to sender
+                        let _ = self.tx_item.send((ev, Box::new(true)));
+
+                        // quit the loop
+                        break;
+                    }
+
                     _ => {}
                 }
             }

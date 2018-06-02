@@ -101,6 +101,12 @@ impl Matcher {
 
                             let _ = tx_matcher.send((ev, arg));
                         }
+
+                        Event::EvActAccept | Event::EvActAbort => {
+                            // quit the loop
+                            break;
+                        }
+
                         _ => {
                             // pass through all other events
                             let _ = tx_matcher.send((ev, arg));

@@ -161,13 +161,19 @@ impl Reader {
                     last_query = query;
                 }
 
-                Event::EvActAccept => {
+                ev @ Event::EvActAccept | ev @ Event::EvActAbort => {
                     // stop existing command
                     tx_reader.take().map(|tx| tx.send(true));
                     thread_reader.take().map(|thrd| thrd.join());
                     let tx_ack: Sender<usize> = *arg.downcast()
                         .expect("reader:EvActAccept: failed to get argument");
                     let _ = tx_ack.send(0);
+
+                    // pass the event to sender
+                    let _ = tx_sender.send((ev, Box::new(true)));
+
+                    // quit the loop
+                    break;
                 }
 
                 _ => {

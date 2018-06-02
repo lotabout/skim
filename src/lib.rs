@@ -289,7 +289,6 @@ impl Skim {
                     let _ = rx.recv();
 
                     // sync with model to quit
-
                     let accept_key = *arg.downcast::<Option<String>>()
                         .unwrap_or_else(|_| Box::new(None));
 
@@ -310,6 +309,12 @@ impl Skim {
                 }
 
                 EvActAbort => {
+                    // kill reader
+                    let (tx, rx): (Sender<usize>, Receiver<usize>) = channel();
+                    let _ = tx_reader.send((EvActAbort, Box::new(tx)));
+                    let _ = rx.recv();
+
+                    // kill model
                     let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
                     let _ = tx_model.send((EvActAbort, Box::new(tx)));
                     let _ = rx.recv();
