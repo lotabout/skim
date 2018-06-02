@@ -11,7 +11,8 @@ case $TRAVIS_OS_NAME in
         stty cols 80
         ;;
     osx)
-        brew install python3
+        brew upgrade python
+        python -V
         python3 -V
         brew install tmux
         tmux -V
