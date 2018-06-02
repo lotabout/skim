@@ -3,13 +3,14 @@
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
+use std::os::unix::thread::{RawPthread, JoinHandleExt};
 use std::io::prelude::*;
 use std::fs::File;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::time::Duration;
 use utf8parse;
-
+use libc::pthread_cancel;
 use event::{parse_action, Event, EventSender};
 
 pub struct Input {
@@ -39,6 +40,11 @@ impl Input {
                 Some(key) => {
                     // search event from keymap
                     match self.keymap.get(&key) {
+                        Some(&(ev @ Event::EvActAccept, None))
+                            | Some(&(ev @ Event::EvActAbort, None)) => {
+                            let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
+                            break;
+                        }
                         Some(&(ev, Some(ref args))) => {
                             let _ = self.tx_input.send((ev, Box::new(Some(args.clone()))));
                         }
@@ -125,14 +131,22 @@ impl utf8parse::Receiver for SimpleUtf8Receiver {
 }
 
 struct KeyBoard {
+    handle: RawPthread,
     rx: Receiver<char>,
     buf: VecDeque<char>,
+}
+
+impl Drop for KeyBoard {
+    fn drop(&mut self) {
+        // Don't try this at home!
+        unsafe {pthread_cancel(self.handle);}
+    }
 }
 
 impl KeyBoard {
     pub fn new(f: File) -> Self {
         let (tx, rx) = channel();
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let mut utf8_receiver = SimpleUtf8Receiver::new(tx);
             let mut utf8_parser = utf8parse::Parser::new();
             for byte in f.bytes() {
@@ -144,7 +158,8 @@ impl KeyBoard {
         });
 
         KeyBoard {
-            rx: rx,
+            handle: handle.into_pthread_t(),
+            rx,
             buf: VecDeque::new(),
         }
     }
