@@ -1,23 +1,22 @@
-use std::sync::mpsc::Sender;
-use event::{Event, EventReceiver};
-use item::{MatchedItem, MatchedItemGroup, MatchedRange};
-use std::cmp::{max, min};
-use orderedvec::OrderedVec;
-use std::sync::Arc;
-use std::collections::HashMap;
-use unicode_width::UnicodeWidthChar;
-use curses::*;
-use std::process::Command;
-use std::error::Error;
 use ansi::ANSIParser;
-use std::default::Default;
-use regex::{Captures, Regex};
+use curses::*;
+use event::{Event, EventReceiver};
 use field::get_string_by_range;
-use std::borrow::Cow;
-use std::convert::From;
-use std::time::{Duration, Instant};
+use item::{MatchedItem, MatchedItemGroup, MatchedRange};
 use options::SkimOptions;
-use output::SkimOutput;
+use orderedvec::OrderedVec;
+use regex::{Captures, Regex};
+use std::borrow::Cow;
+use std::cmp::{max, min};
+use std::collections::HashMap;
+use std::convert::From;
+use std::default::Default;
+use std::error::Error;
+use std::process::Command;
+use std::sync::mpsc::Sender;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use unicode_width::UnicodeWidthChar;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -152,8 +151,8 @@ impl Model {
                 debug!("model: got {:?}", ev);
                 match ev {
                     Event::EvModelNewItem => {
-                        let items: MatchedItemGroup = *arg.downcast()
-                            .expect("model:EvModelNewItem: failed to get argument");
+                        let items: MatchedItemGroup =
+                            *arg.downcast().expect("model:EvModelNewItem: failed to get argument");
                         self.insert_new_items(items);
                     }
 
@@ -212,8 +211,7 @@ impl Model {
                     Event::EvReaderStopped => {
                         // if reader stopped, the num_read is freezed.
                         self.reader_stopped = true;
-                        self.num_read = *arg.downcast()
-                            .expect("model:EvReaderStopped: failed to get argument");
+                        self.num_read = *arg.downcast().expect("model:EvReaderStopped: failed to get argument");
                     }
 
                     Event::EvReaderStarted => {
@@ -227,15 +225,14 @@ impl Model {
                         curses.close();
 
                         // output the expect key
-                        let tx_ack: Sender<Vec<Arc<MatchedItem>>> = *arg.downcast()
-                            .expect("model:EvActAccept: failed to get argument");
+                        let tx_ack: Sender<Vec<Arc<MatchedItem>>> =
+                            *arg.downcast().expect("model:EvActAccept: failed to get argument");
 
                         // do the final dirty work
                         self.act_output();
 
-                        let mut selected: Vec<Arc<MatchedItem>> = self.selected.values()
-                            .map(|item| item.clone())
-                            .collect();
+                        let mut selected: Vec<Arc<MatchedItem>> =
+                            self.selected.values().map(|item| item.clone()).collect();
 
                         selected.sort_by_key(|item| item.item.get_full_index());
 
@@ -244,8 +241,7 @@ impl Model {
                         break;
                     }
                     Event::EvActAbort => {
-                        let tx_ack: Sender<bool> = *arg.downcast()
-                            .expect("model:EvActAbort: failed to get argument");
+                        let tx_ack: Sender<bool> = *arg.downcast().expect("model:EvActAbort: failed to get argument");
                         curses.close();
                         let _ = tx_ack.send(true);
                         break;
@@ -429,11 +425,7 @@ impl Model {
 
         // display the matcher mode
         if !self.matcher_mode.is_empty() {
-            curses.cprint(
-                format!("/{}", &self.matcher_mode).as_ref(),
-                COLOR_INFO,
-                false,
-            );
+            curses.cprint(format!("/{}", &self.matcher_mode).as_ref(), COLOR_INFO, false);
         }
 
         // display the percentage of the number of processed items
@@ -447,11 +439,7 @@ impl Model {
 
         // selected number
         if self.multi_selection && !self.selected.is_empty() {
-            curses.cprint(
-                format!(" [{}]", self.selected.len()).as_ref(),
-                COLOR_INFO,
-                true,
-            );
+            curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
         }
 
         // item cursor
@@ -484,15 +472,7 @@ impl Model {
         if self.selected.contains_key(&index) {
             curses.cprint(">", COLOR_SELECTED, true);
         } else {
-            curses.cprint(
-                " ",
-                if is_current {
-                    COLOR_CURRENT
-                } else {
-                    COLOR_NORMAL
-                },
-                false,
-            );
+            curses.cprint(" ", if is_current { COLOR_CURRENT } else { COLOR_NORMAL }, false);
         }
 
         let (y, x) = curses.getyx();
@@ -501,10 +481,7 @@ impl Model {
         let (match_start, match_end) = match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indics)) => {
                 if !matched_indics.is_empty() {
-                    (
-                        matched_indics[0],
-                        matched_indics[matched_indics.len() - 1] + 1,
-                    )
+                    (matched_indics[0], matched_indics[matched_indics.len() - 1] + 1)
                 } else {
                     (0, 0)
                 }
@@ -515,13 +492,7 @@ impl Model {
 
         let item = &matched_item.item;
         let text: Vec<_> = item.get_text().chars().collect();
-        let (shift, full_width) = reshape_string(
-            &text,
-            self.width as usize,
-            match_start,
-            match_end,
-            self.tabstop,
-        );
+        let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
 
         debug!(
             "model:draw_item: shfit: {:?}, width:{:?}, full_width: {:?}",
@@ -587,13 +558,7 @@ impl Model {
 
             Some(MatchedRange::Range(start, end)) => {
                 for (idx, &ch) in text.iter().enumerate() {
-                    printer.print_char(
-                        curses,
-                        ch,
-                        COLOR_MATCHED,
-                        is_current,
-                        !(idx >= start && idx < end),
-                    );
+                    printer.print_char(curses, ch, COLOR_MATCHED, is_current, !(idx >= start && idx < end));
                 }
                 curses.attr_on(0);
             }
@@ -630,10 +595,7 @@ impl Model {
         );
         let highlighted_content = item.item.get_text();
 
-        debug!(
-            "model:draw_preview: highlighted_content: '{:?}'",
-            highlighted_content
-        );
+        debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
         let cmd = self.inject_preview_command(highlighted_content);
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
@@ -685,10 +647,7 @@ impl Model {
             if range == "" {
                 format!("'{}'", text)
             } else {
-                format!(
-                    "'{}'",
-                    get_string_by_range(&self.delimiter, text, range).unwrap_or("")
-                )
+                format!("'{}'", get_string_by_range(&self.delimiter, text, range).unwrap_or(""))
             }
         })
     }
@@ -1061,13 +1020,7 @@ mod tests {
         assert_eq!(reshape_string(&to_chars(&"abc"), 10, 0, 0, 8), (0, 3));
         assert_eq!(reshape_string(&to_chars(&"a\tbc"), 8, 0, 0, 8), (0, 10));
         assert_eq!(reshape_string(&to_chars(&"a\tb\tc"), 10, 0, 0, 8), (0, 17));
-        assert_eq!(
-            reshape_string(&to_chars(&"a\t中b\tc"), 8, 0, 0, 8),
-            (0, 17)
-        );
-        assert_eq!(
-            reshape_string(&to_chars(&"a\t中b\tc012345"), 8, 0, 0, 8),
-            (0, 23)
-        );
+        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc"), 8, 0, 0, 8), (0, 17));
+        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc012345"), 8, 0, 0, 8), (0, 23));
     }
 }

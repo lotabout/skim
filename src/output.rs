@@ -1,4 +1,4 @@
-use item::{MatchedItem};
+use item::MatchedItem;
 use std::sync::Arc;
 
 pub struct SkimOutput {

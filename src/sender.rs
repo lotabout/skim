@@ -1,6 +1,6 @@
-use std::sync::mpsc::SyncSender;
-use item::ItemGroup;
 use event::{Event, EventArg, EventReceiver};
+use item::ItemGroup;
+use std::sync::mpsc::SyncSender;
 use std::thread;
 use std::time::Duration;
 

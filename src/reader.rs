@@ -1,21 +1,20 @@
-use std::sync::mpsc::{channel, Receiver, Sender, SyncSender};
-use std::error::Error;
-use item::Item;
-use std::sync::{Arc, RwLock};
-use std::process::{Child, Command, Stdio};
-use std::io::{BufRead, BufReader};
 use event::{Event, EventArg, EventReceiver, EventSender};
-use std::thread::JoinHandle;
-use std::thread;
-use std::time::Duration;
+use item::Item;
 use std::collections::HashMap;
+use std::error::Error;
+use std::io::{BufRead, BufReader};
 use std::mem;
-use std::fs::File;
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{channel, Receiver, Sender, SyncSender};
+use std::sync::{Arc, RwLock};
+use std::thread;
+use std::thread::JoinHandle;
+use std::time::Duration;
 
-use regex::Regex;
-use sender::CachedSender;
 use field::{parse_range, FieldRange};
 use options::SkimOptions;
+use regex::Regex;
+use sender::CachedSender;
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -78,9 +77,11 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn new(rx_cmd: EventReceiver,
-               tx_item: SyncSender<(Event, EventArg)>,
-               data_source: Option<Box<BufRead + Send>>) -> Self {
+    pub fn new(
+        rx_cmd: EventReceiver,
+        tx_item: SyncSender<(Event, EventArg)>,
+        data_source: Option<Box<BufRead + Send>>,
+    ) -> Self {
         Reader {
             rx_cmd: rx_cmd,
             tx_item: tx_item,
@@ -142,13 +143,7 @@ impl Reader {
                             let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
                             let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
 
-                            reader(
-                                &cmd_clone,
-                                rx_reader,
-                                &tx_sender_clone,
-                                option_clone,
-                                data_source,
-                            );
+                            reader(&cmd_clone, rx_reader, &tx_sender_clone, option_clone, data_source);
 
                             let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
                         }));
@@ -165,8 +160,7 @@ impl Reader {
                     // stop existing command
                     tx_reader.take().map(|tx| tx.send(true));
                     thread_reader.take().map(|thrd| thrd.join());
-                    let tx_ack: Sender<usize> = *arg.downcast()
-                        .expect("reader:EvActAccept: failed to get argument");
+                    let tx_ack: Sender<usize> = *arg.downcast().expect("reader:EvActAccept: failed to get argument");
                     let _ = tx_ack.send(0);
 
                     // pass the event to sender
@@ -220,7 +214,8 @@ fn reader(
     source_file: Option<Box<BufRead + Send>>,
 ) {
     debug!("reader:reader: called");
-    let (command, mut source) = source_file.map(|f| (None, f))
+    let (command, mut source) = source_file
+        .map(|f| (None, f))
         .unwrap_or_else(|| get_command_output(cmd).expect("command not found"));
 
     let (tx_control, rx_control) = channel();
@@ -259,9 +254,7 @@ fn reader(
         .expect("reader: failed to lock NUM_MAP")
         .entry(cmd.to_string())
         .or_insert_with(|| {
-            *(RUN_NUM
-                .write()
-                .expect("reader: failed to lock RUN_NUM for write")) = run_num + 1;
+            *(RUN_NUM.write().expect("reader: failed to lock RUN_NUM for write")) = run_num + 1;
             run_num + 1
         });
 

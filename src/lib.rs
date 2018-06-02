@@ -10,39 +10,39 @@ extern crate clap;
 
 #[macro_use]
 extern crate lazy_static;
-mod item;
-mod reader;
-mod input;
-mod matcher;
-mod event;
-mod model;
-mod score;
-mod orderedvec;
-mod curses;
-mod query;
 mod ansi;
-mod sender;
+mod curses;
+mod event;
 mod field;
+mod input;
+mod item;
+mod matcher;
+mod model;
 mod options;
+mod orderedvec;
 mod output;
+mod query;
+mod reader;
+mod score;
+mod sender;
 
-use std::thread;
-use std::time::Duration;
-use std::env;
-use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
+use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
-use std::mem;
-use std::ptr;
+use item::MatchedItem;
 use libc::{pthread_sigmask, sigaddset, sigemptyset, sigwait};
-use curses::Curses;
-use std::fs::File;
-use std::os::unix::io::{FromRawFd, IntoRawFd};
-use std::io::{BufRead, BufReader};
 pub use options::SkimOptions;
 pub use output::SkimOutput;
-use item::{MatchedItem};
+use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::mem;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::ptr;
+use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 const REFRESH_DURATION: u64 = 200;
 
@@ -53,7 +53,7 @@ impl Skim {
         let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
         //------------------------------------------------------------------------------
         // register terminal resize event, `pthread_sigmask` should be run before any thread.
-        let mut sigset = unsafe {mem::uninitialized()};
+        let mut sigset = unsafe { mem::uninitialized() };
         unsafe {
             sigemptyset(&mut sigset);
             sigaddset(&mut sigset, libc::SIGWINCH);
@@ -65,7 +65,7 @@ impl Skim {
             // listen to the resize event;
             loop {
                 let mut sig = 0;
-                let _errno = unsafe {sigwait(&sigset, &mut sig)};
+                let _errno = unsafe { sigwait(&sigset, &mut sig) };
                 let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
             }
         });
@@ -78,15 +78,17 @@ impl Skim {
         // Here is a workaround. But reader will need to know the real stdin.
         let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
 
-        let source = source.or_else(|| if !istty {
-            unsafe {
-                let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
-                let tty = File::open("/dev/tty").expect("main: failed to open /dev/tty");
-                libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
-                Some(Box::new(BufReader::new(stdin)))
+        let source = source.or_else(|| {
+            if !istty {
+                unsafe {
+                    let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
+                    let tty = File::open("/dev/tty").expect("main: failed to open /dev/tty");
+                    libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
+                    Some(Box::new(BufReader::new(stdin)))
+                }
+            } else {
+                None
             }
-        } else {
-            None
         });
 
         let curses = Curses::new(&options);
@@ -97,9 +99,7 @@ impl Skim {
             Ok("") | Err(_) => "find .".to_owned(),
             Ok(val) => val.to_owned(),
         };
-        let mut query = query::Query::builder()
-            .base_cmd(&default_command)
-            .build();
+        let mut query = query::Query::builder().base_cmd(&default_command).build();
         query.parse_options(&options);
 
         //------------------------------------------------------------------------------
@@ -149,11 +149,9 @@ impl Skim {
         //------------------------------------------------------------------------------
         // start a timer for notifying refresh
         let tx_model_clone = tx_model.clone();
-        thread::spawn(move || {
-            loop {
-                thread::sleep(Duration::from_millis(REFRESH_DURATION));
-                let _ = tx_model_clone.send((EvModelDrawInfo, Box::new(true)));
-            }
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_millis(REFRESH_DURATION));
+            let _ = tx_model_clone.send((EvModelDrawInfo, Box::new(true)));
         });
 
         //------------------------------------------------------------------------------
@@ -187,13 +185,11 @@ impl Skim {
         // tx_model:  send message to model
         // rx_input:  receive keystroke events
 
-        let mut exit_code = 1;
-
         let _ = tx_input.send((EvActRedraw, Box::new(true))); // trigger draw
         while let Ok((ev, arg)) = rx_input.recv() {
             debug!("main: got event {:?}", ev);
             match ev {
-                EvActAddChar =>  {
+                EvActAddChar => {
                     let ch: char = *arg.downcast().expect("EvActAddChar: failed to get argument");
                     query.act_add_char(ch);
                     on_query_change(&query);
@@ -264,7 +260,7 @@ impl Skim {
                     on_query_change(&query);
                 }
 
-                EvActYank=> {
+                EvActYank => {
                     query.act_yank();
                     on_query_change(&query);
                 }
@@ -287,8 +283,7 @@ impl Skim {
                     let _ = rx.recv();
 
                     // sync with model to quit
-                    let accept_key = *arg.downcast::<Option<String>>()
-                        .unwrap_or_else(|_| Box::new(None));
+                    let accept_key = *arg.downcast::<Option<String>>().unwrap_or_else(|_| Box::new(None));
 
                     let (tx, rx): (Sender<Vec<Arc<MatchedItem>>>, Receiver<Vec<Arc<MatchedItem>>>) = channel();
                     let _ = tx_model.send((EvActAccept, Box::new(tx)));
@@ -299,7 +294,7 @@ impl Skim {
                         query: query.get_query(),
                         cmd: query.get_cmd_query(),
                         selected_items: selected,
-                    })
+                    });
                 }
 
                 EvActClearScreen | EvActRedraw => {
@@ -319,11 +314,9 @@ impl Skim {
                     return None;
                 }
 
-                EvActUp | EvActDown
-                    | EvActToggle | EvActToggleDown | EvActToggleUp
-                    | EvActToggleAll | EvActSelectAll | EvActDeselectAll
-                    | EvActPageDown | EvActPageUp
-                    | EvActScrollLeft | EvActScrollRight => {
+                EvActUp | EvActDown | EvActToggle | EvActToggleDown | EvActToggleUp | EvActToggleAll
+                | EvActSelectAll | EvActDeselectAll | EvActPageDown | EvActPageUp | EvActScrollLeft
+                | EvActScrollRight => {
                     let _ = tx_model.send((ev, arg));
                 }
 

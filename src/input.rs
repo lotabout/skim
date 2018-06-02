@@ -1,17 +1,16 @@
-/// Input will listens to user input, modify the query string, send special
-/// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
-
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::thread;
-use std::os::unix::thread::{RawPthread, JoinHandleExt};
-use std::io::prelude::*;
-use std::fs::File;
+use event::{parse_action, Event, EventSender};
+use libc::pthread_cancel;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::prelude::*;
+use std::os::unix::thread::{JoinHandleExt, RawPthread};
+/// Input will listens to user input, modify the query string, send special
+/// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
 use std::time::Duration;
 use utf8parse;
-use libc::pthread_cancel;
-use event::{parse_action, Event, EventSender};
 
 pub struct Input {
     tx_input: EventSender,
@@ -34,14 +33,12 @@ impl Input {
         loop {
             match self.keyboard.get_key() {
                 Some(Key::Pos(row, col)) => {
-                    let _ = self.tx_input
-                        .send((Event::EvReportCursorPos, Box::new((row, col))));
+                    let _ = self.tx_input.send((Event::EvReportCursorPos, Box::new((row, col))));
                 }
                 Some(key) => {
                     // search event from keymap
                     match self.keymap.get(&key) {
-                        Some(&(ev @ Event::EvActAccept, None))
-                            | Some(&(ev @ Event::EvActAbort, None)) => {
+                        Some(&(ev @ Event::EvActAccept, None)) | Some(&(ev @ Event::EvActAbort, None)) => {
                             let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
                             break;
                         }
@@ -139,7 +136,9 @@ struct KeyBoard {
 impl Drop for KeyBoard {
     fn drop(&mut self) {
         // Don't try this at home!
-        unsafe {pthread_cancel(self.handle);}
+        unsafe {
+            pthread_cancel(self.handle);
+        }
     }
 }
 
@@ -150,10 +149,7 @@ impl KeyBoard {
             let mut utf8_receiver = SimpleUtf8Receiver::new(tx);
             let mut utf8_parser = utf8parse::Parser::new();
             for byte in f.bytes() {
-                utf8_parser.advance(
-                    &mut utf8_receiver,
-                    byte.expect("fail to parse keyboard input"),
-                );
+                utf8_parser.advance(&mut utf8_receiver, byte.expect("fail to parse keyboard input"));
             }
         });
 

@@ -1,16 +1,13 @@
 extern crate clap;
-#[macro_use]
-extern crate log;
-
 extern crate env_logger;
-extern crate time;
+extern crate log;
 extern crate shlex;
-
 extern crate skim;
+extern crate time;
 
 use clap::{App, Arg};
-use std::env;
 use skim::{Skim, SkimOptions};
+use std::env;
 
 const VERSION: &str = "0.3.2";
 
@@ -102,10 +99,9 @@ Usage: sk [options]
     --filter
 ";
 
-
 fn main() {
-    use log::{LogLevelFilter, LogRecord};
     use env_logger::LogBuilder;
+    use log::{LogLevelFilter, LogRecord};
 
     let format = |record: &LogRecord| {
         let t = time::now();

@@ -1,17 +1,10 @@
 extern crate skim;
-use std::default::Default;
 use skim::{Skim, SkimOptions};
+use std::default::Default;
 use std::io::Cursor;
-#[macro_use]
-extern crate lazy_static;
-
-lazy_static! {
-}
 
 pub fn main() {
-    let options: SkimOptions = SkimOptions::default()
-        .height("50%")
-        .multi(true);
+    let options: SkimOptions = SkimOptions::default().height("50%").multi(true);
 
     //==================================================
     // first run

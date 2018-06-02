@@ -242,20 +242,12 @@ mod test {
         let re = Regex::new(".*?,").unwrap();
 
         assert_eq!(
-            super::parse_transform_fields(
-                &re,
-                &"A,B,C,D,E,F",
-                &vec![Single(1), Single(3), Single(-1), Single(-7)]
-            ),
+            super::parse_transform_fields(&re, &"A,B,C,D,E,F", &vec![Single(1), Single(3), Single(-1), Single(-7)]),
             "B,D,F"
         );
 
         assert_eq!(
-            super::parse_transform_fields(
-                &re,
-                &"A,B,C,D,E,F",
-                &vec![LeftInf(3), LeftInf(-5), LeftInf(-6)]
-            ),
+            super::parse_transform_fields(&re, &"A,B,C,D,E,F", &vec![LeftInf(3), LeftInf(-5), LeftInf(-6)]),
             "A,B,C,A,"
         );
 
@@ -293,11 +285,7 @@ mod test {
         );
 
         assert_eq!(
-            super::parse_matching_fields(
-                &re,
-                &"中,华,人,民,E,F",
-                &vec![LeftInf(3), LeftInf(-5), LeftInf(-6)]
-            ),
+            super::parse_matching_fields(&re, &"中,华,人,民,E,F", &vec![LeftInf(3), LeftInf(-5), LeftInf(-6)]),
             vec![(0, 6), (0, 2)]
         );
 
@@ -351,23 +339,14 @@ mod test {
         assert_eq!(get_string_by_field(&re, &text, &LeftInf(-2)), Some("a,b"));
         assert_eq!(get_string_by_field(&re, &text, &LeftInf(-1)), Some("a,b,c"));
 
-        assert_eq!(
-            get_string_by_field(&re, &text, &RightInf(0)),
-            Some("a,b,c,")
-        );
+        assert_eq!(get_string_by_field(&re, &text, &RightInf(0)), Some("a,b,c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(1)), Some("b,c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(2)), Some("c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(3)), Some(""));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(4)), None);
         assert_eq!(get_string_by_field(&re, &text, &RightInf(5)), None);
-        assert_eq!(
-            get_string_by_field(&re, &text, &RightInf(-5)),
-            Some("a,b,c,")
-        );
-        assert_eq!(
-            get_string_by_field(&re, &text, &RightInf(-4)),
-            Some("a,b,c,")
-        );
+        assert_eq!(get_string_by_field(&re, &text, &RightInf(-5)), Some("a,b,c,"));
+        assert_eq!(get_string_by_field(&re, &text, &RightInf(-4)), Some("a,b,c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(-3)), Some("b,c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(-2)), Some("c,"));
         assert_eq!(get_string_by_field(&re, &text, &RightInf(-1)), Some(""));
