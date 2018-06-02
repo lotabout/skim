@@ -41,7 +41,7 @@ use curses::Curses;
 use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::io::{BufRead, BufReader};
-pub use options::SkimOptions;
+pub use options::{SkimOptions, SkimOptionsBuilder};
 pub use output::SkimOutput;
 use item::{MatchedItem};
 use std::sync::Arc;

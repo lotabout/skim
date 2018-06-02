@@ -241,12 +241,14 @@ impl Model {
 
                         // return the selected items
                         let _ = tx_ack.send(selected);
+                        break;
                     }
                     Event::EvActAbort => {
                         let tx_ack: Sender<bool> = *arg.downcast()
                             .expect("model:EvActAbort: failed to get argument");
                         curses.close();
                         let _ = tx_ack.send(true);
+                        break;
                     }
                     Event::EvActUp => {
                         //debug!("model:redraw_items_and_status");
