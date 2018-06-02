@@ -3,7 +3,6 @@ extern crate nix;
 extern crate regex;
 extern crate termion;
 extern crate unicode_width;
-extern crate utf8parse;
 #[macro_use]
 extern crate log;
 extern crate clap;
@@ -31,7 +30,6 @@ use event::Event::*;
 use event::{EventReceiver, EventSender};
 use item::MatchedItem;
 use nix::libc;
-use nix::libc::pthread_cancel;
 use nix::sys::signal::{pthread_sigmask, sigaction, SaFlags, SigAction, SigHandler, SigSet, SigmaskHow, Signal};
 pub use options::SkimOptions;
 pub use output::SkimOutput;
@@ -39,7 +37,6 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
-use std::os::unix::thread::JoinHandleExt;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -59,19 +56,18 @@ impl Skim {
 
         let mut sigset = SigSet::empty();
         sigset.add(Signal::SIGWINCH);
-        pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&sigset), None);
+        let _ = pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&sigset), None);
 
         // SIGWINCH is ignored by mac by default, thus we need to register an empty handler
         let action = SigAction::new(SigHandler::Handler(handle_sigwiwnch), SaFlags::empty(), SigSet::empty());
         unsafe {
-            sigaction(Signal::SIGWINCH, &action);
+            let _ = sigaction(Signal::SIGWINCH, &action);
         }
 
         let tx_input_clone = tx_input.clone();
         thread::spawn(move || {
             // listen to the resize event;
             loop {
-                let mut sig = 0;
                 let _errno = sigset.wait();
                 if let Err(_) = tx_input_clone.send((EvActRedraw, Box::new(true))) {
                     break;

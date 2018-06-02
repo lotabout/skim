@@ -1,16 +1,12 @@
 use event::{parse_action, Event, EventSender};
-use nix::libc::pthread_cancel;
+/// Input will listens to user input, modify the query string, send special
+/// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
+use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::prelude::*;
-use std::os::unix::thread::{JoinHandleExt, RawPthread};
-/// Input will listens to user input, modify the query string, send special
-/// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::thread;
-use std::time::Duration;
-use utf8parse;
+use std::os::unix::io::AsRawFd;
 
 pub struct Input {
     tx_input: EventSender,
@@ -106,76 +102,42 @@ impl Input {
     }
 }
 
-// check https://github.com/rust-lang/rust/issues/27802#issuecomment-270555935
-struct SimpleUtf8Receiver {
-    tx: Sender<char>,
-}
-
-impl SimpleUtf8Receiver {
-    pub fn new(tx: Sender<char>) -> Self {
-        SimpleUtf8Receiver { tx: tx }
-    }
-}
-
-impl utf8parse::Receiver for SimpleUtf8Receiver {
-    fn codepoint(&mut self, ch: char) {
-        let _ = self.tx.send(ch);
-    }
-
-    fn invalid_sequence(&mut self) {
-        // ignore it
-    }
-}
-
 struct KeyBoard {
-    handle: RawPthread,
-    rx: Receiver<char>,
+    file: File,
     buf: VecDeque<char>,
 }
 
-impl Drop for KeyBoard {
-    fn drop(&mut self) {
-        // Don't try this at home!
-        unsafe {
-            pthread_cancel(self.handle);
-        }
-    }
-}
-
 impl KeyBoard {
-    pub fn new(f: File) -> Self {
-        let (tx, rx) = channel();
-        let handle = thread::spawn(move || {
-            let mut utf8_receiver = SimpleUtf8Receiver::new(tx);
-            let mut utf8_parser = utf8parse::Parser::new();
-            for byte in f.bytes() {
-                utf8_parser.advance(&mut utf8_receiver, byte.expect("fail to parse keyboard input"));
-            }
-        });
-
+    pub fn new(file: File) -> Self {
         KeyBoard {
-            handle: handle.into_pthread_t(),
-            rx,
+            file,
             buf: VecDeque::new(),
         }
     }
 
-    fn getch(&self, is_block: bool) -> Option<char> {
-        if is_block {
-            self.rx.recv().ok()
-        } else {
-            self.rx.try_recv().ok()
-        }
-    }
-
     fn get_chars(&mut self) {
-        let ch = self.getch(true)
-            .expect("input:get_chars: something is wrong on gettting next character");
-        self.buf.push_back(ch);
+        let mut buf = Vec::with_capacity(10);
 
-        // sleep for a short time to make sure the chars(if any) are ready to read.
-        thread::sleep(Duration::from_millis(1));
-        while let Some(ch) = self.getch(false) {
+        let mut reader_buf = [0; 1];
+        let mut flag =
+            OFlag::from_bits_truncate(fcntl(self.file.as_raw_fd(), FcntlArg::F_GETFL).expect("Get fcntl failed"));
+
+        // set file to blocking mode
+        flag.remove(OFlag::O_NONBLOCK);
+        let _ = fcntl(self.file.as_raw_fd(), FcntlArg::F_SETFL(flag));
+        let _ = self.file.read(&mut reader_buf);
+        buf.push(reader_buf[0]);
+
+        flag.insert(OFlag::O_NONBLOCK);
+        let _ = fcntl(self.file.as_raw_fd(), FcntlArg::F_SETFL(flag));
+
+        while let Ok(_) = self.file.read(&mut reader_buf) {
+            buf.push(reader_buf[0]);
+        }
+
+        let chars = String::from_utf8(buf).expect("Non UTF8 in input");
+
+        for ch in chars.chars() {
             self.buf.push_back(ch);
         }
     }
