@@ -1,5 +1,5 @@
 extern crate env_logger;
-extern crate libc;
+extern crate nix;
 extern crate regex;
 extern crate termion;
 extern crate unicode_width;
@@ -30,15 +30,16 @@ use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
 use item::MatchedItem;
-use libc::{pthread_sigmask, sigaddset, sigemptyset, sigwait};
+use nix::libc;
+use nix::libc::pthread_cancel;
+use nix::sys::signal::{pthread_sigmask, sigaction, SaFlags, SigAction, SigHandler, SigSet, SigmaskHow, Signal};
 pub use options::SkimOptions;
 pub use output::SkimOutput;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::mem;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
-use std::ptr;
+use std::os::unix::thread::JoinHandleExt;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -48,24 +49,30 @@ const REFRESH_DURATION: u64 = 200;
 
 pub struct Skim {}
 
+extern "C" fn handle_sigwiwnch(_: i32) {}
+
 impl Skim {
     pub fn run_with(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> Option<SkimOutput> {
         let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
         //------------------------------------------------------------------------------
         // register terminal resize event, `pthread_sigmask` should be run before any thread.
-        let mut sigset = unsafe { mem::uninitialized() };
+
+        let mut sigset = SigSet::empty();
+        sigset.add(Signal::SIGWINCH);
+        pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&sigset), None);
+
+        // SIGWINCH is ignored by mac by default, thus we need to register an empty handler
+        let action = SigAction::new(SigHandler::Handler(handle_sigwiwnch), SaFlags::empty(), SigSet::empty());
         unsafe {
-            sigemptyset(&mut sigset);
-            sigaddset(&mut sigset, libc::SIGWINCH);
-            pthread_sigmask(libc::SIG_SETMASK, &sigset, ptr::null_mut());
+            sigaction(Signal::SIGWINCH, &action);
         }
 
         let tx_input_clone = tx_input.clone();
-        thread::spawn(move || {
+        let resize_handle = thread::spawn(move || {
             // listen to the resize event;
             loop {
                 let mut sig = 0;
-                let _errno = unsafe { sigwait(&sigset, &mut sig) };
+                let _errno = sigset.wait();
                 let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
             }
         });
@@ -185,6 +192,8 @@ impl Skim {
         // tx_model:  send message to model
         // rx_input:  receive keystroke events
 
+        let mut ret = None;
+
         let _ = tx_input.send((EvActRedraw, Box::new(true))); // trigger draw
         while let Ok((ev, arg)) = rx_input.recv() {
             debug!("main: got event {:?}", ev);
@@ -289,12 +298,14 @@ impl Skim {
                     let _ = tx_model.send((EvActAccept, Box::new(tx)));
                     let selected = rx.recv().expect("receiving selected item failure on accept");
 
-                    return Some(SkimOutput {
+                    ret = Some(SkimOutput {
                         accept_key,
                         query: query.get_query(),
                         cmd: query.get_cmd_query(),
                         selected_items: selected,
                     });
+
+                    break;
                 }
 
                 EvActClearScreen | EvActRedraw => {
@@ -311,7 +322,7 @@ impl Skim {
                     let (tx, rx): (Sender<bool>, Receiver<bool>) = channel();
                     let _ = tx_model.send((EvActAbort, Box::new(tx)));
                     let _ = rx.recv();
-                    return None;
+                    break;
                 }
 
                 EvActUp | EvActDown | EvActToggle | EvActToggleDown | EvActToggleUp | EvActToggleAll
@@ -333,6 +344,10 @@ impl Skim {
             }
         }
 
-        None
+        unsafe {
+            pthread_cancel(resize_handle.into_pthread_t());
+        }
+
+        ret
     }
 }

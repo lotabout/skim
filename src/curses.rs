@@ -2,7 +2,7 @@
 // Modeled after fzf
 
 //use ncurses::*;
-use libc;
+use nix::libc;
 use options::SkimOptions;
 use std::cmp::{max, min};
 use std::collections::HashMap;

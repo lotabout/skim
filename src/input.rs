@@ -1,5 +1,5 @@
 use event::{parse_action, Event, EventSender};
-use libc::pthread_cancel;
+use nix::libc::pthread_cancel;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs::File;
