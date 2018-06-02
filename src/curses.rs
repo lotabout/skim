@@ -2,21 +2,21 @@
 // Modeled after fzf
 
 //use ncurses::*;
-use std::sync::RwLock;
-use std::collections::HashMap;
-use std::io::{stdin, stdout, Write};
-use std::io::prelude::*;
-use termion::raw::IntoRawMode;
-use termion::screen::AlternateScreen;
-use termion;
-use std::cmp::{max, min};
-use termion::{color, style};
-use std::fmt;
-use unicode_width::UnicodeWidthChar;
-use std::fs::OpenOptions;
-use std::os::unix::io::{IntoRawFd, RawFd};
 use libc;
 use options::SkimOptions;
+use std::cmp::{max, min};
+use std::collections::HashMap;
+use std::fmt;
+use std::fs::OpenOptions;
+use std::io::prelude::*;
+use std::io::{stdin, stdout, Write};
+use std::os::unix::io::{IntoRawFd, RawFd};
+use std::sync::RwLock;
+use termion;
+use termion::raw::IntoRawMode;
+use termion::screen::AlternateScreen;
+use termion::{color, style};
+use unicode_width::UnicodeWidthChar;
 
 pub static COLOR_NORMAL: u16 = 0;
 pub static COLOR_PROMPT: u16 = 1;
@@ -237,8 +237,7 @@ impl Window {
         }
 
         self.attron(COLOR_NORMAL);
-        self.stdout_buffer
-            .push_str(&" ".repeat((max_x - x) as usize));
+        self.stdout_buffer.push_str(&" ".repeat((max_x - x) as usize));
         self.mv(y, x);
     }
 
@@ -330,11 +329,7 @@ impl Window {
         let (y, x) = self.getyx();
         let target_x = x + text_width;
 
-        let final_x = if self.wrap {
-            target_x % max_x
-        } else {
-            target_x
-        };
+        let final_x = if self.wrap { target_x % max_x } else { target_x };
         let final_y = y + if self.wrap { target_x / max_x } else { 0 };
         self.mv(final_y, final_x);
     }
@@ -351,9 +346,7 @@ impl Window {
         let resource_map = RESOURCE_MAP
             .read()
             .expect("curses:attron: failed to lock RESOURCE_MAP for read");
-        resource_map
-            .get(&key)
-            .map(|s| self.stdout_buffer.push_str(s));
+        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
     }
 
     fn attroff(&mut self, key: attr_t) {
@@ -366,14 +359,8 @@ impl Window {
     }
 
     fn attrclear(&mut self) {
-        self.stdout_buffer.push_str(
-            format!(
-                "{}{}{}",
-                color::Fg(color::Reset),
-                color::Bg(color::Reset),
-                style::Reset
-            ).as_str(),
-        );
+        self.stdout_buffer
+            .push_str(format!("{}{}{}", color::Fg(color::Reset), color::Bg(color::Reset), style::Reset).as_str());
     }
 
     pub fn write_to_term(&mut self, term: &mut Write) {
@@ -455,10 +442,12 @@ impl Curses {
 
         // parse the option of window height of skim
 
-        let min_height = options.min_height
+        let min_height = options
+            .min_height
             .map(|x| x.parse::<u16>().unwrap_or(10))
             .expect("min_height should have default values");
-        let height = options.height
+        let height = options
+            .height
             .map(Curses::parse_margin_string)
             .expect("height should have default values");
 
@@ -484,18 +473,12 @@ impl Curses {
         let (term, y): (Box<Write>, u16) = if Margin::Percent(100) == height {
             (
                 Box::new(AlternateScreen::from(
-                    stdout()
-                        .into_raw_mode()
-                        .expect("failed to set terminal to raw mode"),
+                    stdout().into_raw_mode().expect("failed to set terminal to raw mode"),
                 )),
                 0,
             )
         } else {
-            let term = Box::new(
-                stdout()
-                    .into_raw_mode()
-                    .expect("failed to set terminal to raw mode"),
-            );
+            let term = Box::new(stdout().into_raw_mode().expect("failed to set terminal to raw mode"));
             let (y, _) = Curses::get_cursor_pos();
 
             // reserve the necessary lines to show skim (in case current cursor is at the bottom
@@ -520,7 +503,8 @@ impl Curses {
         };
 
         // parse options for margin
-        let margins = options.margin
+        let margins = options
+            .margin
             .map(Curses::parse_margin)
             .expect("option margin is should be specified (by default)");
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
@@ -579,9 +563,7 @@ impl Curses {
             .expect("curses:get_cursor_pos: failed to set stdout to raw mode");
         let mut f = stdin();
         write!(stdout, "\x1B[6n").expect("curses:get_cursor_pos: failed to write to stdout");
-        stdout
-            .flush()
-            .expect("curses:get_cursor_pos: failed to flush stdout");
+        stdout.flush().expect("curses:get_cursor_pos: failed to flush stdout");
 
         let mut read_chars = Vec::new();
         loop {
@@ -594,22 +576,15 @@ impl Curses {
         }
         let s = String::from_utf8(read_chars).expect("curses:get_cursor_pos: invalid utf8 string read");
         let t: Vec<&str> = s[2..s.len() - 1].split(';').collect();
-        stdout
-            .flush()
-            .expect("curses:get_cursor_pos: failed to flush stdout");
-        let y = t[0].parse::<u16>()
-            .expect("curses:get_cursor_pos: invalid position y");
-        let x = t[1].parse::<u16>()
-            .expect("curses:get_cursor_pos: invalid position x");
+        stdout.flush().expect("curses:get_cursor_pos: failed to flush stdout");
+        let y = t[0].parse::<u16>().expect("curses:get_cursor_pos: invalid position y");
+        let x = t[1].parse::<u16>().expect("curses:get_cursor_pos: invalid position x");
         (y - 1, x - 1)
     }
 
     fn parse_margin_string(margin: &str) -> Margin {
         if margin.ends_with('%') {
-            Margin::Percent(min(
-                100,
-                margin[0..margin.len() - 1].parse::<u16>().unwrap_or(100),
-            ))
+            Margin::Percent(min(100, margin[0..margin.len() - 1].parse::<u16>().unwrap_or(100)))
         } else {
             Margin::Fixed(margin.parse::<u16>().unwrap_or(0))
         }
@@ -641,12 +616,7 @@ impl Curses {
                 let margin_left = Curses::parse_margin_string(margins[3]);
                 (margin_top, margin_right, margin_bottom, margin_left)
             }
-            _ => (
-                Margin::Fixed(0),
-                Margin::Fixed(0),
-                Margin::Fixed(0),
-                Margin::Fixed(0),
-            ),
+            _ => (Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0), Margin::Fixed(0)),
         }
     }
 
@@ -793,9 +763,7 @@ impl Curses {
         }
 
         // flush the previous drop, so that ToMainScreen is written before restore
-        stdout()
-            .flush()
-            .expect("curses:close: failed to flush to stdout");
+        stdout().flush().expect("curses:close: failed to flush to stdout");
 
         // restore the original fd
         if self.orig_stdout_fd.is_some() {
@@ -809,13 +777,10 @@ impl Curses {
     }
 
     pub fn refresh(&mut self) {
-        let term = self.term
-            .as_mut()
-            .expect("curses:refresh: failed to get terminal");
+        let term = self.term.as_mut().expect("curses:refresh: failed to get terminal");
         self.win_preview.write_to_term(term);
         self.win_main.write_to_term(term);
-        term.flush()
-            .expect("curses:refresh: failed to flush terminal");
+        term.flush().expect("curses:refresh: failed to flush terminal");
     }
 }
 

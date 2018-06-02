@@ -1,6 +1,6 @@
-use std::sync::mpsc::SyncSender;
-use item::ItemGroup;
 use event::{Event, EventArg, EventReceiver};
+use item::ItemGroup;
+use std::sync::mpsc::SyncSender;
 use std::thread;
 use std::time::Duration;
 
@@ -64,6 +64,14 @@ impl CachedSender {
                     Event::EvReaderNewItem => {
                         self.items.push(*arg.downcast::<ItemGroup>()
                             .expect("sender:EvReaderNewItem: failed to get argument"));
+                    }
+
+                    ev @ Event::EvActAccept | ev @ Event::EvActAbort => {
+                        // pass the event to sender
+                        let _ = self.tx_item.send((ev, Box::new(true)));
+
+                        // quit the loop
+                        break;
                     }
 
                     _ => {}

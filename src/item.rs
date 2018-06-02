@@ -1,14 +1,14 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
-use std::cmp::Ordering;
 use ansi::ANSIParser;
+use curses::attr_t;
+use field::*;
 use regex::Regex;
 use std::borrow::Cow;
-use std::sync::Arc;
-use curses::attr_t;
+use std::cmp::Ordering;
 use std::default::Default;
-use field::*;
+use std::sync::Arc;
 
 // An item will store everything that one line input will need to be operated and displayed.
 //
@@ -72,10 +72,7 @@ impl<'a> Item {
             ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
-            (
-                parse_transform_fields(delimiter, &orig_text, trans_fields),
-                Vec::new(),
-            )
+            (parse_transform_fields(delimiter, &orig_text, trans_fields), Vec::new())
         } else if ansi_enabled {
             // not transformed, ansi
             ansi_parser.parse_ansi(&orig_text)

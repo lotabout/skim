@@ -1,7 +1,7 @@
-use model::ClosureType;
 use curses::*;
-use std::mem;
+use model::ClosureType;
 use options::SkimOptions;
+use std::mem;
 
 #[derive(Clone, Copy)]
 enum QueryMode {

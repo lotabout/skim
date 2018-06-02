@@ -10,9 +10,14 @@ readme  = "README.md"
 keywords = ["fuzzy", "menu", "util"]
 license = "MIT"
 
+[lib]
+name = "skim"
+path = "src/lib.rs"
+
 [[bin]]
 name = "sk"
 path = "src/main.rs"
+
 
 [dependencies]
 libc = "0.2.20"
@@ -26,7 +31,6 @@ log = "0.3.8"
 env_logger = "0.4.3"
 time = "0.1.38"
 clap = "2.26.2"
-derive_builder = "0.5.1"
 
 [features]
 default = []

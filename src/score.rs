@@ -1,12 +1,10 @@
+use regex::Regex;
+use std::cell::RefCell;
 /// score is responsible for calculating the scores of the similarity between
 /// the query and the choice.
 ///
 /// It is modeled after <https://github.com/felipesere/icepick.git>
-
 use std::cmp::max;
-use std::cell::RefCell;
-use regex::Regex;
-use std::ascii::AsciiExt;
 
 const BONUS_UPPER_MATCH: i64 = 10;
 const BONUS_ADJACENCY: i64 = 10;
@@ -122,11 +120,7 @@ pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>
             };
             let score_before_idx = prev.final_score - prev.score + next.score
                 + PENALTY_UNMATCHED * ((next.idx - prev.idx) as i64)
-                - if prev.adj_num == 0 {
-                    BONUS_ADJACENCY
-                } else {
-                    0
-                };
+                - if prev.adj_num == 0 { BONUS_ADJACENCY } else { 0 };
 
             let (back_ref, score, adj_num) = cur_row
                 .iter()
@@ -210,11 +204,7 @@ pub fn exact_match(choice: &str, pattern: &str) -> Option<((usize, usize), (usiz
 
     let first_occur = start_pos
         .map(|s| {
-            let start = if s == 0 {
-                0
-            } else {
-                (&choice[0..s]).chars().count()
-            };
+            let start = if s == 0 { 0 } else { (&choice[0..s]).chars().count() };
             (start, start + pattern_len)
         })
         .unwrap();
@@ -225,11 +215,7 @@ pub fn exact_match(choice: &str, pattern: &str) -> Option<((usize, usize), (usiz
     };
     let last_occur = last_pos
         .map(|s| {
-            let start = if s == 0 {
-                0
-            } else {
-                (&choice[0..s]).chars().count()
-            };
+            let start = if s == 0 { 0 } else { (&choice[0..s]).chars().count() };
             (start, start + pattern_len)
         })
         .unwrap();

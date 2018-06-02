@@ -1,17 +1,22 @@
-use std::sync::{Arc, RwLock};
-use std::sync::mpsc::channel;
 use event::{Event, EventReceiver, EventSender};
 use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
+use std::sync::mpsc::channel;
+use std::sync::{Arc, RwLock};
 use std::thread;
 
-use score;
+use options::SkimOptions;
 use regex::Regex;
+use score;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use options::SkimOptions;
 
 lazy_static! {
-    static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![RankCriteria::Score, RankCriteria::Index, RankCriteria::Begin, RankCriteria::End]);
+    static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![
+        RankCriteria::Score,
+        RankCriteria::Index,
+        RankCriteria::Begin,
+        RankCriteria::End,
+    ]);
     static ref RE_AND: Regex = Regex::new(r"([^ |]+( +\| +[^ |]*)+)|( +)").unwrap();
     static ref RE_OR: Regex = Regex::new(r" +\| +").unwrap();
 }
@@ -101,6 +106,12 @@ impl Matcher {
 
                             let _ = tx_matcher.send((ev, arg));
                         }
+
+                        Event::EvActAccept | Event::EvActAbort => {
+                            // quit the loop
+                            break;
+                        }
+
                         _ => {
                             // pass through all other events
                             let _ = tx_matcher.send((ev, arg));
@@ -148,12 +159,9 @@ impl Matcher {
                     num_processed += items.len();
 
                     matcher_engine.as_ref().map(|mat| {
-                        let matched_items: MatchedItemGroup = items
-                            .into_iter()
-                            .filter_map(|item| mat.match_item(item))
-                            .collect();
-                        let _ = self.tx_result
-                            .send((Event::EvModelNewItem, Box::new(matched_items)));
+                        let matched_items: MatchedItemGroup =
+                            items.into_iter().filter_map(|item| mat.match_item(item)).collect();
+                        let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
                     });
 
                     // report the number of processed items
@@ -399,9 +407,7 @@ impl ExactEngine {
             return None;
         }
 
-        let (begin, end) = result_range
-            .map(|(s, e)| (s + range_start, e + range_start))
-            .unwrap();
+        let (begin, end) = result_range.map(|(s, e)| (s + range_start, e + range_start)).unwrap();
         let score = (end - begin) as i64;
         let rank = build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
 
@@ -426,13 +432,15 @@ impl MatchEngine for ExactEngine {
             ),
             Algorithm::InverseExact => self.match_item_exact(
                 item,
-                Box::new(|matched_result, _| {
-                    if matched_result.is_none() {
-                        Some((0, 0))
-                    } else {
-                        None
-                    }
-                }),
+                Box::new(
+                    |matched_result, _| {
+                        if matched_result.is_none() {
+                            Some((0, 0))
+                        } else {
+                            None
+                        }
+                    },
+                ),
             ),
             Algorithm::PrefixExact => self.match_item_exact(
                 item,
@@ -473,10 +481,7 @@ impl OrEngine {
     pub fn builder(query: &str, mode: MatcherMode) -> Self {
         // mock
         OrEngine {
-            engines: RE_OR
-                .split(query)
-                .map(|q| EngineFactory::build(q, mode))
-                .collect(),
+            engines: RE_OR.split(query).map(|q| EngineFactory::build(q, mode)).collect(),
         }
     }
 
@@ -500,11 +505,7 @@ impl MatchEngine for OrEngine {
     fn display(&self) -> String {
         format!(
             "(Or: {})",
-            self.engines
-                .iter()
-                .map(|e| e.display())
-                .collect::<Vec<_>>()
-                .join(", ")
+            self.engines.iter().map(|e| e.display()).collect::<Vec<_>>().join(", ")
         )
     }
 }
@@ -528,9 +529,7 @@ impl AndEngine {
             }
 
             if !mat.as_str().trim().is_empty() {
-                engines.push(Box::new(
-                    OrEngine::builder(mat.as_str().trim(), mode).build(),
-                ));
+                engines.push(Box::new(OrEngine::builder(mat.as_str().trim(), mode).build()));
             }
             last = end;
         }
@@ -596,11 +595,7 @@ impl MatchEngine for AndEngine {
     fn display(&self) -> String {
         format!(
             "(And: {})",
-            self.engines
-                .iter()
-                .map(|e| e.display())
-                .collect::<Vec<_>>()
-                .join(", ")
+            self.engines.iter().map(|e| e.display()).collect::<Vec<_>>().join(", ")
         )
     }
 }
