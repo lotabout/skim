@@ -68,12 +68,14 @@ impl Skim {
         }
 
         let tx_input_clone = tx_input.clone();
-        let resize_handle = thread::spawn(move || {
+        thread::spawn(move || {
             // listen to the resize event;
             loop {
                 let mut sig = 0;
                 let _errno = sigset.wait();
-                let _ = tx_input_clone.send((EvActRedraw, Box::new(true)));
+                if let Err(_) = tx_input_clone.send((EvActRedraw, Box::new(true))) {
+                    break;
+                }
             }
         });
 
@@ -342,10 +344,6 @@ impl Skim {
                 }
                 _ => {}
             }
-        }
-
-        unsafe {
-            pthread_cancel(resize_handle.into_pthread_t());
         }
 
         ret
