@@ -1,8 +1,7 @@
 use std::default::Default;
 use clap::ArgMatches;
 
-#[derive(Builder, Debug)]
-#[builder(default)]
+#[derive(Debug)]
 pub struct SkimOptions<'a> {
     pub bind: Vec<&'a str>,
     pub multi: bool,
@@ -115,6 +114,100 @@ impl<'a> SkimOptions<'a> {
             exact,
             regex,
         }
+    }
+
+    pub fn bind(self, bind: Vec<&'a str>) -> Self {
+        Self {bind, ..self}
+    }
+    pub fn multi(self, multi: bool) -> Self {
+        Self {multi, ..self}
+    }
+    pub fn prompt(self, prompt: &'a str) -> Self {
+        Self {prompt: Some(prompt), ..self}
+    }
+    pub fn cmd_prompt(self, cmd_prompt: &'a str) -> Self {
+        Self {cmd_prompt: Some(cmd_prompt), ..self}
+    }
+    pub fn expect(self, expect: String) -> Self {
+        Self {expect: Some(expect), ..self}
+    }
+    pub fn tac(self, tac: bool) -> Self {
+        Self {tac, ..self}
+    }
+    pub fn tiebreak(self, tiebreak: String) -> Self {
+        Self {tiebreak: Some(tiebreak), ..self}
+    }
+    pub fn ansi(self, ansi: bool) -> Self {
+        Self {ansi, ..self}
+    }
+    pub fn exact(self, exact: bool) -> Self {
+        Self {exact, ..self}
+    }
+    pub fn cmd(self, cmd: &'a str) -> Self {
+        Self {cmd: Some(cmd), ..self}
+    }
+    pub fn interactive(self, interactive: bool) -> Self {
+        Self {interactive, ..self}
+    }
+    pub fn query(self, query: &'a str) -> Self {
+        Self {query: Some(query), ..self}
+    }
+    pub fn cmd_query(self, cmd_query: &'a str) -> Self {
+        Self {cmd_query: Some(cmd_query), ..self}
+    }
+    pub fn regex(self, regex: bool) -> Self {
+        Self {regex, ..self}
+    }
+    pub fn delimiter(self, delimiter: &'a str) -> Self {
+        Self {delimiter: Some(delimiter), ..self}
+    }
+    pub fn nth(self, nth: &'a str) -> Self {
+        Self {nth: Some(nth), ..self}
+    }
+    pub fn with_nth(self, with_nth: &'a str) -> Self {
+        Self {with_nth: Some(with_nth), ..self}
+    }
+    pub fn replstr(self, replstr: &'a str) -> Self {
+        Self {replstr: Some(replstr), ..self}
+    }
+    pub fn color(self, color: &'a str) -> Self {
+        Self {color: Some(color), ..self}
+    }
+    pub fn margin(self, margin: &'a str) -> Self {
+        Self {margin: Some(margin), ..self}
+    }
+    pub fn min_height(self, min_height: &'a str) -> Self {
+        Self {min_height: Some(min_height), ..self}
+    }
+    pub fn height(self, height: &'a str) -> Self {
+        Self {height: Some(height), ..self}
+    }
+    pub fn preview(self, preview: &'a str) -> Self {
+        Self {preview: Some(preview), ..self}
+    }
+    pub fn preview_window(self, preview_window: &'a str) -> Self {
+        Self {preview_window: Some(preview_window), ..self}
+    }
+    pub fn reverse(self, reverse: bool) -> Self {
+        Self {reverse, ..self}
+    }
+    pub fn read0(self, read0: bool) -> Self {
+        Self {read0, ..self}
+    }
+    pub fn print0(self, print0: bool) -> Self {
+        Self {print0, ..self}
+    }
+    pub fn tabstop(self, tabstop: &'a str) -> Self {
+        Self {tabstop: Some(tabstop), ..self}
+    }
+    pub fn print_query(self, print_query: bool) -> Self {
+        Self {print_query, ..self}
+    }
+    pub fn print_cmd(self, print_cmd: bool) -> Self {
+        Self {print_cmd, ..self}
+    }
+    pub fn no_hscroll(self, no_hscroll: bool) -> Self {
+        Self {no_hscroll, ..self}
     }
 }
 

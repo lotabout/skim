@@ -6,8 +6,6 @@ extern crate unicode_width;
 extern crate utf8parse;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate derive_builder;
 extern crate clap;
 
 #[macro_use]
@@ -41,7 +39,7 @@ use curses::Curses;
 use std::fs::File;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::io::{BufRead, BufReader};
-pub use options::{SkimOptions, SkimOptionsBuilder};
+pub use options::SkimOptions;
 pub use output::SkimOutput;
 use item::{MatchedItem};
 use std::sync::Arc;
