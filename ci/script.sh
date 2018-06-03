@@ -17,7 +17,7 @@ main() {
             ;;
         osx)
             # run the integration test
-            tmux new "python test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
+            tmux new "python3 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
             ;;
         *)
             ;;

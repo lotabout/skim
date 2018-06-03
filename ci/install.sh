@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 case $TRAVIS_OS_NAME in
     linux)
         sudo add-apt-repository -y ppa:jonathonf/python-3.6
