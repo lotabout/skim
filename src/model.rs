@@ -2,7 +2,7 @@ use ansi::ANSIParser;
 use curses::*;
 use event::{Event, EventReceiver};
 use field::get_string_by_range;
-use item::{MatchedItem, MatchedItemGroup, MatchedRange};
+use item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
 use options::SkimOptions;
 use orderedvec::OrderedVec;
 use regex::{Captures, Regex};
@@ -225,16 +225,16 @@ impl Model {
                         curses.close();
 
                         // output the expect key
-                        let tx_ack: Sender<Vec<Arc<MatchedItem>>> =
+                        let tx_ack: Sender<Vec<Arc<Item>>> =
                             *arg.downcast().expect("model:EvActAccept: failed to get argument");
 
                         // do the final dirty work
                         self.act_output();
 
-                        let mut selected: Vec<Arc<MatchedItem>> =
-                            self.selected.values().map(|item| item.clone()).collect();
+                        let mut selected: Vec<Arc<Item>> =
+                            self.selected.values().map(|item| item.item.clone()).collect();
 
-                        selected.sort_by_key(|item| item.item.get_full_index());
+                        selected.sort_by_key(|item| item.get_full_index());
 
                         // return the selected items
                         let _ = tx_ack.send(selected);

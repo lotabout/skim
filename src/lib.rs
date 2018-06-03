@@ -28,7 +28,7 @@ mod sender;
 use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
-use item::MatchedItem;
+use item::Item;
 use nix::libc;
 use nix::sys::signal::{pthread_sigmask, sigaction, SaFlags, SigAction, SigHandler, SigSet, SigmaskHow, Signal};
 pub use options::SkimOptions;
@@ -292,7 +292,7 @@ impl Skim {
                     // sync with model to quit
                     let accept_key = *arg.downcast::<Option<String>>().unwrap_or_else(|_| Box::new(None));
 
-                    let (tx, rx): (Sender<Vec<Arc<MatchedItem>>>, Receiver<Vec<Arc<MatchedItem>>>) = channel();
+                    let (tx, rx): (Sender<Vec<Arc<Item>>>, Receiver<Vec<Arc<Item>>>) = channel();
                     let _ = tx_model.send((EvActAccept, Box::new(tx)));
                     let selected = rx.recv().expect("receiving selected item failure on accept");
 

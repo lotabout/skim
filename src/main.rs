@@ -237,7 +237,7 @@ fn real_main() -> i32 {
     });
 
     for item in output.selected_items.iter() {
-        print!("{}{}", item.item.get_output_text(), output_ending);
+        print!("{}{}", item.get_output_text(), output_ending);
     }
 
     if output.selected_items.len() > 0 {0} else {1}
