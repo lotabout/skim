@@ -30,6 +30,7 @@ skim provides a single executable: `sk`, basically anywhere you would want to us
     - [Interactive Mode](#interactive-mode)
     - [Preview Window](#preview-window)
     - [Fields Support](#fields-support)
+    - [Use as a Library](#use-as-a-library)
 - [FAQ](#faq)
     - [How to ignore files?](#how-to-ignore-files)
     - [Some files are not shown in vim plugin](#some-files-are-not-shown-in-vim-plugin)
@@ -72,16 +73,22 @@ brew install sbdchd/skim/skim
 
 But the Linux way described above will also work.
 
+## Install from crates.io
+
+```sh
+cargo install skim
+```
+
 ## Install as vim plugin
 Once you have cloned the repository, add the following line to your .vimrc.
 
-```
+```vim
 set rtp+=~/.skim
 ```
 
 Or you can have vim-plug manage skim (recommended):
 
-```
+```vim
 Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
 ```
 
@@ -89,19 +96,17 @@ Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
 
 Clone the repo and run:
 
-```
+```sh
 cargo install
 ```
 
 Alternatively, run:
 
-```
+```sh
 cargo build --release
 ```
 
 then put the resulting `target/release/sk` executable on your PATH.
-
-Note: on linux, also make sure the `libncursesw5-dev` package is installed.
 
 # Usage
 
@@ -379,6 +384,45 @@ Also you can use `--with-nth` to re-arrange the order of fields.
 - `start..end` -- starting from `start`-th field, all the way to `end`-th
     field, excluding `end`.
 
+## Use as a library
+
+Skim can now be used as a library in your rust crates. The basic idea is to
+throw anything that is `BufRead`(we can easily turn a `File` for `String` into
+`BufRead`) and skim will do its job and bring us back the user selection
+including the selected items(with their indices), the query, etc.
+
+First, add skim into your `Cargo.toml`:
+
+```toml
+[dependencies]
+skim = "0.4.0"
+```
+
+Then try to run this simple example:
+
+```rust
+extern crate skim;
+use skim::{Skim, SkimOptions};
+use std::default::Default;
+use std::io::Cursor;
+
+pub fn main() {
+    let options: SkimOptions = SkimOptions::default().height("50%").multi(true);
+
+    let input = "aaaaa\nbbbb\nccc".to_string();
+
+    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(|| Vec::new());
+
+    for item in selected_items.iter() {
+        print!("{}: {}{}", item.get_index(), item.get_output_text(), "\n");
+    }
+}
+```
+
+Check more examples under [examples/](https://github.com/lotabout/skim/tree/master/examples) directory.
+
 # FAQ
 
 ## How to ignore files?
@@ -419,8 +463,8 @@ This project is written from scratch. Some decisions of implementation are
 different from fzf. For example:
 
 1. The fuzzy search algorithm is different.
-2. UI of showing matched items. `fzf` will show only the range matched while
-   `skim` will show each character matched.
+2. ~~UI of showing matched items. `fzf` will show only the range matched while
+   `skim` will show each character matched.~~ (fzf has this now)
 3. `skim` has an interactive mode.
 4. `skim`'s range syntax is git style.
 

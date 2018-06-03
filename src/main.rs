@@ -9,7 +9,7 @@ use clap::{App, Arg};
 use skim::{Skim, SkimOptions};
 use std::env;
 
-const VERSION: &str = "0.3.2";
+const VERSION: &str = "0.4.0";
 
 const USAGE: &str = "
 Usage: sk [options]

@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.4.0: 2018-06-03
+
+Refactor skim into a library. With minor bug fixes:
+- support multiple arguments, to be a drop-in replacement of fzf.
+- support negative range field. (e.g. `-1` to specify the last field)
+- respond to terminal resize event on Mac.
+
 ## 0.3.2: 2018-01-18
 Some minor enhancements that might comes handy.
 - Reserve all fzf options, so that skim can be a drop-in replacement of fzf.
