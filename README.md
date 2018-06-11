@@ -330,7 +330,7 @@ finally decide which lines to pick by checking the context around the line.
 window. For example:
 
 ```
-sk --ansi -i -c 'ag --color "{}"' --preview "preview.sh {0}"
+sk --ansi -i -c 'ag --color "{}"' --preview "preview.sh {}"
 ```
 
 (Note the [preview.sh](https://github.com/junegunn/fzf.vim/blob/master/bin/preview.sh) is a script to print the context given filename:lines:columns)
@@ -345,7 +345,7 @@ with the current highlighted line surrounded by single quote. Then call the
 command to get the output. And print the output on the preview window.
 
 Sometimes you don't need the whole line for invoking the command, in this case
-you can use `{0}`, `{1..}`, `{..3}` or `{1..5}` to select the fields. The
+you can use `{}`, `{1..}`, `{..3}` or `{1..5}` to select the fields. The
 syntax is explained in the section "Fields Support".
 
 Last, you might want to configure the position of preview windows, use
@@ -371,18 +371,18 @@ However, you want to search `<filename>` only when typing in queries. That
 means when you type `21`, you want to find a `<filename>` that contains `21`,
 but not matching line number or column number.
 
-You can use `sk --delimiter ':' --nth 0` to achieve this.
+You can use `sk --delimiter ':' --nth 1` to achieve this.
 
 Also you can use `--with-nth` to re-arrange the order of fields.
 
 **Range Syntax**
 
-- `<num>` -- to specify the `num`-th fields, starting with 0.
+- `<num>` -- to specify the `num`-th fields, starting with 1.
 - `start..` -- starting from the `start`-th fields, and the rest.
 - `..end` -- starting from the `0`-th field, all the way to `end`-th field,
-    excluding `end`.
+    including `end`.
 - `start..end` -- starting from `start`-th field, all the way to `end`-th
-    field, excluding `end`.
+    field, including `end`.
 
 ## Use as a library
 
@@ -466,7 +466,7 @@ different from fzf. For example:
 2. ~~UI of showing matched items. `fzf` will show only the range matched while
    `skim` will show each character matched.~~ (fzf has this now)
 3. `skim` has an interactive mode.
-4. `skim`'s range syntax is git style.
+4. ~~`skim`'s range syntax is git style~~: now it is the same with fzf.
 
 # How to contribute
 
