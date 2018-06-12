@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.5.0: 2018-06-12
+
+Change the field syntax to be fzf compatible.
+- Previously it was git style
+    - fields starts with `0`
+    - `1..3` results in `2, 3` (which is `0, 1, 2, 3` minus `0, 1`)
+- Now it is `cut` style
+    - fields starts with `1`
+    - `1..3` results in `1, 2, 3`
+
 ## 0.4.0: 2018-06-03
 
 Refactor skim into a library. With minor bug fixes:
