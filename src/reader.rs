@@ -11,7 +11,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use field::{parse_range, FieldRange};
+use field::FieldRange;
 use options::SkimOptions;
 use regex::Regex;
 use sender::CachedSender;
@@ -52,14 +52,14 @@ impl ReaderOption {
         if let Some(transform_fields) = options.with_nth {
             self.transform_fields = transform_fields
                 .split(',')
-                .filter_map(|string| parse_range(string))
+                .filter_map(|string| FieldRange::from_str(string))
                 .collect();
         }
 
         if let Some(matching_fields) = options.nth {
             self.matching_fields = matching_fields
                 .split(',')
-                .filter_map(|string| parse_range(string))
+                .filter_map(|string| FieldRange::from_str(string))
                 .collect();
         }
 
