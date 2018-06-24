@@ -17,7 +17,8 @@ main() {
 
     test -f Cargo.lock || cargo generate-lockfile
 
-    cargo build --release --target $TARGET
+    # TODO Update this to build the artifacts that matter to you
+    cross build --release --target $TARGET
 
     # TODO Update this to package the right artifacts
     cp target/$TARGET/release/sk $stage/

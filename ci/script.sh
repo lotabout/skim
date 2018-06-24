@@ -2,7 +2,7 @@
 set -ex
 
 main() {
-    cargo build --release --verbose
+    cross build --target $TARGET --release
 
     if [ ! -z $DISABLE_TESTS ]; then
         return
