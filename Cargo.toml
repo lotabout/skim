@@ -1,6 +1,6 @@
 [package]
 name = "skim"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Zhang Jinzhou <lotabout@gmail.com>"]
 description = "Fuzzy Finder in rust!"
 documentation = "https://github.com/lotabout/skim"

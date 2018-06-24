@@ -9,7 +9,7 @@
 
 set -u
 
-version="0.5.0"
+version="0.5.1"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 skim_base="$(pwd)"

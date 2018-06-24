@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.5.1: 2018-06-24
+
+Use [cross](https://github.com/japaric/cross) to build targets.
+
 ## 0.5.0: 2018-06-12
 
 Change the field syntax to be fzf compatible.

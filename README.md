@@ -395,7 +395,7 @@ First, add skim into your `Cargo.toml`:
 
 ```toml
 [dependencies]
-skim = "0.5.0"
+skim = "0.5.1"
 ```
 
 Then try to run this simple example:
