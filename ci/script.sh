@@ -10,12 +10,12 @@ main() {
 
     cargo test --verbose
 
-    case $TRAVIS_OS_NAME in
-        linux)
+    case $TARGET in
+        x86_64-unknown-linux-gnu|i686-unknown-linux-gnu)
             # run the integration test
             tmux new "python3.6 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
             ;;
-        osx)
+        x86_64-apple-darwin|i686-apple-darwin)
             # run the integration test
             tmux new "python3 test/test_skim.py > out && touch ok" && cat out && [ -e ok ]
             ;;

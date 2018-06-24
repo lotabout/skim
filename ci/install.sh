@@ -44,8 +44,8 @@ main() {
            --target $target
 
     # For test
-    case $TRAVIS_OS_NAME in
-        linux)
+    case $TARGET in
+        x86_64-unknown-linux-gnu|i686-unknown-linux-gnu)
             sudo add-apt-repository -y ppa:jonathonf/python-3.6
             sudo apt-get update
             sudo apt-get -y install python3.6
@@ -54,7 +54,7 @@ main() {
             sudo apt-get install -y zsh
             stty cols 80
             ;;
-        osx)
+        x86_64-apple-darwin|i686-apple-darwin)
             brew upgrade python
             python -V
             python3 -V
