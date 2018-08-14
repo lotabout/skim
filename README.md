@@ -2,8 +2,8 @@
 
 > Life is short, skim!
 
-Half of our life is spent on navigation: files, lines, commands... You need
-skim! It is a general fuzzy finder that saves you time.
+Half of our life is spent on navigation: files, lines, commands… You need skim!
+It is a general fuzzy finder that saves you time.
 
 It is blazingly fast as it reads the data source asynchronously.
 
@@ -42,8 +42,8 @@ skim provides a single executable: `sk`, basically anywhere you would want to us
 skim project contains several components:
 
 1. `sk` executable -- the core.
-2. `sk-tmux` -- script for launching `sk` in a tmux plane.
-3. vim/nvim plugin -- to call `sk` inside vim/nvim. check [skim.vim](https://github.com/lotabout/skim.vim) for more vim support.
+2. `sk-tmux` -- script for launching `sk` in a tmux pane.
+3. Vim/Nvim plugin -- to call `sk` inside Vim/Nvim. check [skim.vim](https://github.com/lotabout/skim.vim) for more Vim support.
 
 ## Linux
 
@@ -79,8 +79,9 @@ But the Linux way described above will also work.
 cargo install skim
 ```
 
-## Install as vim plugin
-Once you have cloned the repository, add the following line to your .vimrc.
+## Install as Vim plugin
+
+Once you have cloned the repository, add the following line to your .vimrc:
 
 ```vim
 set rtp+=~/.skim
@@ -125,7 +126,7 @@ sk
 vim $(find . -name "*.rs" | sk -m)
 ```
 The above command will allow you to select files with ".rs" extension and open
-the ones you selected in vim.
+the ones you selected in Vim.
 
 ## As Interactive Interface
 
@@ -146,7 +147,7 @@ sk --ansi -c 'rg --color=always --line-number "{}"'
 
 ## Key Bindings
 
-Some common used keybindings.
+Some commonly used keybindings:
 
 | Key               | Action                                     |
 |------------------:|--------------------------------------------|
@@ -170,7 +171,7 @@ Some common used keybindings.
 | `!fire`  | inverse-exact-match        | items that do not include `fire`  |
 | `!.mp3$` | inverse-suffix-exact-match | items that do not end with `.mp3` |
 
-`skim` also support the combination of tokens.
+`skim` also supports the combination of tokens.
 
 - space has the meaning of `AND`. With the term `src main`, `skim` will search
     for items that match **both** `src` and `main`.
@@ -180,7 +181,7 @@ Some common used keybindings.
 - `OR` have higher precedence. So `readme .md$ | .markdown$` is groupped into
     `readme AND (.md$ OR .markdown$)`.
 
-In case that you want to use regular expressions, `skim` provide `regex` mode:
+In case that you want to use regular expressions, `skim` provides `regex` mode:
 
 ```
 sk --regex
@@ -258,7 +259,7 @@ be stuck with the default colors, `skim` supports customization of the color sch
 --color=[BASE_SCHEME][,COLOR:ANSI]
 ```
 
-The configuration of colors starts with the name of the base color scheme and
+The configuration of colors starts with the name of the base color scheme,
 followed by custom color mappings. For example:
 
 
@@ -303,7 +304,7 @@ While the customisable `COLOR`s are
 - `--ansi`: to parse ANSI color codes(e.g `\e[32mABC`) of the data source
 - `--regex`: use the query as regular expression to match the data source
 
-# Advance Topics
+# Advanced Topics
 
 ## Interactive mode
 
@@ -323,6 +324,7 @@ If you want to further narrow down the result returned by the command, press
 `Ctrl-Q` to toggle interactive mode.
 
 ## Preview Window
+
 This is a great feature of fzf that skim borrows. For example, we use 'ag' to
 find the matched lines, once we narrow down to the target lines, we want to
 finally decide which lines to pick by checking the context around the line.
@@ -338,13 +340,13 @@ You got things like this:
 
 ![preview demo](https://user-images.githubusercontent.com/1527040/30677573-0cee622e-9ebf-11e7-8316-c741324ecb3a.png)
 
-### How it work?
+### How does it work?
 
-If preview command is given by `--preview` option, skim will replace the `{}`
-with the current highlighted line surrounded by single quote. Then call the
-command to get the output. And print the output on the preview window.
+If the preview command is given by the `--preview` option, skim will replace the
+`{}` with the current highlighted line surrounded by single quotes, call the
+command to get the output, and print the output on the preview window.
 
-Sometimes you don't need the whole line for invoking the command, in this case
+Sometimes you don't need the whole line for invoking the command. In this case
 you can use `{}`, `{1..}`, `{..3}` or `{1..5}` to select the fields. The
 syntax is explained in the section "Fields Support".
 
@@ -386,7 +388,7 @@ Also you can use `--with-nth` to re-arrange the order of fields.
 
 ## Use as a library
 
-Skim can now be used as a library in your rust crates. The basic idea is to
+Skim can now be used as a library in your Rust crates. The basic idea is to
 throw anything that is `BufRead`(we can easily turn a `File` for `String` into
 `BufRead`) and skim will do its job and bring us back the user selection
 including the selected items(with their indices), the query, etc.
@@ -427,7 +429,7 @@ Check more examples under [examples/](https://github.com/lotabout/skim/tree/mast
 
 ## How to ignore files?
 
-Skim invoke `find .` to fetch a list of files for filtering. You can override
+Skim invokes `find .` to fetch a list of files for filtering. You can override
 that by setting the environment variable `SKIM_DEFAULT_COMMAND`. For example:
 
 ```sh
@@ -437,12 +439,12 @@ $ sk
 
 You could put it in your `.bashrc` or `.zshrc` if you like it to be default.
 
-## Some files are not shown in vim plugin
+## Some files are not shown in Vim plugin
 
-If you use the vim plugin and execute the `:SK` command, you might find some
+If you use the Vim plugin and execute the `:SK` command, you might find some
 of your files not shown.
 
-As described in [#3](https://github.com/lotabout/skim/issues/3), in the vim
+As described in [#3](https://github.com/lotabout/skim/issues/3), in the Vim
 plugin, `SKIM_DEFAULT_COMMAND` is set to the command by default:
 
 ```
