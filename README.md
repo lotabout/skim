@@ -433,7 +433,7 @@ Skim invokes `find .` to fetch a list of files for filtering. You can override
 that by setting the environment variable `SKIM_DEFAULT_COMMAND`. For example:
 
 ```sh
-$ SKIM_DEFAULT_COMMAND="git ls-tree -r --name-only HEAD || rg --files || find ."
+$ SKIM_DEFAULT_COMMAND="fd --type f || git ls-tree -r --name-only HEAD || rg --files || find ."
 $ sk
 ```
 

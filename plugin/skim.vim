@@ -27,7 +27,7 @@ endif
 let g:loaded_skim = 1
 
 if empty($SKIM_DEFAULT_COMMAND)
-    let $SKIM_DEFAULT_COMMAND = "git ls-tree -r --name-only HEAD || rg --files || ag -l -g \"\" || find ."
+    let $SKIM_DEFAULT_COMMAND = "fd --type f || git ls-tree -r --name-only HEAD || rg --files || ag -l -g \"\" || find ."
 endif
 
 let s:is_win = has('win32') || has('win64')
