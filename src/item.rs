@@ -46,7 +46,7 @@ pub struct Item {
 
 impl<'a> Item {
     pub fn new(
-        orig_text: Cow<str>,
+        orig_text: String,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -83,7 +83,7 @@ impl<'a> Item {
 
         let mut ret = Item {
             index: index,
-            output_text: orig_text.into_owned(),
+            output_text: orig_text,
             text: text,
             chars: Vec::new(),
             ansi_states: states_text,
