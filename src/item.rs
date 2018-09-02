@@ -92,14 +92,19 @@ impl<'a> Item {
             ansi_enabled: ansi_enabled,
         };
 
-        let lower_chars: Vec<char> = ret.get_text().chars().collect();
+        let chars: Vec<char> = if ret.get_text().as_bytes().is_ascii() {
+            ret.get_text().as_bytes().iter().map(|&s| s as char).collect()
+        } else {
+            ret.get_text().chars().collect()
+        };
+
         let matching_ranges = if !matching_fields.is_empty() {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
-            vec![(0, lower_chars.len())]
+            vec![(0, chars.len())]
         };
 
-        ret.chars = lower_chars;
+        ret.chars = chars;
         ret.matching_ranges = matching_ranges;
         ret
     }
