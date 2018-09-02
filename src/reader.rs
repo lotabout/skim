@@ -180,20 +180,18 @@ impl Reader {
 }
 
 fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
-    let mut command = try!(
-        Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-    );
-    let stdout = try!(
-        command
-            .stdout
-            .take()
-            .ok_or_else(|| "command output: unwrap failed".to_owned())
-    );
+    let mut command = Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    let stdout = command
+        .stdout
+        .take()
+        .ok_or_else(|| "command output: unwrap failed".to_owned())?;
+
     Ok((Some(command), Box::new(BufReader::new(stdout))))
 }
 
@@ -219,22 +217,22 @@ fn reader(
         .map(|f| (None, f))
         .unwrap_or_else(|| get_command_output(cmd).expect("command not found"));
 
-    let stopped_clone = stopped.clone();
-    thread::spawn(move || {
-        // listen to `rx` for command to quit reader
-        // kill command if it is got
-        loop {
-            if stopped_clone.load(Ordering::Relaxed) {
-                // clean up resources
-                command.map(|mut x| {
-                    let _ = x.kill();
-                    let _ = x.wait();
-                });
-                break;
-            }
+    let command_stopped = Arc::new(AtomicBool::new(false));
 
+    let stopped_clone = stopped.clone();
+    let command_stopped_clone = command_stopped.clone();
+    thread::spawn(move || {
+        // kill command if it is got
+        while !command.is_none() && !stopped_clone.load(Ordering::Relaxed) {
             thread::sleep(Duration::from_millis(5));
         }
+
+        // clean up resources
+        command.map(|mut x| {
+            let _ = x.kill();
+            let _ = x.wait();
+        });
+        command_stopped_clone.store(true, Ordering::Relaxed);
     });
 
     let opt = option.read().expect("reader: failed to lock option");
@@ -314,4 +312,7 @@ fn reader(
     }
 
     stopped.store(true, Ordering::Relaxed);
+    while !command_stopped.load(Ordering::Relaxed) {
+        thread::sleep(Duration::from_millis(5));
+    }
 }
