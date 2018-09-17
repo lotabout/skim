@@ -16,6 +16,7 @@ use field::FieldRange;
 use options::SkimOptions;
 use regex::Regex;
 use sender::CachedSender;
+use std::env;
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -180,7 +181,8 @@ impl Reader {
 }
 
 fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
-    let mut command = Command::new("sh")
+    let shell = env::var("SHELL").unwrap_or("sh".to_string());
+    let mut command = Command::new(shell)
         .arg("-c")
         .arg(cmd)
         .stdout(Stdio::piped())

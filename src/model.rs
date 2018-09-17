@@ -17,6 +17,7 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthChar;
+use std::env;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -777,7 +778,8 @@ impl Model {
 }
 
 fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Error>> {
-    let output = Command::new("sh")
+    let shell = env::var("SHELL").unwrap_or("sh".to_string());
+    let output = Command::new(shell)
         .env("LINES", lines.to_string())
         .env("COLUMNS", cols.to_string())
         .arg("-c")
