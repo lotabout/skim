@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthChar;
 use std::env;
+use util::escape_single_quote;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -25,7 +26,7 @@ const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 
 lazy_static! {
-    static ref RE_FILEDS: Regex = Regex::new(r"(\{-?[0-9.,q]*?})").unwrap();
+    static ref RE_FILEDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
     static ref REFRESH_DURATION: Duration = Duration::from_millis(200);
 }
 
@@ -643,13 +644,21 @@ impl Model {
             .expect("model:inject_preview_command: invalid preview command");
         debug!("replace: {:?}, text: {:?}", cmd, text);
         RE_FILEDS.replace_all(cmd, |caps: &Captures| {
+            // \{...
+            if &caps[0][0..1] == "\\" {
+                return caps[0].to_string();
+            }
+
+            // {1..} and other variant
             assert!(caps[1].len() >= 2);
             let range = &caps[1][1..caps[1].len() - 1];
-            if range == "" {
-                format!("'{}'", text)
+            let replacement = if range == "" {
+                text
             } else {
-                format!("'{}'", get_string_by_range(&self.delimiter, text, range).unwrap_or(""))
-            }
+                get_string_by_range(&self.delimiter, text, range).unwrap_or("")
+            };
+
+            format!("'{}'", escape_single_quote(replacement))
         })
     }
 

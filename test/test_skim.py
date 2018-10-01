@@ -353,6 +353,7 @@ class TestSkim(TestBase):
 
     def test_read0(self):
         self.tmux.send_keys(f"find . | wc -l", Key('Enter'))
+        self.tmux.until(lambda lines: re.search('\d', lines[-1]) is not None)
         lines = self.tmux.capture()
         num_of_files = int(lines[-1])
 
@@ -749,6 +750,24 @@ class TestSkim(TestBase):
         self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--filter --filter')}", Key('Enter'))
         self.tmux.until(lambda lines: lines[-1].startswith('>'))
         self.tmux.send_keys(Key('Enter'))
+
+    def test_single_quote_of_preview_command(self):
+        # echo "'\"ABC\"'" | sk --preview="echo X{}X" => X'"ABC"'X
+        echo_command = '''echo "'\\"ABC\\"'" | '''
+        sk_command = self.sk('--preview=\"echo X{}X\"')
+        command = echo_command + sk_command
+        self.tmux.paste(command)
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines.any_include('''X'"ABC"'X'''))
+
+        # echo "'\"ABC\"'" | sk --preview="echo X\{}X" => X{}X
+        echo_command = '''echo "'\\"ABC\\"'" | '''
+        sk_command = self.sk('--preview=\"echo X\\{}X\"')
+        command = echo_command + sk_command
+        self.tmux.paste(command)
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines.any_include('''X{}X'''))
+
 
 if __name__ == '__main__':
     unittest.main()
