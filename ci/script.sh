@@ -2,13 +2,13 @@
 set -ex
 
 main() {
-    cross build --target $TARGET --release
-
     if [ ! -z $DISABLE_TESTS ]; then
         return
     fi
 
-    cargo test --verbose
+    cross build --release --target $TARGET
+    mkdir -p target/release
+    cp target/$TARGET/release/sk target/release
 
     case $TARGET in
         x86_64-unknown-linux-gnu|i686-unknown-linux-gnu)

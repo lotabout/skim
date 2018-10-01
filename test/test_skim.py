@@ -10,25 +10,28 @@ import os
 import time
 import re
 import inspect
+import sys
 
 INPUT_RECORD_SEPARATOR = '\n'
 DEFAULT_TIMEOUT = 2000
 
 SCRIPT_PATH = os.path.realpath(__file__)
-BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '../'))
+BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '..'))
 os.chdir(BASE)
 SK = f"SKIM_DEFAULT_OPTIONS= SKIM_DEFAULT_COMMAND= {BASE}/target/release/sk"
 
 def now_mills():
     return int(round(time.time() * 1000))
 
-def wait(func):
+def wait(func, timeout_handler=None):
     since = now_mills()
     while now_mills() - since < DEFAULT_TIMEOUT:
-        time.sleep(0.01)
+        time.sleep(0.02)
         ret = func()
         if ret is not None and ret:
             return
+    if timeout_handler is not None:
+        timeout_handler()
     raise BaseException('Timeout on wait')
 
 class Shell(object):
@@ -94,7 +97,9 @@ class TmuxOutput(list):
         return self.counts()[2]
 
     def any_include(self, val):
-        if isinstance(val, re._pattern_type):
+        if hasattr(re, '_pattern_type') and isinstance(val, re._pattern_type):
+            method = lambda l: val.match(l)
+        if hasattr(re, 'Pattern') and isinstance(val, re.Pattern):
             method = lambda l: val.match(l)
         else:
             method = lambda l: l.find(val) >= 0
@@ -175,7 +180,10 @@ class Tmux(object):
             if pred:
                 self.send_keys(Ctrl('l') if refresh else None)
             return pred
-        wait(wait_callback)
+        def timeout_handler():
+            lines = self.capture()
+            print(lines)
+        wait(wait_callback, timeout_handler)
 
     def prepare(self):
         try:
@@ -756,16 +764,14 @@ class TestSkim(TestBase):
         echo_command = '''echo "'\\"ABC\\"'" | '''
         sk_command = self.sk('--preview=\"echo X{}X\"')
         command = echo_command + sk_command
-        self.tmux.paste(command)
-        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(command, Key('Enter'))
         self.tmux.until(lambda lines: lines.any_include('''X'"ABC"'X'''))
 
         # echo "'\"ABC\"'" | sk --preview="echo X\{}X" => X{}X
         echo_command = '''echo "'\\"ABC\\"'" | '''
         sk_command = self.sk('--preview=\"echo X\\{}X\"')
         command = echo_command + sk_command
-        self.tmux.paste(command)
-        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(command, Key('Enter'))
         self.tmux.until(lambda lines: lines.any_include('''X{}X'''))
 
 
