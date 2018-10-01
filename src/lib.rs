@@ -24,6 +24,7 @@ mod query;
 mod reader;
 mod score;
 mod sender;
+mod util;
 
 use curses::Curses;
 use event::Event::*;
