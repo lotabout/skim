@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.5.2: 2018-10-22
+
+- fix: stop command immediately on accept or abort.
+- minor optimization over ASCII inputs.
+- #90: escape quotes in specified preview command
+
 ## 0.5.1: 2018-06-24
 
 Use [cross](https://github.com/japaric/cross) to build targets.
