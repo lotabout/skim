@@ -36,9 +36,9 @@ __skimcmd_complete() {
     echo "sk-tmux -d${SKIM_TMUX_HEIGHT:-40%}" || echo "sk"
 }
 
-_skim_orig_completion_filter() {
-  sed 's/^\(.*-F\) *\([^ ]*\).* \([^ ]*\)$/export _skim_orig_completion_\3="\1 %s \3 #\2";/' |
-  awk -F= '{gsub(/[^A-Za-z0-9_= ;]/, "_", $1); print $1"="$2}'
+__skim_orig_completion_filter() {
+  sed 's/^\(.*-F\) *\([^ ]*\).* \([^ ]*\)$/export _skim_orig_completion_\3="\1 %s \3 #\2"; [[ "\1" = *" -o nospace "* ]] \&\& [[ ! "$__skim_nospace_commands" = *" \3 "* ]] \&\& __skim_nospace_commands="$__skim_nospace_commands \3 ";/' |
+  awk -F= '{OFS = FS} {gsub(/[^A-Za-z0-9_= ;]/, "_", $1);}1'
 }
 
 _skim_opts_completion() {
@@ -111,7 +111,7 @@ _skim_opts_completion() {
 }
 
 _skim_handle_dynamic_completion() {
-  local cmd orig_var orig ret orig_cmd
+  local cmd orig_var orig ret orig_cmd orig_complete
   cmd="$1"
   shift
   orig_cmd="$1"
@@ -120,10 +120,18 @@ _skim_handle_dynamic_completion() {
   if [ -n "$orig" ] && type "$orig" > /dev/null 2>&1; then
     $orig "$@"
   elif [ -n "$_skim_completion_loader" ]; then
+    orig_complete=$(complete -p "$cmd" 2> /dev/null)
     _completion_loader "$@"
     ret=$?
-    eval "$(complete | command grep "\-F.* $orig_cmd$" | _skim_orig_completion_filter)"
-    source "${BASH_SOURCE[0]}"
+    # _completion_loader may not have updated completion for the command
+    if [ "$(complete -p "$cmd" 2> /dev/null)" != "$orig_complete" ]; then
+      eval "$(complete | command grep " -F.* $orig_cmd$" | __skim_orig_completion_filter)"
+      if [[ "$__skim_nospace_commands" = *" $orig_cmd "* ]]; then
+        eval "${orig_complete/ -F / -o nospace -F }"
+      else
+        eval "$orig_complete"
+      fi
+    fi
     return $ret
   fi
 }
@@ -139,7 +147,7 @@ __skim_generic_path_completion() {
     base=${cur:0:${#cur}-${#trigger}}
     eval "base=$base"
 
-    dir="$base"
+    [[ $base = *"/"* ]] && dir="$base"
     while true; do
       if [ -z "$dir" ] || [ -d "$dir" ]; then
         leftover=${base/#"$dir"}
@@ -150,6 +158,7 @@ __skim_generic_path_completion() {
           printf "%q$3 " "$item"
         done)
         matches=${matches% }
+        [[ -z "$3" ]] && [[ "$__skim_nospace_commands" = *" ${COMP_WORDS[0]} "* ]] && matches="$matches "
         if [ -n "$matches" ]; then
           COMPREPLY=( "$matches" )
         else
@@ -204,7 +213,7 @@ _skim_complete_kill() {
   [ -n "${COMP_WORDS[COMP_CWORD]}" ] && return 1
   local selected skim
   skim="$(__skimcmd_complete)"
-  selected=$(ps -ef | sed 1d | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-50%} --min-height 15 --reverse $SKIM_DEFAULT_OPTIONS --preview 'echo {}' --preview-window down:3:wrap $SKIM_COMPLETION_OPTS" $skim -m | awk '{print $2}' | tr '\n' ' ')
+  selected=$(command ps -ef | sed 1d | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-50%} --min-height 15 --reverse $SKIM_DEFAULT_OPTIONS --preview 'echo {}' --preview-window down:3:wrap $SKIM_COMPLETION_OPTS" $skim -m | awk '{print $2}' | tr '\n' ' ')
   printf '\e[5n'
   if [ -n "$selected" ]; then
     COMPREPLY=( "$selected" )
@@ -219,8 +228,8 @@ _skim_complete_telnet() {
 }
 _skim_complete_ssh() {
   _skim_complete '-m' "$@" < <(
-    cat <(cat ~/.ssh/config /etc/ssh/ssh_config 2> /dev/null | command grep -i '^host' | command grep -v '*') \
-        <(command grep -oE '^[a-z0-9.,:-]+' ~/.ssh/known_hosts | tr ',' '\n' | awk '{ print $1 " " $1 }') \
+    cat <(cat ~/.ssh/config /etc/ssh/ssh_config 2> /dev/null | command grep -i '^host ' | command grep -v '[*?]' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}') \
+        <(command grep -oE '^[[a-z0-9.,:-]+' ~/.ssh/known_hosts | tr ',' '\n' | tr -d '[' | awk '{ print $1 " " $1 }') \
         <(command grep -v '^\s*\(#\|$\)' /etc/hosts | command grep -Fv '0.0.0.0') |
         awk '{if (length($2) > 0) {print $2}}' | sort -u
   )
@@ -254,9 +263,9 @@ a_cmds="
   svn tar unzip zip"
 x_cmds="kill ssh telnet unset unalias export"
 # Preserve existing completion
-eval $(complete |
+eval "$(complete |
   sed -E '/-F/!d; / _skim/d; '"/ ($(echo $d_cmds $a_cmds $x_cmds | sed 's/ /|/g; s/+/\\+/g'))$/"'!d' |
-  _skim_orig_completion_filter)
+  __skim_orig_completion_filter)"
 if type _completion_loader > /dev/null 2>&1; then
   _skim_completion_loader=1
 fi

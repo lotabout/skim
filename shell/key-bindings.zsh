@@ -31,12 +31,21 @@ __skimcmd() {
 skim-file-widget() {
   LBUFFER="${LBUFFER}$(__fsel)"
   local ret=$?
-  zle redisplay
-  typeset -f zle-line-init >/dev/null && zle zle-line-init
+  zle reset-prompt
   return $ret
 }
 zle     -N   skim-file-widget
 bindkey '^T' skim-file-widget
+
+# Ensure precmds are run after cd
+skim-redraw-prompt() {
+  local precmd
+  for precmd in $precmd_functions; do
+    $precmd
+  done
+  zle reset-prompt
+}
+zle -N skim-redraw-prompt
 
 # ALT-C - cd into the selected directory
 skim-cd-widget() {
@@ -50,8 +59,7 @@ skim-cd-widget() {
   fi
   cd "$dir"
   local ret=$?
-  zle reset-prompt
-  typeset -f zle-line-init >/dev/null && zle zle-line-init
+  zle skim-redraw-prompt
   return $ret
 }
 zle     -N    skim-cd-widget
@@ -61,8 +69,8 @@ bindkey '\ec' skim-cd-widget
 skim-history-widget() {
   local selected num
   setopt localoptions noglobsubst noposixbuiltins pipefail 2> /dev/null
-  selected=( $(fc -l 1 |
-    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS -n2..,.. --tac --preview='echo {}' --preview-window down:4:wrap $SKIM_CTRL_R_OPTS --query=${(q)LBUFFER} -m" $(__skimcmd)) )
+  selected=( $(fc -rl 1 |
+    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS -n2..,.. --tiebreak=index --bind=ctrl-r:toggle-sort $SKIM_CTRL_R_OPTS --query=${(qqq)LBUFFER} -m" $(__skimcmd)) )
   local ret=$?
   if [ -n "$selected" ]; then
     num=$selected[1]
@@ -70,8 +78,7 @@ skim-history-widget() {
       zle vi-fetch-history -n $num
     fi
   fi
-  zle redisplay
-  typeset -f zle-line-init >/dev/null && zle zle-line-init
+  zle reset-prompt
   return $ret
 }
 zle     -N   skim-history-widget
