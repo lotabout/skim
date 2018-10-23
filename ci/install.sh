@@ -55,7 +55,6 @@ main() {
             stty cols 80
             ;;
         x86_64-apple-darwin|i686-apple-darwin)
-            brew upgrade python
             python -V
             python3 -V
             brew install tmux
