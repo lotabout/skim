@@ -263,6 +263,9 @@ impl<'a> SkimOptions<'a> {
     pub fn no_hscroll(self, no_hscroll: bool) -> Self {
         Self { no_hscroll, ..self }
     }
+    pub fn inline_info(self, inline_info: bool) -> Self {
+        Self { inline_info, ..self }
+    }
 }
 
 impl<'a> Default for SkimOptions<'a> {
