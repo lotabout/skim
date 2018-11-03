@@ -41,6 +41,8 @@ pub struct Model {
     height: u16,
     width: u16,
 
+    reserved_height: u16, // sum of lines needed for: query, status & headers
+
     pub tabstop: usize,
 
     reader_stopped: bool,
@@ -77,6 +79,7 @@ impl Model {
             hscroll_offset: 0,
             height: 0,
             width: 0,
+            reserved_height: 2,
 
             tabstop: 8,
 
@@ -346,7 +349,7 @@ impl Model {
     fn update_size(&mut self, curses: &mut Window) {
         // update the (height, width)
         let (h, w) = curses.get_maxyx();
-        self.height = h - 2;
+        self.height = h - self.reserved_height;
         self.width = w - 2;
     }
 
@@ -369,12 +372,12 @@ impl Model {
         // screen-line: (h-l-1)   <--->   item-line: l
 
         let lower = self.item_cursor;
-        let max_upper = self.item_cursor + h - 2;
+        let max_upper = self.item_cursor + h - (self.reserved_height as usize);
         let upper = min(max_upper, self.items.len());
 
         for i in lower..upper {
             let l = i - lower;
-            curses.mv((if self.reverse { l + 2 } else { h - 3 - l }) as u16, 0);
+            curses.mv(self.get_item_height(l, h), 0);
             // print the cursor label
             let label = if l == self.line_cursor { ">" } else { " " };
             curses.cprint(label, COLOR_CURSOR, true);
@@ -393,7 +396,7 @@ impl Model {
         // ones
         for i in upper..max_upper {
             let l = i - lower;
-            curses.mv((if self.reverse { l + 2 } else { h - 3 - l }) as u16, 0);
+            curses.mv(self.get_item_height(l, h) as u16, 0);
             curses.clrtoeol();
         }
 
@@ -401,11 +404,28 @@ impl Model {
         curses.mv(old_y, old_x);
     }
 
+    fn get_item_height(&self, l: usize, h: usize) -> u16 {
+        let res = if self.reverse {
+            l + (self.reserved_height as usize)
+        } else {
+            h - (self.reserved_height as usize) - 1 - l
+        };
+        res as u16
+    }
+
+    fn get_status_height(&self) -> u16 {
+        if self.reverse {
+            1
+        } else {
+            self.height
+        }
+    }
+
     fn draw_status(&self, curses: &mut Window) {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
-        curses.mv(if self.reverse { 1 } else { self.height }, 0);
+        curses.mv(self.get_status_height(), 0);
         curses.clrtoeol();
 
         // display spinner
@@ -447,7 +467,7 @@ impl Model {
         // item cursor
         let line_num_str = format!(" {} ", self.item_cursor + self.line_cursor);
         curses.mv(
-            if self.reverse { 1 } else { self.height },
+            self.get_status_height(),
             self.width - (line_num_str.len() as u16),
         );
         curses.cprint(&line_num_str, COLOR_INFO, true);
