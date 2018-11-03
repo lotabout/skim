@@ -63,6 +63,7 @@ pub struct Model {
     print_query: bool,
     print_cmd: bool,
     no_hscroll: bool,
+    inline_info: bool
 }
 
 impl Model {
@@ -79,7 +80,7 @@ impl Model {
             hscroll_offset: 0,
             height: 0,
             width: 0,
-            reserved_height: 2,
+            reserved_height: 2, // = status + query (lines)
 
             tabstop: 8,
 
@@ -98,6 +99,7 @@ impl Model {
             print_query: false,
             print_cmd: false,
             no_hscroll: false,
+            inline_info: false
         }
     }
 
@@ -142,6 +144,12 @@ impl Model {
             let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
             self.tabstop = max(1, tabstop);
         }
+
+        if options.inline_info {
+            self.reserved_height = 1;
+            self.inline_info = true;
+        }
+
     }
 
     pub fn run(&mut self, mut curses: Curses) {
@@ -417,7 +425,7 @@ impl Model {
         if self.reverse {
             1
         } else {
-            self.height
+            self.height + self.reserved_height - 2
         }
     }
 
@@ -425,8 +433,16 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
-        curses.mv(self.get_status_height(), 0);
-        curses.clrtoeol();
+        let status_y = if ! self.inline_info {
+            curses.mv(self.get_status_height(), 0);
+            curses.clrtoeol();
+            self.get_status_height()
+        } else {
+            curses.mv(y, x);
+            curses.clrtoeol();
+            curses.cprint("  <", COLOR_PROMPT, false);
+            y
+        };
 
         // display spinner
         if self.reader_stopped {
@@ -467,7 +483,7 @@ impl Model {
         // item cursor
         let line_num_str = format!(" {} ", self.item_cursor + self.line_cursor);
         curses.mv(
-            self.get_status_height(),
+            status_y,
             self.width - (line_num_str.len() as u16),
         );
         curses.cprint(&line_num_str, COLOR_INFO, true);
@@ -484,7 +500,9 @@ impl Model {
 
         // print query
         curses.mv((if self.reverse { 0 } else { h - 1 }) as u16, 0);
-        curses.clrtoeol();
+        if ! self.inline_info {
+            curses.clrtoeol();
+        }
         print_query_func(curses);
     }
 
