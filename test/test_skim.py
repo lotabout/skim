@@ -471,11 +471,19 @@ class TestSkim(TestBase):
 
     def test_inline_info(self):
         INLINE_INFO_SEP = " <"
+        RE = re.compile(r'  ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])?')
         self.tmux.send_keys(f"echo -e 'a1\\na2\\na3\\na4' | {self.sk('--inline-info')}", Key('Enter'))
         self.tmux.send_keys("a")
-        prompt = "> a " + INLINE_INFO_SEP + "  4/4"
-        self.tmux.until(lambda lines: any(l.startswith(prompt) for l in lines))
+        self.tmux.until(lambda lines: lines[-1].find(INLINE_INFO_SEP) != -1)
+        lines = self.tmux.capture()
         self.tmux.send_keys(Key('Enter'))
+        query_line = lines[-1]
+        bef, after = query_line.split(INLINE_INFO_SEP)
+        mat = RE.match(after)
+        self.assertTrue(mat is not None)
+        ret = tuple(map(lambda x: int(x) if x is not None else 0, mat.groups()))
+        self.assertEqual(len(ret), 3)
+        self.assertEqual((bef, ret[0], ret[1], ret[2]), ("> a ", 4, 4, 0))
 
     def test_reserved_options(self):
         # --extended
