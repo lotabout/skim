@@ -19,6 +19,7 @@ pub enum Event {
     EvModelDrawQuery,
     EvModelDrawInfo,
     EvModelNewItem,
+    EvModelNewPreview,
     EvModelNotifyProcessed,
     EvModelNotifyMatcherMode,
     EvModelRestart,

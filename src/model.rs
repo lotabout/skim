@@ -11,14 +11,12 @@ use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::convert::From;
 use std::default::Default;
-use std::error::Error;
-use std::process::Command;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthChar;
-use std::env;
 use util::escape_single_quote;
+use previewer::PreviewInput;
 
 pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
@@ -54,6 +52,8 @@ pub struct Model {
     timer: Instant,
 
     preview_hidden: bool,
+
+    otx_preview: Option<Sender<(Event, PreviewInput)>>,
 
     // Options
     multi_selection: bool,
@@ -91,6 +91,8 @@ impl Model {
             matcher_mode: "".to_string(),
 
             preview_hidden: true,
+
+            otx_preview: None,
 
             multi_selection: false,
             reverse: false,
@@ -187,6 +189,12 @@ impl Model {
                         self.draw_status(&mut curses.win_main);
                         curses.refresh();
                     }
+                    Event::EvModelNewPreview => {
+                        //debug!("model:EvModelNewPreview:handle_preview_output");
+                        let preview_output = *arg.downcast::<String>()
+                            .expect("model:EvModelNewPreview: failed to get argument");
+                        self.handle_preview_output(&mut curses.win_preview, preview_output);
+                    }
 
                     Event::EvModelNotifyProcessed => {
                         //debug!("model:EvModelNotifyProcessed:items_and_status");
@@ -255,6 +263,11 @@ impl Model {
                         break;
                     }
                     Event::EvActAbort => {
+                        if let Some(tx_preview) = &self.otx_preview{
+                            tx_preview.send((Event::EvActAbort,
+                                             PreviewInput{cmd: "".into(), lines: 0, columns:0}))
+                                .expect("Failed to send to tx_preview");
+                        }
                         let tx_ack: Sender<bool> = *arg.downcast().expect("model:EvActAbort: failed to get argument");
                         curses.close();
                         let _ = tx_ack.send(true);
@@ -337,7 +350,6 @@ impl Model {
                             .expect("model:EvActRedraw: failed to get argument");
                         self.act_redarw(&mut curses, print_query_func);
                     }
-
                     _ => {}
                 }
             }
@@ -608,6 +620,10 @@ impl Model {
         }
     }
 
+    pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>){
+        self.otx_preview = Some(tx_preview);
+    }
+
     fn draw_preview(&mut self, curses: &mut Window) {
         if self.preview_hidden {
             return;
@@ -640,10 +656,17 @@ impl Model {
         let cmd = self.inject_preview_command(&highlighted_content);
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
-        let output = match get_command_output(&cmd, lines, cols) {
-            Ok(output) => output,
-            Err(e) => format!("{}\n{}", cmd, e.description()),
-        };
+        if let Some(tx_preview) = &self.otx_preview {
+            tx_preview.send((Event::EvModelNewPreview , PreviewInput{
+                cmd: cmd.to_string().clone(),
+                lines: lines,
+                columns: cols
+            })).expect("failed to send to previewer");
+        }
+    }
+
+    fn handle_preview_output(&mut self, curses: &mut Window, output: String){
+
         debug!("model:draw_preview: output: '{:?}'", output);
 
         let mut ansi_parser: ANSIParser = Default::default();
@@ -822,22 +845,6 @@ impl Model {
         self.draw_status(&mut curses.win_main);
         curses.win_main.show_cursor();
         curses.refresh();
-    }
-}
-
-fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Error>> {
-    let shell = env::var("SHELL").unwrap_or("sh".to_string());
-    let output = Command::new(shell)
-        .env("LINES", lines.to_string())
-        .env("COLUMNS", cols.to_string())
-        .arg("-c")
-        .arg(cmd)
-        .output()?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        let error: Box<Error> = From::from(String::from_utf8_lossy(&output.stderr).to_string());
-        Err(error)
     }
 }
 
