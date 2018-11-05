@@ -150,7 +150,7 @@ impl KeyBoard {
         let ch = self.buf.pop_front();
 
         match ch {
-            Some('\u{00}') => Some(Key::Char(' ')),
+            Some('\u{00}') => Some(Key::CtrlSpace),
             Some('\u{01}') => Some(Key::CtrlA),
             Some('\u{02}') => Some(Key::CtrlB),
             Some('\u{03}') => Some(Key::CtrlC),
@@ -385,6 +385,7 @@ impl KeyBoard {
 #[cfg_attr(rustfmt, rustfmt_skip)]
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Key {
+    CtrlSpace,
     CtrlA, CtrlB, CtrlC, CtrlD, CtrlE, CtrlF, CtrlG, CtrlH, Tab,   CtrlJ, CtrlK, CtrlL, Enter,
     CtrlN, CtrlO, CtrlP, CtrlQ, CtrlR, CtrlS, CtrlT, CtrlU, CtrlV, CtrlW, CtrlX, CtrlY, CtrlZ,
     ESC,
@@ -417,6 +418,7 @@ pub enum Key {
 #[cfg_attr(rustfmt, rustfmt_skip)]
 pub fn parse_key(key: &str) -> Option<Key> {
     match key.to_lowercase().as_ref() {
+        "ctrl-space" | "ctrl-`" | "ctrl-@" => Some(Key::CtrlSpace),
         "ctrl-a" => Some(Key::CtrlA),
         "ctrl-b" => Some(Key::CtrlB),
         "ctrl-c" => Some(Key::CtrlC),
