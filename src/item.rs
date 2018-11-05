@@ -83,7 +83,7 @@ impl<'a> Item {
 
         let mut ret = Item {
             index: index,
-            orig_text: orig_text,
+            orig_text,
             text: text,
             chars: Vec::new(),
             ansi_states: states_text,
