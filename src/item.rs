@@ -27,7 +27,7 @@ pub struct Item {
     index: (usize, usize),
 
     // The text that will be ouptut when user press `enter`
-    output_text: String,
+    orig_text: String,
 
     // The text that will shown into the screen. Can be transformed.
     text: String,
@@ -83,7 +83,7 @@ impl<'a> Item {
 
         let mut ret = Item {
             index: index,
-            output_text: orig_text,
+            orig_text: orig_text,
             text: text,
             chars: Vec::new(),
             ansi_states: states_text,
@@ -111,21 +111,25 @@ impl<'a> Item {
 
     pub fn get_text(&self) -> &str {
         if !self.using_transform_fields && !self.ansi_enabled {
-            &self.output_text
+            &self.orig_text
         } else {
             &self.text
         }
     }
 
+    pub fn get_orig_text(&'a self) -> Cow<'a, str> {
+        Cow::Borrowed(&self.orig_text)
+    }
+
     pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
             let mut ansi_parser: ANSIParser = Default::default();
-            let (text, _) = ansi_parser.parse_ansi(&self.output_text);
+            let (text, _) = ansi_parser.parse_ansi(&self.orig_text);
             Cow::Owned(text)
         } else if !self.using_transform_fields && self.ansi_enabled {
             Cow::Borrowed(&self.text)
         } else {
-            Cow::Borrowed(&self.output_text)
+            Cow::Borrowed(&self.orig_text)
         }
     }
 
@@ -154,7 +158,7 @@ impl Clone for Item {
     fn clone(&self) -> Item {
         Item {
             index: self.index,
-            output_text: self.output_text.clone(),
+            orig_text: self.orig_text.clone(),
             text: self.text.clone(),
             chars: self.chars.clone(),
             ansi_states: self.ansi_states.clone(),

@@ -633,10 +633,10 @@ impl Model {
                 .get(current_idx)
                 .expect(format!("model:draw_items: failed to get item at {}", current_idx).as_str()),
         );
-        let highlighted_content = item.item.get_text();
+        let highlighted_content = item.item.get_orig_text();
 
         debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
-        let cmd = self.inject_preview_command(highlighted_content);
+        let cmd = self.inject_preview_command(&highlighted_content);
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
         let output = match get_command_output(&cmd, lines, cols) {
