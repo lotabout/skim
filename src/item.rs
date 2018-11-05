@@ -67,7 +67,7 @@ impl<'a> Item {
 
         let mut ansi_parser: ANSIParser = Default::default();
 
-        let (text, states_text) = if using_transform_fields && ansi_enabled {
+        let (text, ansi_states) = if using_transform_fields && ansi_enabled {
             // ansi and transform
             ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
@@ -82,14 +82,14 @@ impl<'a> Item {
         };
 
         let mut ret = Item {
-            index: index,
+            index,
             orig_text,
-            text: text,
+            text,
             chars: Vec::new(),
-            ansi_states: states_text,
+            ansi_states,
             using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
-            ansi_enabled: ansi_enabled,
+            ansi_enabled,
         };
 
         let chars: Vec<char> = if ret.get_text().as_bytes().is_ascii() {
