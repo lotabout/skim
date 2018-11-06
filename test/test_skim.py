@@ -172,23 +172,6 @@ class Tmux(object):
             content = fp.read()
             return TmuxOutput(content.rstrip().split(INPUT_RECORD_SEPARATOR))
 
-    def command_output(self, command):
-    # tun command and return its stdout as str
-        def save_capture():
-            try:
-                self.send_keys(command + " | tmux load-buffer -b captub -", Key("Enter"))
-                self._go("save-buffer", "-b", "captub", f"{Tmux.TEMPNAME}")
-                return True
-            except subprocess.CalledProcessError as ex:
-                return False
-
-        if os.path.exists(Tmux.TEMPNAME):
-            os.remove(Tmux.TEMPNAME)
-
-        wait(save_capture)
-        with open(Tmux.TEMPNAME) as fp:
-            return(fp.read())
-
     def until(self, predicate, refresh = False, pane = 0):
         def wait_callback():
             lines = self.capture()
@@ -376,8 +359,8 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: not lines[-1].startswith('>'))
 
     def test_read0(self):
-        nfiles = self.tmux.command_output("find . | wc -l")
-        num_of_files = int(nfiles)
+        nfiles = subprocess.check_output("find .", shell=True).decode("utf-8").strip().split("\n")
+        num_of_files = len(nfiles)
 
         self.tmux.send_keys(f"find . | {self.sk()}", Key('Enter'))
         self.tmux.until(lambda lines: num_of_files == lines.item_count())
