@@ -51,7 +51,7 @@ class Key(object):
         super(Key, self).__init__()
         self.key = key
     def __repr__(self):
-        return '"' + self.key + '"'
+        return self.key
 
 class Ctrl(Key):
     """Represent a control key"""
@@ -122,25 +122,24 @@ class Tmux(object):
         else:
             raise BaseException('unknown shell')
 
-        self.win = self._go(f"new-window -d -P -F '#I' '{shell_cmd}'")[0]
-        self._go(f"set-window-option -t {self.win} pane-base-index 0")
+        self.win = self._go("new-window", "-d", "-P", "-F", "#I", f"{shell_cmd}")[0]
+        self._go("set-window-option", "-t", f"{self.win}", "pane-base-index", "0")
         self.lines = int(subprocess.check_output('tput lines', shell=True).decode('utf8').strip())
 
-    def _go(self, *args):
+    def _go(self, *args, **kwargs):
         """Run tmux command and return result in list of strings (lines)
 
         :returns: List<String>
         """
-
-        ret = subprocess.check_output(f"tmux {' '.join(args)}", shell=True)
+        ret = subprocess.check_output(["tmux"] + list(args))
         return ret.decode('utf8').split(INPUT_RECORD_SEPARATOR)
 
     def kill(self):
-        self._go(f"kill-window -t {self.win} 2> /dev/null")
+        self._go("kill-window", "-t", f"{self.win}", stderr=subprocess.PIPE)
 
     def send_keys(self, *args, pane=None):
         if pane is not None:
-            self._go(f'select-window -t {self.win}')
+            self._go('select-window', '-t', f'{self.win}')
             target = '{self.win}.{pane}'
         else:
             target = self.win
@@ -148,19 +147,19 @@ class Tmux(object):
         for key in args:
             if key is None:
                 continue
-            elif isinstance(key, Key):
-                self._go(f'send-keys -t {target} {key}')
             else:
-                self._go(f'send-keys -t {target} "{key}"')
+                self._go('send-keys', '-t', f'{target}', f'{key}')
 
     def paste(self, content):
-        content = content.replace("'", "'\\''")
-        subprocess.run(f'''tmux setb '{content}'\; pasteb -t {self.win}\; send-keys -t {self.win} Enter''', shell=True)
+        subprocess.run(["tmux", "setb", f"{content}", ";",
+                        "pasteb", "-t", f"{self.win}", ";",
+                        "send-keys", "-t", f"{self.win}", "Enter"])
 
     def capture(self, pane = 0):
         def save_capture():
             try:
-                self._go(f'capture-pane -t {self.win}.{pane}\; save-buffer {Tmux.TEMPNAME} 2> /dev/null')
+                self._go('capture-pane', '-t', f'{self.win}.{pane}', stderr=subprocess.PIPE)
+                self._go("save-buffer", f"{Tmux.TEMPNAME}", stderr=subprocess.PIPE)
                 return True
             except subprocess.CalledProcessError as ex:
                 return False
@@ -172,6 +171,23 @@ class Tmux(object):
         with open(Tmux.TEMPNAME) as fp:
             content = fp.read()
             return TmuxOutput(content.rstrip().split(INPUT_RECORD_SEPARATOR))
+
+    def command_output(self, command):
+    # tun command and return its stdout as str
+        def save_capture():
+            try:
+                self.send_keys(command + " | tmux load-buffer -b captub -", Key("Enter"))
+                self._go("save-buffer", "-b", "captub", f"{Tmux.TEMPNAME}")
+                return True
+            except subprocess.CalledProcessError as ex:
+                return False
+
+        if os.path.exists(Tmux.TEMPNAME):
+            os.remove(Tmux.TEMPNAME)
+
+        wait(save_capture)
+        with open(Tmux.TEMPNAME) as fp:
+            return(fp.read())
 
     def until(self, predicate, refresh = False, pane = 0):
         def wait_callback():
@@ -360,10 +376,8 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: not lines[-1].startswith('>'))
 
     def test_read0(self):
-        self.tmux.send_keys(f"find . | wc -l", Key('Enter'))
-        self.tmux.until(lambda lines: re.search('\d', lines[-1]) is not None)
-        lines = self.tmux.capture()
-        num_of_files = int(lines[-1])
+        nfiles = self.tmux.command_output("find . | wc -l")
+        num_of_files = int(nfiles)
 
         self.tmux.send_keys(f"find . | {self.sk()}", Key('Enter'))
         self.tmux.until(lambda lines: num_of_files == lines.item_count())
