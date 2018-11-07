@@ -135,7 +135,7 @@ class Tmux(object):
         return ret.decode('utf8').split(INPUT_RECORD_SEPARATOR)
 
     def kill(self):
-        self._go("kill-window", "-t", f"{self.win}", stderr=subprocess.PIPE)
+        self._go("kill-window", "-t", f"{self.win}", stderr=subprocess.DEVNULL)
 
     def send_keys(self, *args, pane=None):
         if pane is not None:
@@ -158,8 +158,8 @@ class Tmux(object):
     def capture(self, pane = 0):
         def save_capture():
             try:
-                self._go('capture-pane', '-t', f'{self.win}.{pane}', stderr=subprocess.PIPE)
-                self._go("save-buffer", f"{Tmux.TEMPNAME}", stderr=subprocess.PIPE)
+                self._go('capture-pane', '-t', f'{self.win}.{pane}', stderr=subprocess.DEVNULL)
+                self._go("save-buffer", f"{Tmux.TEMPNAME}", stderr=subprocess.DEVNULL)
                 return True
             except subprocess.CalledProcessError as ex:
                 return False
