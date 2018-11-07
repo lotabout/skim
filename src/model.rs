@@ -1,4 +1,4 @@
-use ansi::ANSIParser;
+use ansi::{ANSIParser, AnsiString};
 use curses::*;
 use event::{Event, EventReceiver};
 use field::get_string_by_range;
@@ -54,6 +54,7 @@ pub struct Model {
     timer: Instant,
 
     preview_hidden: bool,
+    headers: Vec<AnsiString>,
 
     otx_preview: Option<Sender<(Event, PreviewInput)>>,
 
@@ -93,6 +94,7 @@ impl Model {
             matcher_mode: "".to_string(),
 
             preview_hidden: true,
+            headers: Vec::new(),
 
             otx_preview: None,
 
@@ -155,6 +157,10 @@ impl Model {
             self.inline_info = true;
         }
 
+        if let Some(header) = options.header {
+            self.reserved_height += 1;
+            self.headers.push(AnsiString::from_str(header));
+        }
     }
 
     pub fn run(&mut self, mut curses: Curses) {
@@ -437,12 +443,10 @@ impl Model {
     }
 
     fn get_status_position(&self, cursor_y: u16) -> (u16, u16) {
-
-        if ! self.inline_info {
-            (if self.reverse { 1 } else { self.height + self.reserved_height - 2 }
-             , 0)
-        } else {
-            ((cursor_y, self.query_end_x))
+        match (self.inline_info, self.reverse){
+            (false, true) => (1, 0),
+            (false, false) => (0, 0),
+            (true, _) => ((cursor_y, self.query_end_x))
         }
     }
 
@@ -503,6 +507,48 @@ impl Model {
         );
         curses.cprint(&line_num_str, COLOR_INFO, true);
 
+        // restore cursor
+        curses.mv(y, x);
+    }
+
+    fn get_header_height(&self, query_y: u16, maxy:u16) -> Option<u16> {
+        let (status_height, _) = self.get_status_position(query_y);
+        let res = if self.reverse {status_height + 1} else {status_height - 1};
+
+        if self.reserved_height +1 < maxy && maxy > 3 {
+            Some(res)
+         } else {
+            None
+        }
+    }
+
+    fn draw_headers(&self, curses: &mut Window) {
+        // cursor should be placed on query, so store cursor before printing
+        let (y, x) = curses.getyx();
+        let (maxy, _) = curses.get_maxyx();
+        let direction = if self.reverse {1} else {-1};
+
+        let mut printer = LinePrinter::builder()
+            .container_width(self.width as usize)
+            .shift(0)
+            .hscroll_offset(self.hscroll_offset)
+            .build();
+
+        if let (true, Some(yh)) = (self.headers.len() > 0, self.get_header_height( y, maxy)) {
+            for (i, header) in self.headers.iter().enumerate(){
+                let nyh = ((yh as i64)+(direction*(i as i64))) as u16;
+                curses.mv(nyh, 0);
+                curses.clrtoeol();
+                curses.mv(nyh, 2);
+                for (ch, attrs) in header.iter(){
+                    for (_, attr) in attrs {
+                            curses.attr_on(*attr);
+                    }
+                    printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+                }
+
+            }
+        }
         // restore cursor
         curses.mv(y, x);
     }
@@ -821,6 +867,7 @@ impl Model {
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
         self.draw_query(&mut curses.win_main, &print_query_func);
+        self.draw_headers(&mut curses.win_main);
         curses.refresh();
     }
 
