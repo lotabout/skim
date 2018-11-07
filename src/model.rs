@@ -26,7 +26,7 @@ const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 const DELIMITER_STR: &'static str = r"[\t\n ]+";
 
 lazy_static! {
-    static ref RE_FILEDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
     static ref REFRESH_DURATION: Duration = Duration::from_millis(200);
 }
 
@@ -350,7 +350,7 @@ impl Model {
                         //debug!("model:EvActRedraw:act_redraw");
                         let print_query_func = *arg.downcast::<QueryPrintClosure>()
                             .expect("model:EvActRedraw: failed to get argument");
-                        self.act_redarw(&mut curses, print_query_func);
+                        self.act_redraw(&mut curses, print_query_func);
                     }
                     _ => {}
                 }
@@ -552,7 +552,7 @@ impl Model {
         let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
 
         debug!(
-            "model:draw_item: shfit: {:?}, width:{:?}, full_width: {:?}",
+            "model:draw_item: shift: {:?}, width:{:?}, full_width: {:?}",
             shift, self.width, full_width
         );
         let mut printer = LinePrinter::builder()
@@ -709,7 +709,7 @@ impl Model {
             .as_ref()
             .expect("model:inject_preview_command: invalid preview command");
         debug!("replace: {:?}, text: {:?}", cmd, text);
-        RE_FILEDS.replace_all(cmd, |caps: &Captures| {
+        RE_FIELDS.replace_all(cmd, |caps: &Captures| {
             // \{...
             if &caps[0][0..1] == "\\" {
                 return caps[0].to_string();
@@ -832,7 +832,7 @@ impl Model {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: QueryPrintClosure) {
+    pub fn act_redraw(&mut self, curses: &mut Curses, print_query_func: QueryPrintClosure) {
         curses.resize();
         self.update_size(&mut curses.win_main);
         self.draw_preview(&mut curses.win_preview);
