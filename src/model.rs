@@ -865,8 +865,8 @@ impl Model {
         self.update_size(&mut curses.win_main);
         self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
-        self.draw_status(&mut curses.win_main);
         self.draw_query(&mut curses.win_main, &print_query_func);
+        self.draw_status(&mut curses.win_main);
         self.draw_headers(&mut curses.win_main);
         curses.refresh();
     }
