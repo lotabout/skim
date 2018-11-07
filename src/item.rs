@@ -122,7 +122,7 @@ impl<'a> Item {
         if self.using_transform_fields && self.ansi_enabled {
             let mut ansi_parser: ANSIParser = Default::default();
             let text = ansi_parser.parse_ansi(&self.orig_text);
-            Cow::Owned(text.inner())
+            Cow::Owned(text.into_inner())
         } else if !self.using_transform_fields && self.ansi_enabled {
             Cow::Borrowed(&self.text.stripped)
         } else {

@@ -682,23 +682,8 @@ impl Model {
             prevout
         );
 
-        let mut ansi_states = prevout.ansi_states.iter().peekable();
-
         curses.mv(0, 0);
-        for (ch_idx, ch) in prevout.stripped.chars().enumerate() {
-            // print ansi color codes.
-            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                if ch_idx == ansi_idx {
-                    curses.attr_on(attr);
-                    let _ = ansi_states.next();
-                } else if ch_idx > ansi_idx {
-                    let _ = ansi_states.next();
-                } else {
-                    break;
-                }
-            }
-            curses.addch(ch);
-        }
+        prevout.print(curses);
         curses.attr_on(0);
 
         curses.clrtoend();

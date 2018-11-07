@@ -1,6 +1,6 @@
 // Parse ANSI attr code
 
-use curses::{attr_t, register_ansi};
+use curses::{attr_t, register_ansi, Window};
 use regex::Regex;
 use std::default::Default;
 
@@ -38,8 +38,26 @@ impl AnsiString{
         }
     }
 
-    pub fn inner(self) -> String{
+    pub fn into_inner(self) -> String{
         self.stripped
+    }
+
+    pub fn print(&self, curses: &mut Window) {
+        let mut ansi_states = self.ansi_states.iter().peekable();
+        for (ch_idx, ch) in self.stripped.chars().enumerate() {
+            // print ansi color codes.
+            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
+                if ch_idx == ansi_idx {
+                    curses.attr_on(attr);
+                    let _ = ansi_states.next();
+                } else if ch_idx > ansi_idx {
+                    let _ = ansi_states.next();
+                } else {
+                    break;
+                }
+            }
+            curses.addch(ch);
+        }
     }
 }
 
