@@ -18,7 +18,8 @@ use unicode_width::UnicodeWidthChar;
 use util::escape_single_quote;
 use previewer::PreviewInput;
 
-pub type ClosureType = Box<Fn(&mut Window) + Send>;
+// write query & returns (y,x) after query
+pub type QueryPrintClosure = Box<Fn(&mut Window) -> (u16, u16) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -39,6 +40,7 @@ pub struct Model {
     hscroll_offset: usize,
     height: u16,
     width: u16,
+    query_end_x: u16,
 
     reserved_height: u16, // sum of lines needed for: query, status & headers
 
@@ -82,7 +84,7 @@ impl Model {
             height: 0,
             width: 0,
             reserved_height: 2, // = status + query (lines)
-
+            query_end_x: 0,
             tabstop: 8,
 
             reader_stopped: false,
@@ -179,7 +181,7 @@ impl Model {
 
                     Event::EvModelDrawQuery => {
                         //debug!("model:EvModelDrawQuery:query");
-                        let print_query_func = *arg.downcast::<ClosureType>()
+                        let print_query_func = *arg.downcast::<QueryPrintClosure>()
                             .expect("model:EvModelDrawQuery: failed to get argument");
                         self.draw_query(&mut curses.win_main, &print_query_func);
                         curses.refresh();
@@ -346,7 +348,7 @@ impl Model {
 
                     Event::EvActRedraw => {
                         //debug!("model:EvActRedraw:act_redraw");
-                        let print_query_func = *arg.downcast::<ClosureType>()
+                        let print_query_func = *arg.downcast::<QueryPrintClosure>()
                             .expect("model:EvActRedraw: failed to get argument");
                         self.act_redarw(&mut curses, print_query_func);
                     }
@@ -451,7 +453,10 @@ impl Model {
             curses.clrtoeol();
             self.get_status_height()
         } else {
-            curses.mv(y, x);
+            if self.query_end_x == 0 {
+                return;
+            }
+            curses.mv(y, self.query_end_x);
             curses.clrtoeol();
             curses.cprint("  <", COLOR_PROMPT, false);
             y
@@ -505,7 +510,7 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_query(&self, curses: &mut Window, print_query_func: &ClosureType) {
+    fn draw_query(&mut self, curses: &mut Window, print_query_func: &QueryPrintClosure) {
         let (h, w) = curses.get_maxyx();
         let (h, _) = (h as usize, w as usize);
 
@@ -516,7 +521,9 @@ impl Model {
         if ! self.inline_info {
             curses.clrtoeol();
         }
-        print_query_func(curses);
+        let (_, x) = print_query_func(curses);
+        self.query_end_x = x;
+
     }
 
     fn draw_item(&self, curses: &mut Window, matched_item: &MatchedItem, is_current: bool) {
@@ -828,7 +835,7 @@ impl Model {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: ClosureType) {
+    pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: QueryPrintClosure) {
         curses.resize();
         self.update_size(&mut curses.win_main);
         self.draw_preview(&mut curses.win_preview);
