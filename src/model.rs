@@ -1,4 +1,4 @@
-use ansi::{ANSIParser, AnsiString};
+use ansi::AnsiString;
 use curses::*;
 use event::{Event, EventReceiver};
 use field::get_string_by_range;
@@ -10,7 +10,6 @@ use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::convert::From;
-use std::default::Default;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -199,7 +198,7 @@ impl Model {
                     }
                     Event::EvModelNewPreview => {
                         //debug!("model:EvModelNewPreview:handle_preview_output");
-                        let preview_output = *arg.downcast::<String>()
+                        let preview_output = *arg.downcast::<AnsiString>()
                             .expect("model:EvModelNewPreview: failed to get argument");
                         self.handle_preview_output(&mut curses.win_preview, preview_output);
                     }
@@ -712,21 +711,12 @@ impl Model {
         }
     }
 
-    fn handle_preview_output(&mut self, curses: &mut Window, output: String){
+    fn handle_preview_output(&mut self, curses: &mut Window, aoutput: AnsiString){
 
-        debug!("model:draw_preview: output: '{:?}'", output);
-
-        let mut ansi_parser: ANSIParser = Default::default();
-        let prevout = ansi_parser.parse_ansi(&output);
-
-        debug!("model:draw_preview: output = {:?}", &output);
-        debug!(
-            "model:draw_preview: {:?}",
-            prevout
-        );
+        debug!("model:draw_preview: output = {:?}", &aoutput);
 
         curses.mv(0, 0);
-        prevout.print(curses);
+        aoutput.print(curses);
         curses.attr_on(0);
 
         curses.clrtoend();

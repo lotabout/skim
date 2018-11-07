@@ -1,4 +1,5 @@
 use event::{Event, EventSender};
+use ansi::AnsiString;
 use libc;
 
 use std::env;
@@ -107,8 +108,9 @@ fn wait_and_send(mut spawned: std::process::Child, tx_model: EventSender, stoppe
     pipe.read_to_end(&mut res).expect("Failed to read from std pipe");
     let stdout = String::from_utf8_lossy(&res).to_string();
     if stdout != "" {
+        let astdout = AnsiString::from_str(&stdout);
         tx_model
-            .send((Event::EvModelNewPreview, Box::new(stdout)))
+            .send((Event::EvModelNewPreview, Box::new(astdout)))
             .expect("Failed to send Preview msg");
     }
 }
