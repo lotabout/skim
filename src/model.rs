@@ -436,11 +436,13 @@ impl Model {
         res as u16
     }
 
-    fn get_status_height(&self) -> u16 {
-        if self.reverse {
-            1
+    fn get_status_position(&self, cursor_y: u16) -> (u16, u16) {
+
+        if ! self.inline_info {
+            (if self.reverse { 1 } else { self.height + self.reserved_height - 2 }
+             , 0)
         } else {
-            self.height + self.reserved_height - 2
+            ((cursor_y, self.query_end_x))
         }
     }
 
@@ -448,18 +450,13 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
-        let status_y = if ! self.inline_info {
-            curses.mv(self.get_status_height(), 0);
-            curses.clrtoeol();
-            self.get_status_height()
-        } else {
-            if self.query_end_x == 0 {
-                return;
-            }
-            curses.mv(y, self.query_end_x);
-            curses.clrtoeol();
+        let (status_y, status_x) = self.get_status_position(y);
+
+        curses.mv(status_y, status_x);
+        curses.clrtoeol();
+
+        if self.inline_info{
             curses.cprint("  <", COLOR_PROMPT, false);
-            y
         };
 
         // display spinner
