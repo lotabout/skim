@@ -43,23 +43,53 @@ impl AnsiString{
     }
 
     pub fn print(&self, curses: &mut Window) {
-        let mut ansi_states = self.ansi_states.iter().peekable();
-        for (ch_idx, ch) in self.stripped.chars().enumerate() {
-            // print ansi color codes.
-            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                if ch_idx == ansi_idx {
-                    curses.attr_on(attr);
-                    let _ = ansi_states.next();
-                } else if ch_idx > ansi_idx {
-                    let _ = ansi_states.next();
-                } else {
-                    break;
-                }
+
+        for (c, attrs) in self.iter(){
+            for a in attrs{
+                curses.attr_on(a)
             }
-            curses.addch(ch);
+            curses.addch(c);
+        };
+    }
+
+    pub fn iter<'a>(&'a self) -> AnsiStringIterator<'a> {
+        AnsiStringIterator {
+            it_text: Box::new(self.stripped.chars().enumerate()),
+            pk_ansi_states: self.ansi_states.iter().peekable()
         }
     }
 }
+
+use std::iter::Enumerate;
+use std::iter::Peekable;
+pub struct AnsiStringIterator<'a> {
+    it_text: Box<Enumerate<std::str::Chars<'a>>>,
+    pk_ansi_states: std::iter::Peekable<std::slice::Iter<'a, (usize, u16)>>
+}
+
+impl<'a> Iterator for AnsiStringIterator<'a>{
+    type Item = (char, Vec<attr_t>);
+    fn next(&mut self) -> Option<Self::Item>{
+        let mut res: Vec<attr_t> = Vec::new();
+        let (ch_idx, ch) = match self.it_text.next(){
+            Some((ch_idx, ch)) => (ch_idx, ch),
+            None => {return None;}
+        };
+
+        while let Some(&&(ansi_idx, attr)) = self.pk_ansi_states.peek() {
+            if ch_idx == ansi_idx {
+                res.push(attr);
+                let _ = self.pk_ansi_states.next();
+            } else if ch_idx > ansi_idx {
+                let _ = self.pk_ansi_states.next();
+            } else {
+                break;
+            }
+        }
+        return Some((ch, res));
+    }
+}
+
 
 impl ANSIParser {
     pub fn parse_ansi(&mut self, text: &str) -> AnsiString {

@@ -570,25 +570,17 @@ impl Model {
             curses.attr_on(COLOR_CURRENT);
         }
 
-        let mut ansi_states = item.get_ansi_states().iter().peekable();
-        for (ch_idx, &ch) in text.iter().enumerate() {
-            // print ansi color codes.
-            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                if ch_idx == ansi_idx {
-                    if is_current && ansi_contains_reset(attr) {
-                        curses.attr_on(COLOR_CURRENT);
-                    } else {
-                        curses.attr_on(attr);
-                    }
-                    let _ = ansi_states.next();
-                } else if ch_idx > ansi_idx {
-                    let _ = ansi_states.next();
+        for (ch, attrs) in item.get_text_struct().iter(){
+            for attr in attrs{
+                if is_current && ansi_contains_reset(attr) {
+                    curses.attr_on(COLOR_CURRENT);
                 } else {
-                    break;
+                    curses.attr_on(attr);
                 }
             }
             printer.print_char(curses, ch, COLOR_NORMAL, false, false);
         }
+
         curses.attr_on(0);
         curses.clrtoeol();
 

@@ -118,6 +118,10 @@ impl<'a> Item {
         Cow::Borrowed(&self.orig_text)
     }
 
+    pub fn get_text_struct(&self) -> &AnsiString {
+        &self.text
+    }
+
     pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
             let mut ansi_parser: ANSIParser = Default::default();
