@@ -64,6 +64,10 @@ impl AnsiString {
     pub fn has_attrs(&self) -> bool {
         self.ansi_states.len() != 0
     }
+
+    pub fn from_str(raw: &str) -> AnsiString {
+        ANSIParser::default().parse_ansi(raw)
+    }
 }
 
 pub struct AnsiStringIterator<'a> {
