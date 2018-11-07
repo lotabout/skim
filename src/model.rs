@@ -156,9 +156,13 @@ impl Model {
             self.inline_info = true;
         }
 
-        if let Some(header) = options.header {
+        match options.header{
+            None => {},
+            Some("") => {},
+            Some(header) => {
             self.reserved_height += 1;
             self.headers.push(AnsiString::from_str(header));
+            }
         }
     }
 
@@ -444,7 +448,7 @@ impl Model {
     fn get_status_position(&self, cursor_y: u16) -> (u16, u16) {
         match (self.inline_info, self.reverse){
             (false, true) => (1, 0),
-            (false, false) => (0, 0),
+            (false, false) => ({ self.height + self.reserved_height - 2 }, 0),
             (true, _) => ((cursor_y, self.query_end_x))
         }
     }
