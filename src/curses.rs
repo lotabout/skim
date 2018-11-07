@@ -31,6 +31,7 @@ pub static COLOR_HEADER: u16 = 9;
 pub static COLOR_BORDER: u16 = 10;
 static COLOR_USER: u16 = 11;
 
+#[allow(non_camel_case_types)]
 pub type attr_t = u16;
 
 lazy_static! {
