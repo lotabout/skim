@@ -570,17 +570,22 @@ impl Model {
             curses.attr_on(COLOR_CURRENT);
         }
 
-        for (ch, attrs) in item.get_text_struct().iter(){
-            for (_, attr) in attrs {
-                if is_current && ansi_contains_reset(*attr) {
-                    curses.attr_on(COLOR_CURRENT);
-                } else {
-                    curses.attr_on(*attr);
+        if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
+            for (ch, attrs) in item.get_text_struct().as_ref().unwrap().iter(){
+                for (_, attr) in attrs {
+                    if is_current && ansi_contains_reset(*attr) {
+                        curses.attr_on(COLOR_CURRENT);
+                    } else {
+                        curses.attr_on(*attr);
+                    }
                 }
+                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
             }
-            printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+        } else {
+            for ch in item.get_orig_text().chars(){
+                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+            }
         }
-
         curses.attr_on(0);
         curses.clrtoeol();
 

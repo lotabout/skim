@@ -118,8 +118,12 @@ impl<'a> Item {
         Cow::Borrowed(&self.orig_text)
     }
 
-    pub fn get_text_struct(&self) -> &AnsiString {
-        &self.text
+    pub fn get_text_struct(&self) -> Option<&AnsiString> {
+        if !self.using_transform_fields && !self.ansi_enabled {
+            None
+        } else {
+            Some(&self.text)
+        }
     }
 
     pub fn get_output_text(&'a self) -> Cow<'a, str> {

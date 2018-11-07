@@ -32,6 +32,7 @@ pub struct AnsiString {
 }
 
 impl AnsiString {
+
     pub fn new_empty() -> AnsiString {
         AnsiString {
             stripped: "".to_string(),
@@ -58,6 +59,10 @@ impl AnsiString {
             it_text: Box::new(self.stripped.chars().enumerate()),
             pk_ansi_states: self.ansi_states.iter().enumerate().peekable(),
         }
+    }
+
+    pub fn has_attrs(&self) -> bool {
+        self.ansi_states.len() != 0
     }
 }
 
