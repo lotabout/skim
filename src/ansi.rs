@@ -224,3 +224,18 @@ impl ANSIParser {
         //Some(attr)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ansi_iterator() {
+        let input = "\x1B[48;2;5;10;15m\x1B[38;2;70;130;180mhi\x1B[0m";
+        let ansistring = ANSIParser::default().parse_ansi(input);
+        let mut it = ansistring.iter();
+        let arr: Vec<(usize, u16)> = vec![(0, 11), (0, 12)];
+        assert_eq!(Some(('h', &arr[..2])), it.next());
+        assert_eq!(Some(('i', &arr[..0])), it.next());
+    }
+}
