@@ -489,6 +489,13 @@ class TestSkim(TestBase):
         self.assertEqual(len(ret), 3)
         self.assertEqual((bef, ret[0], ret[1], ret[2]), ("> a ", 4, 4, 0))
 
+        # test that inline info is does not overwrite query
+        self.tmux.send_keys(f"echo -e 'a1\\nabcd2\\nabcd3\\nabcd4' | {self.sk('--inline-info')}", Key('Enter'))
+        self.tmux.send_keys("bc", Ctrl("a"), "a")
+        self.tmux.until(lambda lines: lines[-1].find(INLINE_INFO_SEP) != -1 and
+                        lines[-1].split(INLINE_INFO_SEP)[0] == "> abc ")
+        self.tmux.send_keys(Key('Enter'))
+
     def test_reserved_options(self):
         # --extended
         self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('--extended')}", Key('Enter'))
