@@ -844,6 +844,7 @@ impl Model {
 
     fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
         curses.win_main.hide_cursor();
+        self.update_size(&mut curses.win_main);
         self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
