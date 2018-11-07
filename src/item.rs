@@ -1,7 +1,7 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
-use ansi::ANSIParser;
+use ansi::{ANSIParser, AnsiString};
 use curses::attr_t;
 use field::*;
 use regex::Regex;
@@ -30,13 +30,11 @@ pub struct Item {
     orig_text: String,
 
     // The text that will shown into the screen. Can be transformed.
-    text: String,
+    text: AnsiString,
 
     // cache of the lower case version of text. To improve speed
     chars: Vec<char>,
 
-    // the ansi state (color) of the text
-    ansi_states: Vec<(usize, attr_t)>,
     matching_ranges: Vec<(usize, usize)>,
 
     // For the transformed ANSI case, the output will need another transform.
@@ -67,18 +65,18 @@ impl<'a> Item {
 
         let mut ansi_parser: ANSIParser = Default::default();
 
-        let (text, ansi_states) = if using_transform_fields && ansi_enabled {
+        let text = if using_transform_fields && ansi_enabled {
             // ansi and transform
             ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
-            (parse_transform_fields(delimiter, &orig_text, trans_fields), Vec::new())
+            AnsiString{stripped: parse_transform_fields(delimiter, &orig_text, trans_fields), ansi_states: Vec::new()}
         } else if ansi_enabled {
             // not transformed, ansi
             ansi_parser.parse_ansi(&orig_text)
         } else {
             // normal case
-            ("".to_string(), Vec::new())
+            AnsiString::new_empty()
         };
 
         let mut ret = Item {
@@ -86,7 +84,6 @@ impl<'a> Item {
             orig_text,
             text,
             chars: Vec::new(),
-            ansi_states,
             using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
             ansi_enabled,
@@ -113,7 +110,7 @@ impl<'a> Item {
         if !self.using_transform_fields && !self.ansi_enabled {
             &self.orig_text
         } else {
-            &self.text
+            &self.text.stripped
         }
     }
 
@@ -124,10 +121,10 @@ impl<'a> Item {
     pub fn get_output_text(&'a self) -> Cow<'a, str> {
         if self.using_transform_fields && self.ansi_enabled {
             let mut ansi_parser: ANSIParser = Default::default();
-            let (text, _) = ansi_parser.parse_ansi(&self.orig_text);
-            Cow::Owned(text)
+            let text = ansi_parser.parse_ansi(&self.orig_text);
+            Cow::Owned(text.inner())
         } else if !self.using_transform_fields && self.ansi_enabled {
-            Cow::Borrowed(&self.text)
+            Cow::Borrowed(&self.text.stripped)
         } else {
             Cow::Borrowed(&self.orig_text)
         }
@@ -138,7 +135,7 @@ impl<'a> Item {
     }
 
     pub fn get_ansi_states(&self) -> &Vec<(usize, attr_t)> {
-        &self.ansi_states
+        &self.text.ansi_states
     }
 
     pub fn get_index(&self) -> usize {
@@ -161,7 +158,6 @@ impl Clone for Item {
             orig_text: self.orig_text.clone(),
             text: self.text.clone(),
             chars: self.chars.clone(),
-            ansi_states: self.ansi_states.clone(),
             using_transform_fields: self.using_transform_fields,
             matching_ranges: self.matching_ranges.clone(),
             ansi_enabled: self.ansi_enabled,

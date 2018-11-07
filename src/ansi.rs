@@ -23,8 +23,28 @@ impl Default for ANSIParser {
     }
 }
 
+#[derive(Clone, Debug)]
+// named like to not clash with ANSIString from ansi_term crate
+pub struct AnsiString {
+    pub stripped: String,
+    pub ansi_states: Vec<(usize, attr_t)>
+}
+
+impl AnsiString{
+    pub fn new_empty() -> AnsiString {
+        AnsiString {
+            stripped: "".to_string(),
+            ansi_states: Vec::new()
+        }
+    }
+
+    pub fn inner(self) -> String{
+        self.stripped
+    }
+}
+
 impl ANSIParser {
-    pub fn parse_ansi(&mut self, text: &str) -> (String, Vec<(usize, attr_t)>) {
+    pub fn parse_ansi(&mut self, text: &str) -> AnsiString {
         let mut strip_string = String::new();
         let mut colors = Vec::new();
 
@@ -58,7 +78,10 @@ impl ANSIParser {
 
         strip_string.push_str(&text[last..text.len()]);
 
-        (strip_string, colors)
+        AnsiString{
+            stripped: strip_string,
+            ansi_states: colors
+        }
     }
 
     fn interpret_code(&self, code: &str) -> Option<attr_t> {

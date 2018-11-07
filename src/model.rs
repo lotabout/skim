@@ -674,18 +674,18 @@ impl Model {
         debug!("model:draw_preview: output: '{:?}'", output);
 
         let mut ansi_parser: ANSIParser = Default::default();
-        let (strip_string, ansi_states) = ansi_parser.parse_ansi(&output);
+        let prevout = ansi_parser.parse_ansi(&output);
 
         debug!("model:draw_preview: output = {:?}", &output);
         debug!(
-            "model:draw_preview: strip_string: {:?}\nansi_states: {:?}",
-            strip_string, ansi_states
+            "model:draw_preview: {:?}",
+            prevout
         );
 
-        let mut ansi_states = ansi_states.iter().peekable();
+        let mut ansi_states = prevout.ansi_states.iter().peekable();
 
         curses.mv(0, 0);
-        for (ch_idx, ch) in strip_string.chars().enumerate() {
+        for (ch_idx, ch) in prevout.stripped.chars().enumerate() {
             // print ansi color codes.
             while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
                 if ch_idx == ansi_idx {
