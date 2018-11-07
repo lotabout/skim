@@ -571,11 +571,11 @@ impl Model {
         }
 
         for (ch, attrs) in item.get_text_struct().iter(){
-            for attr in attrs{
-                if is_current && ansi_contains_reset(attr) {
+            for (_, attr) in attrs {
+                if is_current && ansi_contains_reset(*attr) {
                     curses.attr_on(COLOR_CURRENT);
                 } else {
-                    curses.attr_on(attr);
+                    curses.attr_on(*attr);
                 }
             }
             printer.print_char(curses, ch, COLOR_NORMAL, false, false);

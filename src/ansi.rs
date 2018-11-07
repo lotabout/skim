@@ -1,8 +1,9 @@
 // Parse ANSI attr code
-
 use curses::{attr_t, register_ansi, Window};
 use regex::Regex;
 use std::default::Default;
+use std::iter::Enumerate;
+use std::iter::Peekable;
 
 pub struct ANSIParser {
     re: &'static Regex,
@@ -27,69 +28,77 @@ impl Default for ANSIParser {
 // named like to not clash with ANSIString from ansi_term crate
 pub struct AnsiString {
     pub stripped: String,
-    pub ansi_states: Vec<(usize, attr_t)>
+    pub ansi_states: Vec<(usize, attr_t)>,
 }
 
-impl AnsiString{
+impl AnsiString {
     pub fn new_empty() -> AnsiString {
         AnsiString {
             stripped: "".to_string(),
-            ansi_states: Vec::new()
+            ansi_states: Vec::new(),
         }
     }
 
-    pub fn into_inner(self) -> String{
+    pub fn into_inner(self) -> String {
         self.stripped
     }
 
     pub fn print(&self, curses: &mut Window) {
-
-        for (c, attrs) in self.iter(){
-            for a in attrs{
-                curses.attr_on(a)
+        for (c, attrs) in self.iter() {
+            for (_, a) in attrs {
+                curses.attr_on(*a)
             }
             curses.addch(c);
-        };
+        }
     }
 
     pub fn iter<'a>(&'a self) -> AnsiStringIterator<'a> {
         AnsiStringIterator {
+            ansi_states: &self.ansi_states,
             it_text: Box::new(self.stripped.chars().enumerate()),
-            pk_ansi_states: self.ansi_states.iter().peekable()
+            pk_ansi_states: self.ansi_states.iter().enumerate().peekable(),
         }
     }
 }
 
-use std::iter::Enumerate;
-use std::iter::Peekable;
 pub struct AnsiStringIterator<'a> {
+    ansi_states: &'a Vec<(usize, attr_t)>,
     it_text: Box<Enumerate<std::str::Chars<'a>>>,
-    pk_ansi_states: std::iter::Peekable<std::slice::Iter<'a, (usize, u16)>>
+    pk_ansi_states: Peekable<Enumerate<std::slice::Iter<'a, (usize, attr_t)>>>,
 }
 
-impl<'a> Iterator for AnsiStringIterator<'a>{
-    type Item = (char, Vec<attr_t>);
-    fn next(&mut self) -> Option<Self::Item>{
-        let mut res: Vec<attr_t> = Vec::new();
-        let (ch_idx, ch) = match self.it_text.next(){
+impl<'a> Iterator for AnsiStringIterator<'a> {
+    type Item = (char, &'a [(usize, attr_t)]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut as_range: Option<(usize, usize)> = None;
+        let (ch_idx, ch) = match self.it_text.next() {
             Some((ch_idx, ch)) => (ch_idx, ch),
-            None => {return None;}
+            None => {
+                return None;
+            }
         };
 
-        while let Some(&&(ansi_idx, attr)) = self.pk_ansi_states.peek() {
+        while let Some(&(states_idx, &(ansi_idx, _))) = self.pk_ansi_states.peek() {
             if ch_idx == ansi_idx {
-                res.push(attr);
                 let _ = self.pk_ansi_states.next();
+                as_range = match as_range {
+                    Some((start, end)) => Some((start, end + 1)),
+                    None => Some((states_idx, states_idx)),
+                }
             } else if ch_idx > ansi_idx {
                 let _ = self.pk_ansi_states.next();
             } else {
                 break;
             }
         }
-        return Some((ch, res));
+        if let Some((start, end)) = as_range {
+            return Some((ch, &self.ansi_states[start..end + 1]));
+        } else {
+            return Some((ch, &[]));
+        }
     }
 }
-
 
 impl ANSIParser {
     pub fn parse_ansi(&mut self, text: &str) -> AnsiString {
@@ -126,9 +135,9 @@ impl ANSIParser {
 
         strip_string.push_str(&text[last..text.len()]);
 
-        AnsiString{
+        AnsiString {
             stripped: strip_string,
-            ansi_states: colors
+            ansi_states: colors,
         }
     }
 
