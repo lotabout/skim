@@ -25,7 +25,7 @@ impl Default for ANSIParser {
 }
 
 #[derive(Clone, Debug)]
-// named like to not clash with ANSIString from ansi_term crate
+// named like this not clash with ANSIString from ansi_term crate
 pub struct AnsiString {
     pub stripped: String,
     pub ansi_states: Vec<(usize, attr_t)>,

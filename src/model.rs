@@ -160,8 +160,8 @@ impl Model {
             None => {},
             Some("") => {},
             Some(header) => {
-            self.reserved_height += 1;
-            self.headers.push(AnsiString::from_str(header));
+                self.reserved_height += 1;
+                self.headers.push(AnsiString::from_str(header));
             }
         }
     }
