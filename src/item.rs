@@ -142,10 +142,6 @@ impl<'a> Item {
         &self.chars
     }
 
-    pub fn get_ansi_states(&self) -> &Vec<(usize, attr_t)> {
-        &self.text.ansi_states
-    }
-
     pub fn get_index(&self) -> usize {
         self.index.1
     }
