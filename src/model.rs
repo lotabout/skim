@@ -24,6 +24,7 @@ pub type ClosureType = Box<Fn(&mut Window) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+const DELIMITER_STR: &'static str = r"[\t\n ]+";
 
 lazy_static! {
     static ref RE_FILEDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
@@ -94,7 +95,7 @@ impl Model {
             multi_selection: false,
             reverse: false,
             preview_cmd: None,
-            delimiter: Regex::new(r"[ \t\n]+").unwrap(),
+            delimiter: Regex::new(DELIMITER_STR).unwrap(),
             output_ending: "\n",
             print_query: false,
             print_cmd: false,
@@ -121,7 +122,7 @@ impl Model {
         }
 
         if let Some(delimiter) = options.delimiter {
-            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(r"[ \t\n]+").unwrap());
+            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
         if options.print0 {

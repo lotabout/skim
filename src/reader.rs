@@ -18,6 +18,8 @@ use regex::Regex;
 use sender::CachedSender;
 use std::env;
 
+const DELIMITER_STR: &'static str = r"[\t\n ]+";
+
 struct ReaderOption {
     pub use_ansi_color: bool,
     pub default_arg: String,
@@ -35,7 +37,7 @@ impl ReaderOption {
             default_arg: String::new(),
             transform_fields: Vec::new(),
             matching_fields: Vec::new(),
-            delimiter: Regex::new(r".*?\t").unwrap(),
+            delimiter: Regex::new(DELIMITER_STR).unwrap(),
             replace_str: "{}".to_string(),
             line_ending: b'\n',
         }
@@ -48,7 +50,7 @@ impl ReaderOption {
 
         if let Some(delimiter) = options.delimiter {
             self.delimiter =
-                Regex::new(&(".*?".to_string() + delimiter)).unwrap_or_else(|_| Regex::new(r".*?[\t ]").unwrap());
+                Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
         if let Some(transform_fields) = options.with_nth {

@@ -130,12 +130,13 @@ pub fn get_string_by_range<'a>(delimiter: &Regex, text: &'a str, range: &str) ->
 
 // -> a vector of the matching fields.
 pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> Vec<(usize, usize)> {
-    let mut ranges = delimiter
-        .find_iter(text)
-        .map(|m| (m.start(), m.end()))
-        .collect::<Vec<(usize, usize)>>();
-    let &(_, end) = ranges.last().unwrap_or(&(0, 0));
-    ranges.push((end, text.len()));
+    let mut ranges = Vec::new();
+    let mut last = 0;
+    for mat in delimiter.find_iter(text) {
+        ranges.push((last, mat.start()));
+        last = mat.end();
+    }
+    ranges.push((last , text.len()));
 
     let mut ret = Vec::new();
     for field in fields {
@@ -150,17 +151,14 @@ pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange
     ret
 }
 
-
-
-
-
 pub fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> String {
-    let mut ranges = delimiter
-        .find_iter(text)
-        .map(|m| (m.start(), m.end()))
-        .collect::<Vec<(usize, usize)>>();
-    let &(_, end) = ranges.last().unwrap_or(&(0, 0));
-    ranges.push((end, text.len()));
+    let mut ranges = Vec::new();
+    let mut last = 0;
+    for mat in delimiter.find_iter(text) {
+        ranges.push((last, mat.start()));
+        last = mat.end();
+    }
+    ranges.push((last , text.len()));
 
     let mut ret = String::new();
     for field in fields {
@@ -251,7 +249,7 @@ mod test {
     #[test]
     fn test_parse_transform_fields() {
         // delimiter is ","
-        let re = Regex::new(".*?,").unwrap();
+        let re = Regex::new(",").unwrap();
 
         assert_eq!(
             super::parse_transform_fields(&re, &"A,B,C,D,E,F", &vec![Single(2), Single(4), Single(-1), Single(-7)]),
@@ -285,7 +283,7 @@ mod test {
     #[test]
     fn test_parse_matching_fields() {
         // delimiter is ","
-        let re = Regex::new(".*?,").unwrap();
+        let re = Regex::new(",").unwrap();
 
         assert_eq!(
             super::parse_matching_fields(
