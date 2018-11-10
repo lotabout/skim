@@ -55,7 +55,7 @@ pub struct Model {
     preview_hidden: bool,
     headers: Vec<AnsiString>,
 
-    otx_preview: Option<Sender<(Event, PreviewInput)>>,
+    tx_preview: Option<Sender<(Event, PreviewInput)>>,
 
     // Options
     multi_selection: bool,
@@ -95,7 +95,7 @@ impl Model {
             preview_hidden: true,
             headers: Vec::new(),
 
-            otx_preview: None,
+            tx_preview: None,
 
             multi_selection: false,
             reverse: false,
@@ -274,7 +274,7 @@ impl Model {
                         break;
                     }
                     Event::EvActAbort => {
-                        if let Some(tx_preview) = &self.otx_preview{
+                        if let Some(tx_preview) = &self.tx_preview{
                             tx_preview.send((Event::EvActAbort,
                                              PreviewInput{cmd: "".into(), lines: 0, columns:0}))
                                 .expect("Failed to send to tx_preview");
@@ -674,7 +674,7 @@ impl Model {
     }
 
     pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>){
-        self.otx_preview = Some(tx_preview);
+        self.tx_preview = Some(tx_preview);
     }
 
     fn draw_preview(&mut self, curses: &mut Window) {
@@ -709,7 +709,7 @@ impl Model {
         let cmd = self.inject_preview_command(&highlighted_content);
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
-        if let Some(tx_preview) = &self.otx_preview {
+        if let Some(tx_preview) = &self.tx_preview {
             tx_preview.send((Event::EvModelNewPreview , PreviewInput{
                 cmd: cmd.to_string().clone(),
                 lines: lines,
