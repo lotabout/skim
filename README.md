@@ -140,7 +140,7 @@ directory:
 # work with ag
 sk --ansi -i -c 'ag --color "{}"'
 # or with rg
-sk --ansi -c 'rg --color=always --line-number "{}"'
+sk --ansi -i -c 'rg --color=always --line-number "{}"'
 ```
 
 ![interactive mode demo](https://cloud.githubusercontent.com/assets/1527040/21603930/655d859a-d1db-11e6-9fec-c25099d30a12.gif)
