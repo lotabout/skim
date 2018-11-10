@@ -55,6 +55,7 @@ Usage: sk [options]
     --ansi               parse ANSI color codes for input strings
     --tabstop=SPACES     Number of spaces for a tab character (default: 8)
     --inline-info        Display info next to query
+    --header=STR         Display STR next to info
 
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
@@ -87,7 +88,6 @@ Usage: sk [options]
     --filepath-word
     --jump-labels=CHARS
     --border
-    --header=STR
     --header-lines=N
     --no-bold
     --history=FILE

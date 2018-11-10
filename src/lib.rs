@@ -25,6 +25,7 @@ mod reader;
 mod score;
 mod sender;
 mod util;
+mod previewer;
 
 use curses::Curses;
 use event::Event::*;
@@ -133,11 +134,22 @@ impl Skim {
         });
 
         //------------------------------------------------------------------------------
-        // model
+        // model + previewer
         let (tx_model, rx_model) = channel();
         let mut model = model::Model::new(rx_model);
 
         model.parse_options(&options);
+
+        if options.preview.is_some(){
+            let (tx_preview, rx_preview) = channel();
+            model.set_previewer(tx_preview);
+            // previewer
+            let tx_model_clone = tx_model.clone();
+            std::thread::spawn(move ||{
+                previewer::run(rx_preview, tx_model_clone);
+            });
+        }
+
         thread::spawn(move || {
             model.run(curses);
         });

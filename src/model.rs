@@ -1,4 +1,4 @@
-use ansi::ANSIParser;
+use ansi::AnsiString;
 use curses::*;
 use event::{Event, EventReceiver};
 use field::get_string_by_range;
@@ -10,24 +10,22 @@ use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::convert::From;
-use std::default::Default;
-use std::error::Error;
-use std::process::Command;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthChar;
-use std::env;
 use util::escape_single_quote;
+use previewer::PreviewInput;
 
-pub type ClosureType = Box<Fn(&mut Window) + Send>;
+// write query & returns (y,x) after query
+pub type QueryPrintClosure = Box<Fn(&mut Window) -> (u16, u16) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 const DELIMITER_STR: &'static str = r"[\t\n ]+";
 
 lazy_static! {
-    static ref RE_FILEDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
     static ref REFRESH_DURATION: Duration = Duration::from_millis(200);
 }
 
@@ -41,6 +39,7 @@ pub struct Model {
     hscroll_offset: usize,
     height: u16,
     width: u16,
+    query_end_x: u16,
 
     reserved_height: u16, // sum of lines needed for: query, status & headers
 
@@ -54,6 +53,9 @@ pub struct Model {
     timer: Instant,
 
     preview_hidden: bool,
+    headers: Vec<AnsiString>,
+
+    tx_preview: Option<Sender<(Event, PreviewInput)>>,
 
     // Options
     multi_selection: bool,
@@ -82,7 +84,7 @@ impl Model {
             height: 0,
             width: 0,
             reserved_height: 2, // = status + query (lines)
-
+            query_end_x: 0,
             tabstop: 8,
 
             reader_stopped: false,
@@ -91,6 +93,9 @@ impl Model {
             matcher_mode: "".to_string(),
 
             preview_hidden: true,
+            headers: Vec::new(),
+
+            tx_preview: None,
 
             multi_selection: false,
             reverse: false,
@@ -151,6 +156,14 @@ impl Model {
             self.inline_info = true;
         }
 
+        match options.header{
+            None => {},
+            Some("") => {},
+            Some(header) => {
+                self.reserved_height += 1;
+                self.headers.push(AnsiString::from_str(header));
+            }
+        }
     }
 
     pub fn run(&mut self, mut curses: Curses) {
@@ -177,7 +190,7 @@ impl Model {
 
                     Event::EvModelDrawQuery => {
                         //debug!("model:EvModelDrawQuery:query");
-                        let print_query_func = *arg.downcast::<ClosureType>()
+                        let print_query_func = *arg.downcast::<QueryPrintClosure>()
                             .expect("model:EvModelDrawQuery: failed to get argument");
                         self.draw_query(&mut curses.win_main, &print_query_func);
                         curses.refresh();
@@ -186,6 +199,12 @@ impl Model {
                         //debug!("model:EvModelDrawInfo:status");
                         self.draw_status(&mut curses.win_main);
                         curses.refresh();
+                    }
+                    Event::EvModelNewPreview => {
+                        //debug!("model:EvModelNewPreview:handle_preview_output");
+                        let preview_output = *arg.downcast::<AnsiString>()
+                            .expect("model:EvModelNewPreview: failed to get argument");
+                        self.handle_preview_output(&mut curses.win_preview, preview_output);
                     }
 
                     Event::EvModelNotifyProcessed => {
@@ -255,6 +274,11 @@ impl Model {
                         break;
                     }
                     Event::EvActAbort => {
+                        if let Some(tx_preview) = &self.tx_preview{
+                            tx_preview.send((Event::EvActAbort,
+                                             PreviewInput{cmd: "".into(), lines: 0, columns:0}))
+                                .expect("Failed to send to tx_preview");
+                        }
                         let tx_ack: Sender<bool> = *arg.downcast().expect("model:EvActAbort: failed to get argument");
                         curses.close();
                         let _ = tx_ack.send(true);
@@ -333,11 +357,10 @@ impl Model {
 
                     Event::EvActRedraw => {
                         //debug!("model:EvActRedraw:act_redraw");
-                        let print_query_func = *arg.downcast::<ClosureType>()
+                        let print_query_func = *arg.downcast::<QueryPrintClosure>()
                             .expect("model:EvActRedraw: failed to get argument");
-                        self.act_redarw(&mut curses, print_query_func);
+                        self.act_redraw(&mut curses, print_query_func);
                     }
-
                     _ => {}
                 }
             }
@@ -422,11 +445,11 @@ impl Model {
         res as u16
     }
 
-    fn get_status_height(&self) -> u16 {
-        if self.reverse {
-            1
-        } else {
-            self.height + self.reserved_height - 2
+    fn get_status_position(&self, cursor_y: u16) -> (u16, u16) {
+        match (self.inline_info, self.reverse){
+            (false, true) => (1, 0),
+            (false, false) => ({ self.height + self.reserved_height - 2 }, 0),
+            (true, _) => ((cursor_y, self.query_end_x))
         }
     }
 
@@ -434,15 +457,13 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
 
-        let status_y = if ! self.inline_info {
-            curses.mv(self.get_status_height(), 0);
-            curses.clrtoeol();
-            self.get_status_height()
-        } else {
-            curses.mv(y, x);
-            curses.clrtoeol();
+        let (status_y, status_x) = self.get_status_position(y);
+
+        curses.mv(status_y, status_x);
+        curses.clrtoeol();
+
+        if self.inline_info{
             curses.cprint("  <", COLOR_PROMPT, false);
-            y
         };
 
         // display spinner
@@ -493,7 +514,52 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_query(&self, curses: &mut Window, print_query_func: &ClosureType) {
+    fn get_header_height(&self, query_y: u16, maxy:u16) -> Option<u16> {
+        let (status_height, _) = self.get_status_position(query_y);
+        let res = if self.reverse {status_height + 1} else {status_height - 1};
+
+        if self.reserved_height +1 < maxy && maxy > 3 {
+            Some(res)
+         } else {
+            None
+        }
+    }
+
+    fn draw_headers(&self, curses: &mut Window) {
+        // cursor should be placed on query, so store cursor before printing
+        let (y, x) = curses.getyx();
+        let (maxy, _) = curses.get_maxyx();
+        let (has_headers, yh) = (self.headers.len() > 0, self.get_header_height( y, maxy));
+        if ! has_headers || yh.is_none() {
+            return;
+        }
+        let yh = yh.unwrap();
+        let direction = if self.reverse {1} else {-1};
+
+        let mut printer = LinePrinter::builder()
+            .container_width(self.width as usize)
+            .shift(0)
+            .hscroll_offset(self.hscroll_offset)
+            .build();
+
+        for (i, header) in self.headers.iter().enumerate() {
+            let nyh = ((yh as i64)+(direction*(i as i64))) as u16;
+            curses.mv(nyh, 0);
+            curses.clrtoeol();
+            curses.mv(nyh, 2);
+            for (ch, attrs) in header.iter(){
+                for (_, attr) in attrs {
+                    curses.attr_on(*attr);
+                }
+                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+            }
+
+        }
+        // restore cursor
+        curses.mv(y, x);
+    }
+
+    fn draw_query(&mut self, curses: &mut Window, print_query_func: &QueryPrintClosure) {
         let (h, w) = curses.get_maxyx();
         let (h, _) = (h as usize, w as usize);
 
@@ -504,7 +570,9 @@ impl Model {
         if ! self.inline_info {
             curses.clrtoeol();
         }
-        print_query_func(curses);
+        let (_, x) = print_query_func(curses);
+        self.query_end_x = x;
+
     }
 
     fn draw_item(&self, curses: &mut Window, matched_item: &MatchedItem, is_current: bool) {
@@ -536,7 +604,7 @@ impl Model {
         let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
 
         debug!(
-            "model:draw_item: shfit: {:?}, width:{:?}, full_width: {:?}",
+            "model:draw_item: shift: {:?}, width:{:?}, full_width: {:?}",
             shift, self.width, full_width
         );
         let mut printer = LinePrinter::builder()
@@ -554,24 +622,21 @@ impl Model {
             curses.attr_on(COLOR_CURRENT);
         }
 
-        let mut ansi_states = item.get_ansi_states().iter().peekable();
-        for (ch_idx, &ch) in text.iter().enumerate() {
-            // print ansi color codes.
-            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                if ch_idx == ansi_idx {
-                    if is_current && ansi_contains_reset(attr) {
+        if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
+            for (ch, attrs) in item.get_text_struct().as_ref().unwrap().iter(){
+                for (_, attr) in attrs {
+                    if is_current && ansi_contains_reset(*attr) {
                         curses.attr_on(COLOR_CURRENT);
                     } else {
-                        curses.attr_on(attr);
+                        curses.attr_on(*attr);
                     }
-                    let _ = ansi_states.next();
-                } else if ch_idx > ansi_idx {
-                    let _ = ansi_states.next();
-                } else {
-                    break;
                 }
+                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
             }
-            printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+        } else {
+            for ch in item.get_orig_text().chars(){
+                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+            }
         }
         curses.attr_on(0);
         curses.clrtoeol();
@@ -608,6 +673,10 @@ impl Model {
         }
     }
 
+    pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>){
+        self.tx_preview = Some(tx_preview);
+    }
+
     fn draw_preview(&mut self, curses: &mut Window) {
         if self.preview_hidden {
             return;
@@ -640,38 +709,21 @@ impl Model {
         let cmd = self.inject_preview_command(&highlighted_content);
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
-        let output = match get_command_output(&cmd, lines, cols) {
-            Ok(output) => output,
-            Err(e) => format!("{}\n{}", cmd, e.description()),
-        };
-        debug!("model:draw_preview: output: '{:?}'", output);
+        if let Some(tx_preview) = &self.tx_preview {
+            tx_preview.send((Event::EvModelNewPreview , PreviewInput{
+                cmd: cmd.to_string().clone(),
+                lines: lines,
+                columns: cols
+            })).expect("failed to send to previewer");
+        }
+    }
 
-        let mut ansi_parser: ANSIParser = Default::default();
-        let (strip_string, ansi_states) = ansi_parser.parse_ansi(&output);
+    fn handle_preview_output(&mut self, curses: &mut Window, aoutput: AnsiString){
 
-        debug!("model:draw_preview: output = {:?}", &output);
-        debug!(
-            "model:draw_preview: strip_string: {:?}\nansi_states: {:?}",
-            strip_string, ansi_states
-        );
-
-        let mut ansi_states = ansi_states.iter().peekable();
+        debug!("model:draw_preview: output = {:?}", &aoutput);
 
         curses.mv(0, 0);
-        for (ch_idx, ch) in strip_string.chars().enumerate() {
-            // print ansi color codes.
-            while let Some(&&(ansi_idx, attr)) = ansi_states.peek() {
-                if ch_idx == ansi_idx {
-                    curses.attr_on(attr);
-                    let _ = ansi_states.next();
-                } else if ch_idx > ansi_idx {
-                    let _ = ansi_states.next();
-                } else {
-                    break;
-                }
-            }
-            curses.addch(ch);
-        }
+        aoutput.print(curses);
         curses.attr_on(0);
 
         curses.clrtoend();
@@ -682,7 +734,7 @@ impl Model {
             .as_ref()
             .expect("model:inject_preview_command: invalid preview command");
         debug!("replace: {:?}, text: {:?}", cmd, text);
-        RE_FILEDS.replace_all(cmd, |caps: &Captures| {
+        RE_FIELDS.replace_all(cmd, |caps: &Captures| {
             // \{...
             if &caps[0][0..1] == "\\" {
                 return caps[0].to_string();
@@ -805,39 +857,25 @@ impl Model {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn act_redarw(&mut self, curses: &mut Curses, print_query_func: ClosureType) {
+    pub fn act_redraw(&mut self, curses: &mut Curses, print_query_func: QueryPrintClosure) {
         curses.resize();
         self.update_size(&mut curses.win_main);
         self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
-        self.draw_status(&mut curses.win_main);
         self.draw_query(&mut curses.win_main, &print_query_func);
+        self.draw_status(&mut curses.win_main);
+        self.draw_headers(&mut curses.win_main);
         curses.refresh();
     }
 
     fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
         curses.win_main.hide_cursor();
+        self.update_size(&mut curses.win_main);
         self.draw_preview(&mut curses.win_preview);
         self.draw_items(&mut curses.win_main);
         self.draw_status(&mut curses.win_main);
         curses.win_main.show_cursor();
         curses.refresh();
-    }
-}
-
-fn get_command_output(cmd: &str, lines: u16, cols: u16) -> Result<String, Box<Error>> {
-    let shell = env::var("SHELL").unwrap_or("sh".to_string());
-    let output = Command::new(shell)
-        .env("LINES", lines.to_string())
-        .env("COLUMNS", cols.to_string())
-        .arg("-c")
-        .arg(cmd)
-        .output()?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        let error: Box<Error> = From::from(String::from_utf8_lossy(&output.stderr).to_string());
-        Err(error)
     }
 }
 

@@ -1,5 +1,5 @@
 use curses::*;
-use model::ClosureType;
+use model::QueryPrintClosure;
 use options::SkimOptions;
 use std::mem;
 
@@ -131,7 +131,7 @@ impl Query {
         }
     }
 
-    pub fn get_print_func(&self) -> ClosureType {
+    pub fn get_print_func(&self) -> QueryPrintClosure {
         let before = self.get_before();
         let after = self.get_after();
         let mode = self.mode;
@@ -149,9 +149,11 @@ impl Query {
             }
 
             curses.printw(&before);
-            let (y, x) = curses.getyx();
+            let (cursor_y, cursor_x) = curses.getyx();
             curses.printw(&after);
-            curses.mv(y, x);
+            let (qend_y, qend_x) = curses.getyx();
+            curses.mv(cursor_y, cursor_x);
+            return (qend_y, qend_x);
         })
     }
 

@@ -34,7 +34,8 @@ pub struct SkimOptions<'a> {
     pub print_query: bool,
     pub print_cmd: bool,
     pub no_hscroll: bool,
-    pub inline_info: bool
+    pub inline_info: bool,
+    pub header: Option<&'a str>,
 }
 
 impl<'a> SkimOptions<'a> {
@@ -85,6 +86,7 @@ impl<'a> SkimOptions<'a> {
         let exact = options.is_present("exact");
         let regex = options.is_present("regex");
         let inline_info = options.is_present("inline-info");
+        let header = options.values_of("header").and_then(|vals| vals.last());
 
         SkimOptions {
             color,
@@ -118,7 +120,8 @@ impl<'a> SkimOptions<'a> {
             tac,
             exact,
             regex,
-            inline_info
+            inline_info,
+            header,
         }
     }
 
@@ -266,6 +269,11 @@ impl<'a> SkimOptions<'a> {
     pub fn inline_info(self, inline_info: bool) -> Self {
         Self { inline_info, ..self }
     }
+    pub fn header(self, header: &'a str) -> Self {
+        Self { header: Some(header),
+               ..self
+        }
+    }
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -302,7 +310,8 @@ impl<'a> Default for SkimOptions<'a> {
             print_query: false,
             print_cmd: false,
             no_hscroll: false,
-            inline_info: false
+            inline_info: false,
+            header: None
         }
     }
 }
