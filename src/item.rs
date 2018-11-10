@@ -2,7 +2,6 @@
 // the internal states, such as selected or not
 
 use ansi::{ANSIParser, AnsiString};
-use curses::attr_t;
 use field::*;
 use regex::Regex;
 use std::borrow::Cow;
