@@ -529,6 +529,11 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
         let (maxy, _) = curses.get_maxyx();
+        let (has_headers, yh) = (self.headers.len() > 0, self.get_header_height( y, maxy));
+        if ! has_headers || yh.is_none() {
+            return;
+        }
+        let yh = yh.unwrap();
         let direction = if self.reverse {1} else {-1};
 
         let mut printer = LinePrinter::builder()
@@ -537,20 +542,18 @@ impl Model {
             .hscroll_offset(self.hscroll_offset)
             .build();
 
-        if let (true, Some(yh)) = (self.headers.len() > 0, self.get_header_height( y, maxy)) {
-            for (i, header) in self.headers.iter().enumerate(){
-                let nyh = ((yh as i64)+(direction*(i as i64))) as u16;
-                curses.mv(nyh, 0);
-                curses.clrtoeol();
-                curses.mv(nyh, 2);
-                for (ch, attrs) in header.iter(){
-                    for (_, attr) in attrs {
-                            curses.attr_on(*attr);
-                    }
-                    printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+        for (i, header) in self.headers.iter().enumerate() {
+            let nyh = ((yh as i64)+(direction*(i as i64))) as u16;
+            curses.mv(nyh, 0);
+            curses.clrtoeol();
+            curses.mv(nyh, 2);
+            for (ch, attrs) in header.iter(){
+                for (_, attr) in attrs {
+                    curses.attr_on(*attr);
                 }
-
+                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
             }
+
         }
         // restore cursor
         curses.mv(y, x);
