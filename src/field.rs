@@ -103,10 +103,9 @@ impl FieldRange {
     }
 }
 
-
-// e.g. delimiter = Regex::new(",").unwrap()
-// Note that this is differnt with `to_index_pair`, it uses delimiters like ".*?,"
-pub fn get_string_by_field<'a>(delimiter: &Regex, text: &'a str, field: &FieldRange) -> Option<&'a str> {
+// ("|", "a|b||c") -> [(0, 2), (2, 4), (4, 5), (5, 6)]
+// explain: split to ["a|", "b|", "|", "c"]
+fn get_ranges_by_delimiter(delimiter: &Regex, text: &str) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut last = 0;
     for mat in delimiter.find_iter(text) {
@@ -114,6 +113,14 @@ pub fn get_string_by_field<'a>(delimiter: &Regex, text: &'a str, field: &FieldRa
         last = mat.end();
     }
     ranges.push((last, text.len()));
+    ranges
+}
+
+
+// e.g. delimiter = Regex::new(",").unwrap()
+// Note that this is differnt with `to_index_pair`, it uses delimiters like ".*?,"
+pub fn get_string_by_field<'a>(delimiter: &Regex, text: &'a str, field: &FieldRange) -> Option<&'a str> {
+    let ranges = get_ranges_by_delimiter(delimiter, text);
 
     if let Some((start, stop)) = field.to_index_pair(ranges.len()) {
         let &(begin, _) = &ranges[start];
@@ -130,13 +137,7 @@ pub fn get_string_by_range<'a>(delimiter: &Regex, text: &'a str, range: &str) ->
 
 // -> a vector of the matching fields.
 pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> Vec<(usize, usize)> {
-    let mut ranges = Vec::new();
-    let mut last = 0;
-    for mat in delimiter.find_iter(text) {
-        ranges.push((last, mat.start()));
-        last = mat.end();
-    }
-    ranges.push((last , text.len()));
+    let ranges = get_ranges_by_delimiter(delimiter, text);
 
     let mut ret = Vec::new();
     for field in fields {
@@ -152,13 +153,7 @@ pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange
 }
 
 pub fn parse_transform_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> String {
-    let mut ranges = Vec::new();
-    let mut last = 0;
-    for mat in delimiter.find_iter(text) {
-        ranges.push((last, mat.start()));
-        last = mat.end();
-    }
-    ranges.push((last , text.len()));
+    let ranges = get_ranges_by_delimiter(delimiter, text);
 
     let mut ret = String::new();
     for field in fields {
