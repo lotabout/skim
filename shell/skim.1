@@ -1,0 +1,767 @@
+.TH skim 1 "2018/11/19" "0.5.2" "https://github.com/lotabout/skim"
+.hy
+.RS
+.PP
+Life is short, skim!
+.RE
+.PP
+Half of our life is spent on navigation: files, lines, commands\&... You
+need skim! It is a general fuzzy finder that saves you time.
+.PP
+It is blazingly fast as it reads the data source asynchronously.
+.PP
+skim provides a single executable: \f[C]sk\f[R], basically anywhere you
+would want to use \f[C]grep\f[R] try \f[C]sk\f[R] instead.
+.SH Usage
+.PP
+skim can be used as a general filter(like \f[C]grep\f[R]) or as an
+interactive interface for invoking commands.
+.SS As filter
+.PP
+Try the following
+.IP
+.nf
+\f[C]
+# directly invoke skim
+sk
+
+# or pipe some input to it: (press TAB key select multiple items with \-m enabled)
+vim $(find . \-name \[dq]*.rs\[dq] | sk \-m)
+\f[R]
+.fi
+.PP
+The above command will allow you to select files with \[lq].rs\[rq]
+extension and open the ones you selected in Vim.
+.SS As Interactive Interface
+.PP
+\f[C]skim\f[R] can invoke other commands dynamically.
+Normally you would want to integrate it with
+rg (https://github.com/BurntSushi/ripgrep)
+ag (https://github.com/ggreer/the_silver_searcher) or
+ack (https://github.com/petdance/ack2) for searching contents in a
+project directory:
+.IP
+.nf
+\f[C]
+# work with ag
+sk \-\-ansi \-i \-c \[aq]ag \-\-color \[dq]{}\[dq]\[aq]
+# or with rg
+sk \-\-ansi \-i \-c \[aq]rg \-\-color=always \-\-line\-number \[dq]{}\[dq]\[aq]
+\f[R]
+.fi
+.PP
+[IMAGE: interactive mode
+demo (https://cloud.githubusercontent.com/assets/1527040/21603930/655d859a-d1db-11e6-9fec-c25099d30a12.gif)]
+.SS Key Bindings
+.PP
+Some commonly used keybindings:
+.PP
+.TS
+tab(@);
+r l.
+T{
+Key
+T}@T{
+Action
+T}
+_
+T{
+Enter
+T}@T{
+Accept (select current one and quit)
+T}
+T{
+ESC/Ctrl\-G
+T}@T{
+Abort
+T}
+T{
+Ctrl\-P/Up
+T}@T{
+Move cursor up
+T}
+T{
+Ctrl\-N/Down
+T}@T{
+Move cursor Down
+T}
+T{
+TAB
+T}@T{
+Toggle selection and move down (with \f[C]\-m\f[R])
+T}
+T{
+Shift\-TAB
+T}@T{
+Toggle selection and move up (with \f[C]\-m\f[R])
+T}
+.TE
+.SS Search Syntax
+.PP
+\f[C]skim\f[R] borrowed \f[C]fzf\f[R]\[cq]s syntax for matching items:
+.PP
+.TS
+tab(@);
+l l l.
+T{
+Token
+T}@T{
+Match type
+T}@T{
+Description
+T}
+_
+T{
+\f[C]text\f[R]
+T}@T{
+fuzzy\-match
+T}@T{
+items that match \f[C]text\f[R]
+T}
+T{
+\f[C]\[ha]music\f[R]
+T}@T{
+prefix\-exact\-match
+T}@T{
+items that start with \f[C]music\f[R]
+T}
+T{
+\f[C].mp3$\f[R]
+T}@T{
+suffix\-exact\-match
+T}@T{
+items that end with \f[C].mp3\f[R]
+T}
+T{
+\f[C]\[aq]wild\f[R]
+T}@T{
+exact\-match (quoted)
+T}@T{
+items that include \f[C]wild\f[R]
+T}
+T{
+\f[C]!fire\f[R]
+T}@T{
+inverse\-exact\-match
+T}@T{
+items that do not include \f[C]fire\f[R]
+T}
+T{
+\f[C]!.mp3$\f[R]
+T}@T{
+inverse\-suffix\-exact\-match
+T}@T{
+items that do not end with \f[C].mp3\f[R]
+T}
+.TE
+.PP
+\f[C]skim\f[R] also supports the combination of tokens.
+.IP \[bu] 2
+space has the meaning of \f[C]AND\f[R].
+With the term \f[C]src main\f[R], \f[C]skim\f[R] will search for items
+that match \f[B]both\f[R] \f[C]src\f[R] and \f[C]main\f[R].
+.IP \[bu] 2
+\f[C]|\f[R] means \f[C]OR\f[R] (note the spaces around \f[C]|\f[R]).
+With the term \f[C].md$ |   .markdown$\f[R], \f[C]skim\f[R] will search
+for items ends with either \f[C].md\f[R] or \f[C].markdown\f[R].
+.IP \[bu] 2
+\f[C]OR\f[R] have higher precedence.
+So \f[C]readme .md$ | .markdown$\f[R] is groupped into
+\f[C]readme AND (.md$ OR .markdown$)\f[R].
+.PP
+In case that you want to use regular expressions, \f[C]skim\f[R]
+provides \f[C]regex\f[R] mode:
+.IP
+.nf
+\f[C]
+sk \-\-regex
+\f[R]
+.fi
+.PP
+You can switch to \f[C]regex\f[R] mode dynamically by pressing
+\f[C]Ctrl\-R\f[R] (Rotate Mode).
+.SS exit code
+.PP
+.TS
+tab(@);
+l l.
+T{
+Exit Code
+T}@T{
+Meaning
+T}
+_
+T{
+0
+T}@T{
+Exit normally
+T}
+T{
+1
+T}@T{
+No Match found
+T}
+T{
+130
+T}@T{
+Abort by Ctrl\-C/Ctrl\-G/ESC/etc\&...
+T}
+.TE
+.SH Customization
+.SS Keymap
+.PP
+Specify the bindings with comma seperated pairs(no space allowed),
+example:
+.PP
+\f[C]sk \-\-bind \[aq]alt\-a:select\-all,alt\-d:deselect\-all\[aq]\f[R]
+.PP
+.TS
+tab(@);
+l l.
+T{
+Action
+T}@T{
+Default key
+T}
+_
+T{
+abort
+T}@T{
+esc, ctrl\-c, ctrl\-g
+T}
+T{
+accept
+T}@T{
+enter
+T}
+T{
+backward\-char
+T}@T{
+left, ctrl\-b
+T}
+T{
+backward\-delete\-char
+T}@T{
+ctrl\-h, backspace
+T}
+T{
+backward\-kill\-word
+T}@T{
+alt\-backspace
+T}
+T{
+backward\-word
+T}@T{
+alt\-b, shift\-left
+T}
+T{
+beginning\-of\-line
+T}@T{
+ctrl\-a
+T}
+T{
+cancel
+T}@T{
+None
+T}
+T{
+clear\-screen
+T}@T{
+ctrl\-l
+T}
+T{
+delete\-char
+T}@T{
+del
+T}
+T{
+delete\-charEOF
+T}@T{
+ctrl\-d
+T}
+T{
+deselect\-all
+T}@T{
+None
+T}
+T{
+down
+T}@T{
+ctrl\-j, ctrl\-n, down
+T}
+T{
+end\-of\-line
+T}@T{
+ctrl\-e, end
+T}
+T{
+forward\-char
+T}@T{
+ctrl\-f, right
+T}
+T{
+forward\-word
+T}@T{
+alt\-f, shift\-right
+T}
+T{
+ignore
+T}@T{
+None
+T}
+T{
+kill\-line
+T}@T{
+ctrl\-k
+T}
+T{
+kill\-word
+T}@T{
+alt\-d
+T}
+T{
+page\-down
+T}@T{
+page\-down
+T}
+T{
+page\-up
+T}@T{
+page\-up
+T}
+T{
+rotate\-mode
+T}@T{
+ctrl\-r
+T}
+T{
+scroll\-left
+T}@T{
+alt\-h
+T}
+T{
+scroll\-right
+T}@T{
+alt\-l
+T}
+T{
+select\-all
+T}@T{
+None
+T}
+T{
+toggle
+T}@T{
+None
+T}
+T{
+toggle\-all
+T}@T{
+None
+T}
+T{
+toggle\-down
+T}@T{
+tab
+T}
+T{
+toggle\-interactive
+T}@T{
+ctrl\-q
+T}
+T{
+toggle\-out
+T}@T{
+None
+T}
+T{
+toggle\-preview
+T}@T{
+None
+T}
+T{
+toggle\-sort
+T}@T{
+None
+T}
+T{
+toggle\-up
+T}@T{
+shift\-tab
+T}
+T{
+unix\-line\-discard
+T}@T{
+ctrl\-u
+T}
+T{
+unix\-word\-rubout
+T}@T{
+ctrl\-w
+T}
+T{
+up
+T}@T{
+ctrl\-p, ctrl\-k, up
+T}
+.TE
+.SS Sort Criteria
+.PP
+There are four sort keys for results:
+\f[C]score, index, begin, end\f[R], you can specify how the records are
+sorted by \f[C]sk \-\-tiebreak score,index,\-begin\f[R] or any other
+order you want.
+.SS Color Scheme
+.PP
+It is a high chance that you are a better artist than me.
+Luckily you won\[cq]t be stuck with the default colors, \f[C]skim\f[R]
+supports customization of the color scheme.
+.IP
+.nf
+\f[C]
+\-\-color=[BASE_SCHEME][,COLOR:ANSI]
+\f[R]
+.fi
+.PP
+The configuration of colors starts with the name of the base color
+scheme, followed by custom color mappings.
+For example:
+.IP
+.nf
+\f[C]
+sk \-\-color=current_bg:24
+sk \-\-color=light,fg:232,bg:255,current_bg:116,info:27
+\f[R]
+.fi
+.PP
+You can choose the \f[C]BASE SCHEME\f[R] among the following(default:
+dark on 256\-color terminal, otherwise 16):
+.PP
+.TS
+tab(@);
+l l.
+T{
+Base Scheme
+T}@T{
+Description
+T}
+_
+T{
+dark
+T}@T{
+Color scheme for dark 256\-color terminal
+T}
+T{
+light
+T}@T{
+Color scheme for light 256\-color terminal
+T}
+T{
+16
+T}@T{
+Color scheme for 16\-color terminal
+T}
+T{
+bw
+T}@T{
+No colors
+T}
+.TE
+.PP
+While the customisable \f[C]COLOR\f[R]s are
+.PP
+.TS
+tab(@);
+l l.
+T{
+Color
+T}@T{
+Description
+T}
+_
+T{
+fg
+T}@T{
+Text
+T}
+T{
+bg
+T}@T{
+Background
+T}
+T{
+matched
+T}@T{
+Text color of matched items
+T}
+T{
+matched_bg
+T}@T{
+Background color of matched items
+T}
+T{
+current
+T}@T{
+Text color (current line)
+T}
+T{
+current_bg
+T}@T{
+Background color (current line)
+T}
+T{
+current_match
+T}@T{
+Text color of matched items (current line)
+T}
+T{
+current_match_bg
+T}@T{
+Background color of matched items (current line)
+T}
+T{
+spinner
+T}@T{
+Streaming input indicator
+T}
+T{
+info
+T}@T{
+Info area
+T}
+T{
+prompt
+T}@T{
+Prompt
+T}
+T{
+cursor
+T}@T{
+Cursor
+T}
+T{
+selected
+T}@T{
+Text color of \[lq]selected\[rq] indicator
+T}
+T{
+border
+T}@T{
+Border color of preview window
+T}
+.TE
+.SS Misc
+.IP \[bu] 2
+\f[C]\-\-ansi\f[R]: to parse ANSI color codes(e.g
+\f[C]\[rs]e[32mABC\f[R]) of the data source
+.IP \[bu] 2
+\f[C]\-\-regex\f[R]: use the query as regular expression to match the
+data source
+.SH Advanced Topics
+.SS Interactive mode
+.PP
+In interactive mode, \f[C]sk\f[R] will pass the query to the command you
+specified and present the output to you.
+You can specify the command using the \f[C]\-c\f[R] option:
+.PP
+\f[C]sk \-i \-c \[aq]ag \-\-color \[dq]{}\[dq]\[aq]\f[R]
+.PP
+In the above example, the replace string \f[C]{}\f[R] will be replaced
+with the query you type before invoking the command.
+Use \f[C]\-I <replstr>\f[R] to change replstr if you want.
+.PP
+For example, with the input \[lq]hello\[rq] in interactive mode,
+\f[C]skim\f[R] will replace the above command with
+\f[C]ag \-\-color \[dq]hello\[dq]\f[R] and invoke it.
+.PP
+If you want to further narrow down the result returned by the command,
+press \f[C]Ctrl\-Q\f[R] to toggle interactive mode.
+.SS Preview Window
+.PP
+This is a great feature of fzf that skim borrows.
+For example, we use `ag' to find the matched lines, once we narrow down
+to the target lines, we want to finally decide which lines to pick by
+checking the context around the line.
+\f[C]grep\f[R] and \f[C]ag\f[R] has an option \f[C]\-\-context\f[R],
+skim can do better with preview window.
+For example:
+.IP
+.nf
+\f[C]
+sk \-\-ansi \-i \-c \[aq]ag \-\-color \[dq]{}\[dq]\[aq] \-\-preview \[dq]preview.sh {}\[dq]
+\f[R]
+.fi
+.PP
+(Note the
+preview.sh (https://github.com/junegunn/fzf.vim/blob/master/bin/preview.sh)
+is a script to print the context given filename:lines:columns) You got
+things like this:
+.PP
+[IMAGE: preview
+demo (https://user-images.githubusercontent.com/1527040/30677573-0cee622e-9ebf-11e7-8316-c741324ecb3a.png)]
+.SS How does it work?
+.PP
+If the preview command is given by the \f[C]\-\-preview\f[R] option,
+skim will replace the \f[C]{}\f[R] with the current highlighted line
+surrounded by single quotes, call the command to get the output, and
+print the output on the preview window.
+.PP
+Sometimes you don\[cq]t need the whole line for invoking the command.
+In this case you can use \f[C]{}\f[R], \f[C]{1..}\f[R], \f[C]{..3}\f[R]
+or \f[C]{1..5}\f[R] to select the fields.
+The syntax is explained in the section \[lq]Fields Support\[rq].
+.PP
+Last, you might want to configure the position of preview windows, use
+\f[C]\-\-preview\-window\f[R].
+\- \f[C]\-\-preview\-window up:30%\f[R] to put the window in the up
+position with height 30% of the total height of skim.
+\- \f[C]\-\-preview\-window left:10:wrap\f[R], to specify the
+\f[C]wrap\f[R] allows the preview window to wrap the output of the
+preview command.
+\- \f[C]\-\-preview\-window wrap:hidden\f[R] to hide the preview window
+at startup, later it can be shown by the action
+\f[C]toggle\-preview\f[R].
+.SS Fields support
+.PP
+Normally only plugin users need to understand this.
+.PP
+For example, you have the data source with the format:
+.IP
+.nf
+\f[C]
+<filename>:<line number>:<column number>
+\f[R]
+.fi
+.PP
+However, you want to search \f[C]<filename>\f[R] only when typing in
+queries.
+That means when you type \f[C]21\f[R], you want to find a
+\f[C]<filename>\f[R] that contains \f[C]21\f[R], but not matching line
+number or column number.
+.PP
+You can use \f[C]sk \-\-delimiter \[aq]:\[aq] \-\-nth 1\f[R] to achieve
+this.
+.PP
+Also you can use \f[C]\-\-with\-nth\f[R] to re\-arrange the order of
+fields.
+.PP
+\f[B]Range Syntax\f[R]
+.IP \[bu] 2
+\f[C]<num>\f[R] \[en] to specify the \f[C]num\f[R]\-th fields, starting
+with 1.
+.IP \[bu] 2
+\f[C]start..\f[R] \[en] starting from the \f[C]start\f[R]\-th fields,
+and the rest.
+.IP \[bu] 2
+\f[C]..end\f[R] \[en] starting from the \f[C]0\f[R]\-th field, all the
+way to \f[C]end\f[R]\-th field, including \f[C]end\f[R].
+.IP \[bu] 2
+\f[C]start..end\f[R] \[en] starting from \f[C]start\f[R]\-th field, all
+the way to \f[C]end\f[R]\-th field, including \f[C]end\f[R].
+.SS Use as a library
+.PP
+Skim can now be used as a library in your Rust crates.
+The basic idea is to throw anything that is \f[C]BufRead\f[R](we can
+easily turn a \f[C]File\f[R] for \f[C]String\f[R] into
+\f[C]BufRead\f[R]) and skim will do its job and bring us back the user
+selection including the selected items(with their indices), the query,
+etc.
+.PP
+First, add skim into your \f[C]Cargo.toml\f[R]:
+.IP
+.nf
+\f[C]
+[dependencies]
+skim = \[dq]0.5.2\[dq]
+\f[R]
+.fi
+.PP
+Then try to run this simple example:
+.IP
+.nf
+\f[C]
+extern crate skim;
+use skim::{Skim, SkimOptions};
+use std::default::Default;
+use std::io::Cursor;
+
+pub fn main() {
+    let options: SkimOptions = SkimOptions::default().height(\[dq]50%\[dq]).multi(true);
+
+    let input = \[dq]aaaaa\[rs]nbbbb\[rs]nccc\[dq].to_string();
+
+    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(|| Vec::new());
+
+    for item in selected_items.iter() {
+        print!(\[dq]{}: {}{}\[dq], item.get_index(), item.get_output_text(), \[dq]\[rs]n\[dq]);
+    }
+}
+\f[R]
+.fi
+.PP
+Check more examples under
+examples/ (https://github.com/lotabout/skim/tree/master/examples)
+directory.
+.SH FAQ
+.SS How to ignore files?
+.PP
+Skim invokes \f[C]find .\f[R] to fetch a list of files for filtering.
+You can override that by setting the environment variable
+\f[C]SKIM_DEFAULT_COMMAND\f[R].
+For example:
+.IP
+.nf
+\f[C]
+$ SKIM_DEFAULT_COMMAND=\[dq]fd \-\-type f || git ls\-tree \-r \-\-name\-only HEAD || rg \-\-files || find .\[dq]
+$ sk
+\f[R]
+.fi
+.PP
+You could put it in your \f[C].bashrc\f[R] or \f[C].zshrc\f[R] if you
+like it to be default.
+.SS Some files are not shown in Vim plugin
+.PP
+If you use the Vim plugin and execute the \f[C]:SK\f[R] command, you
+might find some of your files not shown.
+.PP
+As described in #3 (https://github.com/lotabout/skim/issues/3), in the
+Vim plugin, \f[C]SKIM_DEFAULT_COMMAND\f[R] is set to the command by
+default:
+.IP
+.nf
+\f[C]
+let $SKIM_DEFAULT_COMMAND = \[dq]git ls\-tree \-r \-\-name\-only HEAD || rg \-\-files || ag \-l \-g \[rs]\[dq]\[rs]\[dq] || find .\[dq]
+\f[R]
+.fi
+.PP
+That means the files not recognized by git will not shown.
+Either override the default with
+\f[C]let $SKIM_DEFAULT_COMMAND = \[aq]\[aq]\f[R] or find the missing
+file by yourself.
+.SH Difference to fzf
+.PP
+fzf (https://github.com/junegunn/fzf) is a command\-line fuzzy finder
+written in Go and skim (https://github.com/lotabout/skim) tries to
+implement a new one in Rust!
+.PP
+This project is written from scratch.
+Some decisions of implementation are different from fzf.
+For example:
+.IP "1." 3
+The fuzzy search algorithm is different.
+.IP "2." 3
+[STRIKEOUT:UI of showing matched items. \f[C]fzf\f[R] will show only the
+range matched while \f[C]skim\f[R] will show each character matched.]
+(fzf has this now)
+.IP "3." 3
+\f[C]skim\f[R] has an interactive mode.
+.IP "4." 3
+[STRIKEOUT:\f[C]skim\f[R]\[cq]s range syntax is git style]: now it is
+the same with fzf.
+.SH How to contribute
+.PP
+Create new issues (https://github.com/lotabout/skim/issues/new) if you
+meet any bugs or have any ideas.
+Pull requests are warmly welcomed.
