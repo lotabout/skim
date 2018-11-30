@@ -35,4 +35,5 @@ clap = "2.26.2"
 default = []
 
 [profile.release]
+lto = true
 debug = false
