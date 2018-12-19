@@ -15,8 +15,8 @@ impl CachedSender {
     pub fn new(rx_sender: EventReceiver, tx_item: SyncSender<(Event, EventArg)>) -> Self {
         CachedSender {
             items: Vec::new(),
-            rx_sender: rx_sender,
-            tx_item: tx_item,
+            rx_sender,
+            tx_item,
         }
     }
 

@@ -53,7 +53,7 @@ impl AnsiString {
         }
     }
 
-    pub fn iter<'a>(&'a self) -> AnsiStringIterator<'a> {
+    pub fn iter(&self) -> AnsiStringIterator {
         AnsiStringIterator {
             ansi_states: &self.ansi_states,
             it_text: Box::new(self.stripped.chars().enumerate()),
@@ -62,7 +62,7 @@ impl AnsiString {
     }
 
     pub fn has_attrs(&self) -> bool {
-        self.ansi_states.len() != 0
+        !self.ansi_states.is_empty()
     }
 
     pub fn from_str(raw: &str) -> AnsiString {
@@ -102,7 +102,7 @@ impl<'a> Iterator for AnsiStringIterator<'a> {
             }
         }
         if let Some((start, end)) = as_range {
-            return Some((ch, &self.ansi_states[start..end + 1]));
+            return Some((ch, &self.ansi_states[start..=end]));
         } else {
             return Some((ch, &[]));
         }
@@ -119,10 +119,10 @@ impl ANSIParser {
         // add it to the newest line if no new color is specified.
         match self.re.find(text) {
             Some(mat) if mat.start() == 0 => {}
-            Some(_) | None => {
-                self.last_attr.map(|attr| {
+            _ => {
+                if let Some(attr) = self.last_attr {
                     colors.push((0, attr));
-                });
+                }
             }
         }
 
@@ -136,9 +136,9 @@ impl ANSIParser {
             last = end;
 
             let attr = self.interpret_code(&text[start..end]);
-            attr.map(|attr| {
+            if let Some(attr) = attr {
                 colors.push((num_chars, attr));
-            });
+            }
             self.last_attr = attr;
         }
 

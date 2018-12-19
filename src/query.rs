@@ -153,7 +153,7 @@ impl Query {
             curses.printw(&after);
             let (qend_y, qend_x) = curses.getyx();
             curses.mv(cursor_y, cursor_x);
-            return (qend_y, qend_x);
+            (qend_y, qend_x)
         })
     }
 
@@ -206,16 +206,16 @@ impl Query {
 
     pub fn act_backward_char(&mut self) {
         let (before, after) = self.get_ref();
-        before.pop().map(|ch| {
+        if let Some(ch) = before.pop() {
             after.push(ch);
-        });
+        }
     }
 
     pub fn act_forward_char(&mut self) {
         let (before, after) = self.get_ref();
-        after.pop().map(|ch| {
+        if let Some(ch) = after.pop() {
             before.push(ch);
-        });
+        }
     }
 
     pub fn act_unix_word_rubout(&mut self) {
@@ -278,16 +278,16 @@ impl Query {
         let (before, after) = self.get_ref();
         // skip whitespace
         while !before.is_empty() && !before[before.len() - 1].is_alphanumeric() {
-            before.pop().map(|ch| {
+            if let Some(ch) = before.pop() {
                 after.push(ch);
-            });
+            }
         }
 
         // backword char until whitespace
         while !before.is_empty() && before[before.len() - 1].is_alphanumeric() {
-            before.pop().map(|ch| {
+            if let Some(ch) = before.pop() {
                 after.push(ch);
-            });
+            }
         }
     }
 
@@ -296,33 +296,33 @@ impl Query {
         // backword char until whitespace
         // skip whitespace
         while !after.is_empty() && after[after.len() - 1].is_whitespace() {
-            after.pop().map(|ch| {
+            if let Some(ch) = after.pop() {
                 before.push(ch);
-            });
+            }
         }
 
         while !after.is_empty() && !after[after.len() - 1].is_whitespace() {
-            after.pop().map(|ch| {
+            if let Some(ch) = after.pop() {
                 before.push(ch);
-            });
+            }
         }
     }
 
     pub fn act_beginning_of_line(&mut self) {
         let (before, after) = self.get_ref();
         while !before.is_empty() {
-            before.pop().map(|ch| {
+            if let Some(ch) = before.pop() {
                 after.push(ch);
-            });
+            }
         }
     }
 
     pub fn act_end_of_line(&mut self) {
         let (before, after) = self.get_ref();
         while !after.is_empty() {
-            after.pop().map(|ch| {
+            if let Some(ch) = after.pop() {
                 before.push(ch);
-            });
+            }
         }
     }
 

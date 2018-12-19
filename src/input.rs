@@ -19,8 +19,8 @@ impl Input {
         let f = File::open("/dev/tty").expect("failed on open /dev/tty");
         let keyboard = KeyBoard::new(f);
         Input {
-            tx_input: tx_input,
-            keyboard: keyboard,
+            tx_input,
+            keyboard,
             keymap: get_default_key_map(),
         }
     }
@@ -243,9 +243,9 @@ impl KeyBoard {
                     self.buf.pop_front();
 
                     let row_num = row.parse::<u16>()
-                        .expect(format!("input:get_escaped_key: failed to parse row: {}", row).as_str());
+                        .unwrap_or_else(|_| panic!("input:get_escaped_key: failed to parse row: {}", row));
                     let col_num = col.parse::<u16>()
-                        .expect(format!("input:get_escaped_key: failed to parse col: {}", col).as_str());
+                        .unwrap_or_else(|_| panic!("input:get_escaped_key: failed to parse col: {}", col));
 
                     return Some(Key::Pos(row_num - 1, col_num - 1));
                 }
@@ -382,7 +382,7 @@ impl KeyBoard {
     }
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 #[derive(Eq, PartialEq, Hash, Debug)]
 pub enum Key {
     CtrlSpace,
@@ -415,7 +415,7 @@ pub enum Key {
     Pos(u16, u16),
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 pub fn parse_key(key: &str) -> Option<Key> {
     match key.to_lowercase().as_ref() {
         "ctrl-space" | "ctrl-`" | "ctrl-@" => Some(Key::CtrlSpace),

@@ -80,7 +80,7 @@ pub enum Event {
     EvActYank,
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 pub fn parse_action(action: &str) -> Option<Event> {
     match action {
         "abort"                =>   Some(Event::EvActAbort),

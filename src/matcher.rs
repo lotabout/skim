@@ -45,7 +45,7 @@ pub struct Matcher {
 impl Matcher {
     pub fn new(tx_result: EventSender) -> Self {
         Matcher {
-            tx_result: tx_result,
+            tx_result,
             mode: MatcherMode::Fuzzy,
         }
     }
@@ -158,11 +158,11 @@ impl Matcher {
                         .expect("matcher:EvMatcherNewItem: failed to get arguments");
                     num_processed += items.len();
 
-                    matcher_engine.as_ref().map(|mat| {
+                    if let Some(mat) = matcher_engine.as_ref() {
                         let matched_items: MatchedItemGroup =
                             items.into_iter().filter_map(|item| mat.match_item(item)).collect();
                         let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
-                    });
+                    }
 
                     // report the number of processed items
                     let _ = self.tx_result
@@ -268,11 +268,7 @@ impl MatchEngine for RegexEngine {
             }
         }
 
-        if matched_result.is_none() {
-            return None;
-        }
-
-        let (begin, end) = matched_result.unwrap();
+        let (begin, end) = matched_result?;
         let score = (end - begin) as i64;
         let rank = build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
 
@@ -402,12 +398,9 @@ impl ExactEngine {
             }
         }
 
-        let result_range = filter(&matched_result, range_end - range_start);
-        if result_range.is_none() {
-            return None;
-        }
+        let (s, e) = filter(&matched_result, range_end - range_start)?;
 
-        let (begin, end) = result_range.map(|(s, e)| (s + range_start, e + range_start)).unwrap();
+        let (begin, end) = (s + range_start, e + range_start);
         let score = (end - begin) as i64;
         let rank = build_rank(-score, item.get_index() as i64, begin as i64, end as i64);
 
@@ -539,7 +532,7 @@ impl AndEngine {
             engines.push(EngineFactory::build(term, mode));
         }
 
-        AndEngine { engines: engines }
+        AndEngine { engines }
     }
 
     pub fn build(self) -> Self {
@@ -554,7 +547,7 @@ impl AndEngine {
         for item in items {
             match item.matched_range {
                 Some(MatchedRange::Range(start, end)) => {
-                    ranges.extend((start..end).into_iter());
+                    ranges.extend(start..end);
                 }
                 Some(MatchedRange::Chars(vec)) => {
                     ranges.extend(vec.iter());
@@ -577,12 +570,8 @@ impl MatchEngine for AndEngine {
         // mock
         let mut results = vec![];
         for engine in &self.engines {
-            let result = engine.match_item(Arc::clone(&item));
-            if result.is_none() {
-                return None;
-            } else {
-                results.push(result.unwrap());
-            }
+            let result = engine.match_item(Arc::clone(&item))?;
+            results.push(result);
         }
 
         if results.is_empty() {

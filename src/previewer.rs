@@ -24,7 +24,7 @@ struct PreviewThread {
 
 impl PreviewThread {
     fn kill(self) {
-        if self.stopped.load(Ordering::Relaxed) == false {
+        if !self.stopped.load(Ordering::Relaxed) {
             unsafe { libc::kill(self.pid as i32, libc::SIGKILL) };
         }
         self.thread.join().expect("Failed to join Preview process");
@@ -40,13 +40,13 @@ pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, tx_model: EventSender) {
         }
 
         if _ev == Event::EvActAbort {
-            return ();
+            return;
         }
 
         // Try to empty the channel. Happens when spamming up/down or typing fast.
         while let Ok((_ev, new_prv1)) = rx_preview.try_recv() {
             if _ev == Event::EvActAbort {
-                return ();
+                return;
             }
             new_prv = new_prv1;
         }
@@ -56,7 +56,7 @@ pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, tx_model: EventSender) {
             continue;
         }
 
-        let shell = env::var("SHELL").unwrap_or("sh".to_string());
+        let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
         let spawned = Command::new(shell)
             .env("LINES", new_prv.lines.to_string())
             .env("COLUMNS", new_prv.columns.to_string())
@@ -94,7 +94,7 @@ fn wait_and_send(mut spawned: std::process::Child, tx_model: EventSender, stoppe
     stopped.store(true, Ordering::SeqCst);
 
     if status.is_err() {
-        return ();
+        return;
     }
     let status = status.unwrap();
 

@@ -18,7 +18,7 @@ use regex::Regex;
 use sender::CachedSender;
 use std::env;
 
-const DELIMITER_STR: &'static str = r"[\t\n ]+";
+const DELIMITER_STR: &str = r"[\t\n ]+";
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -87,8 +87,8 @@ impl Reader {
         data_source: Option<Box<BufRead + Send>>,
     ) -> Self {
         Reader {
-            rx_cmd: rx_cmd,
-            tx_item: tx_item,
+            rx_cmd,
+            tx_item,
             option: Arc::new(RwLock::new(ReaderOption::new())),
             data_source,
         }
@@ -183,7 +183,7 @@ impl Reader {
 }
 
 fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
-    let shell = env::var("SHELL").unwrap_or("sh".to_string());
+    let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let mut command = Command::new(shell)
         .arg("-c")
         .arg(cmd)
@@ -227,15 +227,15 @@ fn reader(
     let command_stopped_clone = command_stopped.clone();
     thread::spawn(move || {
         // kill command if it is got
-        while !command.is_none() && !stopped_clone.load(Ordering::Relaxed) {
+        while command.is_some() && !stopped_clone.load(Ordering::Relaxed) {
             thread::sleep(Duration::from_millis(5));
         }
 
         // clean up resources
-        command.map(|mut x| {
+        if let Some(mut x) = command {
             let _ = x.kill();
             let _ = x.wait();
-        });
+        }
         command_stopped_clone.store(true, Ordering::Relaxed);
     });
 
@@ -298,10 +298,8 @@ fn reader(
                     ));
                 }
 
-                if index.trailing_zeros() > 5 {
-                    if stopped.load(Ordering::SeqCst) {
-                        break;
-                    }
+                if index.trailing_zeros() > 5 && stopped.load(Ordering::SeqCst) {
+                    break;
                 }
             }
             Err(_err) => {} // String not UTF8 or other error, skip.

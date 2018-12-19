@@ -191,7 +191,7 @@ pub struct MatchedItem {
 impl MatchedItem {
     pub fn builder(item: Arc<Item>) -> Self {
         MatchedItem {
-            item: item,
+            item,
             rank: [0, 0, 0, 0],
             matched_range: None,
         }
