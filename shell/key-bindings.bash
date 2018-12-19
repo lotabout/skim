@@ -7,7 +7,7 @@ __skim_select__() {
     -o -type f -print \
     -o -type d -print \
     -o -type l -print 2> /dev/null | cut -b3-"}"
-  eval "$cmd" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_CTRL_T_OPTS" skim -m "$@" | while read -r item; do
+  eval "$cmd" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_CTRL_T_OPTS" sk -m "$@" | while read -r item; do
     printf '%q ' "$item"
   done
   echo
