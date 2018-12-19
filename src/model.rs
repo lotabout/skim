@@ -22,7 +22,7 @@ pub type QueryPrintClosure = Box<Fn(&mut Window) -> (u16, u16) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
-const DELIMITER_STR: &'static str = r"[\t\n ]+";
+const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
@@ -72,7 +72,7 @@ pub struct Model {
 impl Model {
     pub fn new(rx_cmd: EventReceiver) -> Self {
         Model {
-            rx_cmd: rx_cmd,
+            rx_cmd,
             items: OrderedVec::new(),
             num_read: 0,
             num_processed: 0,
@@ -417,7 +417,7 @@ impl Model {
             let item = Arc::clone(
                 self.items
                     .get(i)
-                    .expect(format!("model:draw_items: failed to get item at {}", i).as_str()),
+                    .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", i)),
             );
             self.draw_item(curses, &item, l == self.line_cursor);
             curses.attr_on(0);
@@ -449,7 +449,7 @@ impl Model {
         match (self.inline_info, self.reverse){
             (false, true) => (1, 0),
             (false, false) => ({ self.height + self.reserved_height - 2 }, 0),
-            (true, _) => ((cursor_y, self.query_end_x))
+            (true, _) => (cursor_y, self.query_end_x),
         }
     }
 
@@ -471,7 +471,7 @@ impl Model {
             self.print_char(curses, ' ', COLOR_NORMAL, false);
         } else {
             let time = self.timer.elapsed();
-            let mills = (time.as_secs() * 1000) as u32 + time.subsec_nanos() / 1000 / 1000;
+            let mills = (time.as_secs() * 1000) as u32 + time.subsec_millis();
             let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
             self.print_char(curses, SPINNERS[index as usize], COLOR_SPINNER, true);
         }
@@ -529,8 +529,8 @@ impl Model {
         // cursor should be placed on query, so store cursor before printing
         let (y, x) = curses.getyx();
         let (maxy, _) = curses.get_maxyx();
-        let (has_headers, yh) = (self.headers.len() > 0, self.get_header_height( y, maxy));
-        if ! has_headers || yh.is_none() {
+        let (has_headers, yh) = (!self.headers.is_empty(), self.get_header_height(y, maxy));
+        if !has_headers || yh.is_none() {
             return;
         }
         let yh = yh.unwrap();
@@ -543,7 +543,7 @@ impl Model {
             .build();
 
         for (i, header) in self.headers.iter().enumerate() {
-            let nyh = ((yh as i64)+(direction*(i as i64))) as u16;
+            let nyh = (i64::from(yh)+(direction*(i as i64))) as u16;
             curses.mv(nyh, 0);
             curses.clrtoeol();
             curses.mv(nyh, 2);
@@ -701,7 +701,7 @@ impl Model {
         let item = Arc::clone(
             self.items
                 .get(current_idx)
-                .expect(format!("model:draw_items: failed to get item at {}", current_idx).as_str()),
+                .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", current_idx))
         );
         let highlighted_content = item.item.get_orig_text();
 
@@ -711,9 +711,9 @@ impl Model {
 
         if let Some(tx_preview) = &self.tx_preview {
             tx_preview.send((Event::EvModelNewPreview , PreviewInput{
-                cmd: cmd.to_string().clone(),
-                lines: lines,
-                columns: cols
+                cmd: cmd.to_string(),
+                lines,
+                columns: cols,
             })).expect("failed to send to previewer");
         }
     }
@@ -802,7 +802,7 @@ impl Model {
         let cursor = self.item_cursor + self.line_cursor;
         let current_item = self.items
             .get(cursor)
-            .expect(format!("model:act_toggle: failed to get item {}", cursor).as_str());
+            .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, Arc::clone(current_item));
@@ -839,7 +839,7 @@ impl Model {
             let cursor = self.item_cursor + self.line_cursor;
             let current_item = self.items
                 .get(cursor)
-                .expect(format!("model:act_output: failed to get item {}", cursor).as_str());
+                .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
         }

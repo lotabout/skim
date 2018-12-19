@@ -127,7 +127,7 @@ fn main() {
     std::process::exit(exit_code);
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 fn real_main() -> i32 {
     let mut args = Vec::new();
 
@@ -217,7 +217,7 @@ fn real_main() -> i32 {
     let output_ending = if options.print0 {"\0"} else {"\n"};
 
     let output = Skim::run_with(&options, None);
-    if let None = output {
+    if output.is_none() {
         return 130;
     }
 
@@ -232,13 +232,13 @@ fn real_main() -> i32 {
         print!("{}{}", output.cmd, output_ending);
     }
 
-    output.accept_key.map(|key| {
+    if let Some(key) = output.accept_key {
         print!("{}{}", key, output_ending);
-    });
+    }
 
     for item in output.selected_items.iter() {
         print!("{}{}", item.get_output_text(), output_ending);
     }
 
-    if output.selected_items.len() > 0 {0} else {1}
+    if output.selected_items.is_empty() {1} else {0}
 }

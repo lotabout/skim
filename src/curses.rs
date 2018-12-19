@@ -61,7 +61,7 @@ pub fn register_ansi(ansi: String) -> attr_t {
     if color_map.contains_key(&ansi) {
         *color_map
             .get(&ansi)
-            .expect(format!("curses:register_ansi: failed to get ansi: {}", &ansi).as_str())
+            .unwrap_or_else(|| panic!("curses:register_ansi: failed to get ansi: {}", &ansi))
     } else {
         let next_pair = COLOR_USER + pair_num;
         register_resource(next_pair, ansi.clone());
@@ -195,7 +195,7 @@ impl Window {
         self.mv(y, x);
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     pub fn mv(&mut self, y: u16, x: u16) {
         self.current_y = y;
         self.current_x = x;
@@ -347,7 +347,9 @@ impl Window {
         let resource_map = RESOURCE_MAP
             .read()
             .expect("curses:attron: failed to lock RESOURCE_MAP for read");
-        resource_map.get(&key).map(|s| self.stdout_buffer.push_str(s));
+        if let Some(s) = resource_map.get(&key) {
+          self.stdout_buffer.push_str(s);
+        }
     }
 
     fn attroff(&mut self, key: attr_t) {
@@ -665,7 +667,7 @@ impl Curses {
         (direction, size, wrap, shown)
     }
 
-    #[cfg_attr(rustfmt, rustfmt_skip)]
+    #[rustfmt::skip]
     pub fn resize(&mut self) {
         let (max_y, max_x) = Curses::terminal_size();
         let height = self.height();
@@ -813,7 +815,7 @@ impl<'a> color::Color for &'a ColorWrapper {
     }
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 pub struct ColorTheme {
     fg:               ColorWrapper, // text fg
     bg:               ColorWrapper, // text bg
@@ -832,7 +834,7 @@ pub struct ColorTheme {
     border:           ColorWrapper,
 }
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 impl ColorTheme {
     pub fn init_from_options(options: &SkimOptions) {
         // register

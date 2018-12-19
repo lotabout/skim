@@ -71,7 +71,7 @@ impl Skim {
             // listen to the resize event;
             loop {
                 let _errno = sigset.wait();
-                if let Err(_) = tx_input_clone.send((EvActRedraw, Box::new(true))) {
+                if tx_input_clone.send((EvActRedraw, Box::new(true))).is_err() {
                     break;
                 }
             }

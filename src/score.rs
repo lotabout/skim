@@ -89,8 +89,8 @@ pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>
                 if ch == pattern_char && (idx as i64) > prev_matched_idx {
                     let score = fuzzy_score(choice, idx, pattern, pattern_idx);
                     vec.push(MatchingStatus {
-                        idx: idx,
-                        score: score,
+                        idx,
+                        score,
                         final_score: score,
                         adj_num: 1,
                         back_ref: 0,
@@ -143,14 +143,14 @@ pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>
                 MatchingStatus {
                     final_score: score_before_idx,
                     back_ref: prev.back_ref,
-                    adj_num: adj_num,
+                    adj_num,
                     ..next
                 }
             } else {
                 MatchingStatus {
                     final_score: score,
-                    back_ref: back_ref,
-                    adj_num: adj_num,
+                    back_ref,
+                    adj_num,
                     ..next
                 }
             };
@@ -177,12 +177,7 @@ pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>
 pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)> {
     match *pattern {
         Some(ref pat) => {
-            let ret = pat.find(choice);
-            if ret.is_none() {
-                return None;
-            }
-
-            let mat = ret.unwrap();
+            let mat = pat.find(choice)?;
             let (start, end) = (mat.start(), mat.end());
             let first = (&choice[0..start]).chars().count();
             let last = first + (&choice[start..end]).chars().count();
@@ -195,30 +190,20 @@ pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usiz
 // Pattern may appear in sevearl places, return the first and last occurrence
 pub fn exact_match(choice: &str, pattern: &str) -> Option<((usize, usize), (usize, usize))> {
     // search from the start
-    let start_pos = choice.find(pattern);
-    if start_pos.is_none() {
-        return None;
-    };
+    let start_pos = choice.find(pattern)?;
 
     let pattern_len = pattern.chars().count();
 
-    let first_occur = start_pos
-        .map(|s| {
-            let start = if s == 0 { 0 } else { (&choice[0..s]).chars().count() };
-            (start, start + pattern_len)
-        })
-        .unwrap();
-
-    let last_pos = choice.rfind(pattern);
-    if last_pos.is_none() {
-        return None;
+    let first_occur = {
+        let start = if start_pos == 0 { 0 } else { (&choice[0..start_pos]).chars().count() };
+        (start, start + pattern_len)
     };
-    let last_occur = last_pos
-        .map(|s| {
-            let start = if s == 0 { 0 } else { (&choice[0..s]).chars().count() };
-            (start, start + pattern_len)
-        })
-        .unwrap();
+
+    let last_pos = choice.rfind(pattern)?;
+    let last_occur = {
+        let start = if last_pos == 0 { 0 } else { (&choice[0..last_pos]).chars().count() };
+        (start, start + pattern_len)
+    };
 
     Some((first_occur, last_occur))
 }
