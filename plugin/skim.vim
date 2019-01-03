@@ -264,7 +264,7 @@ function! s:validate_layout(layout)
   for key in keys(a:layout)
     if index(s:layout_keys, key) < 0
       throw printf('Invalid entry in g:skim_layout: %s (allowed: %s)%s',
-            \ key, join(s:layout_keys, ', '), key == 'options' ? '. Use $SKIM_DEFAULT_OPTS.' : '')
+            \ key, join(s:layout_keys, ', '), key == 'options' ? '. Use $SKIM_DEFAULT_OPTIONS.' : '')
     endif
   endfor
   return a:layout
@@ -594,7 +594,7 @@ function! s:calc_size(max, val, dict)
     let srcsz = len(a:dict.source)
   endif
 
-  let opts = get(a:dict, 'options', '').$SKIM_DEFAULT_OPTS
+  let opts = get(a:dict, 'options', '').$SKIM_DEFAULT_OPTIONS
   let margin = stridx(opts, '--inline-info') > stridx(opts, '--no-inline-info') ? 1 : 2
   let margin += stridx(opts, '--header') > stridx(opts, '--no-header')
   return srcsz >= 0 ? min([srcsz + margin, size]) : size
