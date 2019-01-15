@@ -272,14 +272,9 @@ fn reader(
                     buffer.pop();
                 }
 
-                let content = unsafe {
-                    String::from_utf8_unchecked(
-                        mem::replace(&mut buffer, Vec::with_capacity(100)))
-                };
-
                 debug!("reader:reader: create new item. index = {}", index);
                 let item = Item::new(
-                    content,
+                    String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,
                     &opt.transform_fields,
                     &opt.matching_fields,

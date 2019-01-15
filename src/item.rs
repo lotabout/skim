@@ -43,7 +43,7 @@ pub struct Item {
 
 impl<'a> Item {
     pub fn new(
-        orig_text: String,
+        orig_text: Cow<str>,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -79,9 +79,9 @@ impl<'a> Item {
         };
 
         let mut ret = Item {
-            index,
-            orig_text,
-            text,
+            index: index,
+            orig_text: orig_text.into_owned(),
+            text: text,
             chars: Vec::new(),
             using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
