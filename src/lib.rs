@@ -220,9 +220,17 @@ impl Skim {
                     on_query_change(&query);
                 }
 
-                EvActDeleteCharEOF | EvActDeleteChar => {
+                EvActDeleteChar => {
                     query.act_delete_char();
                     on_query_change(&query);
+                }
+
+                EvActDeleteCharEOF => {
+                    if query.get_query() == "" {
+                        let _ = tx_input.send((EvActAbort, Box::new(true))); // trigger draw
+                    } else {
+                        let _ = tx_input.send((EvActDeleteChar, Box::new(true))); // trigger draw
+                    }
                 }
 
                 EvActBackwardChar => {
