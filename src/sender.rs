@@ -1,7 +1,6 @@
 use event::{Event, EventArg, EventReceiver};
 use item::ItemGroup;
 use std::sync::mpsc::SyncSender;
-use std::thread;
 use std::time::Duration;
 
 // sender is a cache of reader
@@ -31,7 +30,13 @@ impl CachedSender {
 
         loop {
             // try to read a bunch of items first
-            if let Ok((ev, arg)) = self.rx_sender.try_recv() {
+            if let Some((ev, arg)) = {
+              if am_i_runing {
+                self.rx_sender.recv_timeout(Duration::from_millis(10)).ok()
+              } else {
+                self.rx_sender.recv().ok()
+              }
+            } {
                 match ev {
                     Event::EvReaderStarted => {
                         reader_stopped = false;
@@ -91,8 +96,6 @@ impl CachedSender {
                     let _ = self.tx_item.send((Event::EvSenderStopped, Box::new(true)));
                     am_i_runing = false;
                 }
-            } else {
-                thread::sleep(Duration::from_millis(10));
             }
         }
     }
