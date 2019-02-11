@@ -1,7 +1,6 @@
 use event::{Event, EventArg, EventReceiver};
 use item::ItemGroup;
 use std::sync::mpsc::SyncSender;
-use std::thread;
 use std::time::Duration;
 
 // sender is a cache of reader
@@ -10,6 +9,8 @@ pub struct CachedSender {
     rx_sender: EventReceiver,
     tx_item: SyncSender<(Event, EventArg)>,
 }
+
+const WAIT_TIMEOUT: Duration = Duration::from_millis(10);
 
 impl CachedSender {
     pub fn new(rx_sender: EventReceiver, tx_item: SyncSender<(Event, EventArg)>) -> Self {
@@ -31,7 +32,7 @@ impl CachedSender {
 
         loop {
             // try to read a bunch of items first
-            if let Ok((ev, arg)) = self.rx_sender.try_recv() {
+            if let Ok((ev, arg)) = self.rx_sender.recv_timeout(WAIT_TIMEOUT) {
                 match ev {
                     Event::EvReaderStarted => {
                         reader_stopped = false;
@@ -62,8 +63,10 @@ impl CachedSender {
                     }
 
                     Event::EvReaderNewItem => {
-                        self.items.push(*arg.downcast::<ItemGroup>()
-                            .expect("sender:EvReaderNewItem: failed to get argument"));
+                        self.items.push(
+                            *arg.downcast::<ItemGroup>()
+                                .expect("sender:EvReaderNewItem: failed to get argument"),
+                        );
                     }
 
                     ev @ Event::EvActAccept | ev @ Event::EvActAbort => {
@@ -78,21 +81,19 @@ impl CachedSender {
                 }
             }
 
-            if am_i_runing {
+            if am_i_runing && index < self.items.len() {
                 // try to send a bunch of items:
-                if index < self.items.len() {
-                    if self.tx_item
-                        .try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone())))
-                        .is_ok()
-                    {
-                        index += 1;
-                    }
-                } else if reader_stopped {
-                    let _ = self.tx_item.send((Event::EvSenderStopped, Box::new(true)));
-                    am_i_runing = false;
+                if self
+                    .tx_item
+                    .try_send((Event::EvMatcherNewItem, Box::new(self.items[index].clone())))
+                    .is_ok()
+                {
+                    index += 1;
                 }
-            } else {
-                thread::sleep(Duration::from_millis(10));
+            } else if am_i_runing && reader_stopped {
+                // stop running if reader had stopped
+                let _ = self.tx_item.send((Event::EvSenderStopped, Box::new(true)));
+                am_i_runing = false;
             }
         }
     }
