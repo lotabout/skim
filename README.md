@@ -178,7 +178,7 @@ Some commonly used keybindings:
 - ` | ` means `OR` (note the spaces around `|`). With the term `.md$ |
     .markdown$`, `skim` will search for items ends with either `.md` or
     `.markdown`.
-- `OR` have higher precedence. So `readme .md$ | .markdown$` is groupped into
+- `OR` have higher precedence. So `readme .md$ | .markdown$` is grouped into
     `readme AND (.md$ OR .markdown$)`.
 
 In case that you want to use regular expressions, `skim` provides `regex` mode:
