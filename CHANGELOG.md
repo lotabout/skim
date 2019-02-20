@@ -1,5 +1,18 @@
 # Change Log
 
+## 0.5.3: 2019-02-20
+
+Features:
+- `--header` for adding header line
+- `--inline-info` for displaying info besides query
+- run preview commands asynchronizely
+- implement action `delete-charEOF`
+- support key: `ctrl+space`
+
+More bug fixes, noticable ones are:
+- Panic on reading non-utf8 characters
+- 100% CPU when input is not ready
+
 ## 0.5.2: 2018-10-22
 
 - fix: stop command immediately on accept or abort.
