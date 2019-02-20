@@ -87,7 +87,7 @@ impl FieldRange {
             Both(left, right) => {
                 let left = FieldRange::translate_neg(left, length);
                 let right = FieldRange::translate_neg(right, length);
-                if length == 0 || left > right || left > length {
+                if length == 0 || right == 0 || left > right || left > length {
                     None
                 } else {
                     Some((max(left, 1)-1, min(right, length)))

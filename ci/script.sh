@@ -6,6 +6,7 @@ main() {
         return
     fi
 
+    cross test --target $TARGET
     cross build --release --target $TARGET
     mkdir -p target/release
     cp target/$TARGET/release/sk target/release
