@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.5.4: 2019-02-20
+
+Emergency release that fix test failures which breaks
+[APKBUILD](https://github.com/5paceToast/user-aports/blob/master/toast/skim/APKBUILD).
+Check out [#128](https://github.com/lotabout/skim/issues/128).
+
 ## 0.5.3: 2019-02-20
 
 Features:
