@@ -1,12 +1,12 @@
-use event::{Event, EventReceiver, EventSender};
-use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::event::{Event, EventReceiver, EventSender};
+use crate::item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use options::SkimOptions;
+use crate::options::SkimOptions;
 use regex::Regex;
-use score;
+use crate::score;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 

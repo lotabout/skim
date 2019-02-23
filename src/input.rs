@@ -1,4 +1,4 @@
-use event::{parse_action, Event, EventSender};
+use crate::event::{parse_action, Event, EventSender};
 /// Input will listens to user input, modify the query string, send special
 /// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
 use nix::fcntl::{fcntl, FcntlArg, OFlag};

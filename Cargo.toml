@@ -9,6 +9,7 @@ repository = "https://github.com/lotabout/skim"
 readme  = "README.md"
 keywords = ["fuzzy", "menu", "util"]
 license = "MIT"
+edition = "2018"
 
 [lib]
 name = "skim"

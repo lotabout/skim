@@ -1,10 +1,10 @@
-use ansi::AnsiString;
-use curses::*;
-use event::{Event, EventReceiver};
-use field::get_string_by_range;
-use item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
-use options::SkimOptions;
-use orderedvec::OrderedVec;
+use crate::ansi::AnsiString;
+use crate::curses::*;
+use crate::event::{Event, EventReceiver};
+use crate::field::get_string_by_range;
+use crate::item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::options::SkimOptions;
+use crate::orderedvec::OrderedVec;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::{max, min};
@@ -14,8 +14,8 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthChar;
-use util::escape_single_quote;
-use previewer::PreviewInput;
+use crate::util::escape_single_quote;
+use crate::previewer::PreviewInput;
 
 // write query & returns (y,x) after query
 pub type QueryPrintClosure = Box<Fn(&mut Window) -> (u16, u16) + Send>;

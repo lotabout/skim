@@ -1,12 +1,5 @@
-extern crate env_logger;
-extern crate nix;
-extern crate regex;
-extern crate termion;
-extern crate unicode_width;
 #[macro_use]
 extern crate log;
-extern crate clap;
-
 #[macro_use]
 extern crate lazy_static;
 mod ansi;

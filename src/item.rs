@@ -1,8 +1,8 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
-use ansi::{ANSIParser, AnsiString};
-use field::*;
+use crate::ansi::{ANSIParser, AnsiString};
+use crate::field::*;
 use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;

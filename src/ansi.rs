@@ -1,5 +1,5 @@
 // Parse ANSI attr code
-use curses::{attr_t, register_ansi, Window};
+use crate::curses::{attr_t, register_ansi, Window};
 use regex::Regex;
 use std::default::Default;
 use std::iter::Enumerate;

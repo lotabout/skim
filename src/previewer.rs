@@ -1,6 +1,6 @@
-use event::{Event, EventSender};
-use ansi::AnsiString;
-use libc;
+use crate::event::{Event, EventSender};
+use crate::ansi::AnsiString;
+use nix::libc;
 
 use std::env;
 use std::io::Read;
