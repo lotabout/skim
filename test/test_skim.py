@@ -391,11 +391,38 @@ class TestSkim(TestBase):
         lines = self.readonce().strip()
         self.assertEqual(lines, 'a\0b\0')
 
-    def test_with_nth(self):
+    def test_with_nth_preview(self):
         sk_command = self.sk("--delimiter ','", '--with-nth 2..', '--preview', "'echo X{1}Y'")
         self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
         self.tmux.until(lambda lines: lines.any_include("Xfield1Y"))
         self.tmux.send_keys(Key('Enter'))
+
+    def test_with_nth(self):
+        # fields, expected
+        tests = [
+                ('1', 'field1,'),
+                ('2', 'field2,'),
+                ('3', 'field3,'),
+                ('4', 'field4'),
+                ('5', ''),
+                ('-1', 'field4'),
+                ('-2', 'field3,'),
+                ('-3', 'field2,'),
+                ('-4', 'field1,'),
+                ('-5', ''),
+                ('2..', 'field2,field3,field4'),
+                ('..3', 'field1,field2,field3,'),
+                ('2..3', 'field2,field3,'),
+                ('3..2', ''),
+                ]
+
+        for field, expected in tests:
+            sk_command = self.sk("--delimiter ','", f'--with-nth={field}')
+            self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
+            self.tmux.until(lambda lines: lines.item_count() == 1)
+            lines = self.tmux.capture()
+            self.tmux.send_keys(Key('Enter'))
+            self.assertEqual(f'> {expected}'.strip(), lines[-3])
 
     def test_print_query(self):
         self.tmux.send_keys(f"seq 1 1000 | {self.sk('-q 10', '--print-query')}", Key('Enter'))

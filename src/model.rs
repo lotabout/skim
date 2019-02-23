@@ -634,7 +634,7 @@ impl Model {
                 printer.print_char(curses, ch, COLOR_NORMAL, false, false);
             }
         } else {
-            for ch in item.get_orig_text().chars(){
+            for ch in item.get_text().chars(){
                 printer.print_char(curses, ch, COLOR_NORMAL, false, false);
             }
         }
