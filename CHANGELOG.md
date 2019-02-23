@@ -1,5 +1,11 @@
 # Change Log
 
+## 0.5.5: 2019-02-23
+
+Bug fixes:
+- fix: regression on `--with-nth` feature
+- fix: 100% CPU on not enough printing area
+
 ## 0.5.4: 2019-02-20
 
 Emergency release that fix test failures which breaks
