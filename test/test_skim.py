@@ -424,6 +424,28 @@ class TestSkim(TestBase):
             self.tmux.send_keys(Key('Enter'))
             self.assertEqual(f'> {expected}'.strip(), lines[-3])
 
+    def test_nth(self):
+        # fields, query, match_count(0/1)
+        tests = [
+                ('1', 'field1', 1),
+                ('1', 'field2', 0),
+                ('-1', 'field4', 1),
+                ('-1', 'field3', 0),
+                ('-5', 'f', 0),
+                ('2..', 'field2', 1),
+                ('2..', 'field4', 1),
+                ('..3', 'field1', 1),
+                ('..3', 'field3,', 1),
+                ('2..3', '2,3', 1),
+                ('3..2', 'f', 0),
+                ]
+
+        for field, query, count in tests:
+            sk_command = self.sk(f"--delimiter ',' --nth={field} -q {query}")
+            self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
+            self.tmux.until(lambda lines: lines.item_count() == 1 and lines.match_count() == count)
+            self.tmux.send_keys(Key('Enter'))
+
     def test_print_query(self):
         self.tmux.send_keys(f"seq 1 1000 | {self.sk('-q 10', '--print-query')}", Key('Enter'))
         self.tmux.until(lambda lines: lines.item_count() == 1000)
