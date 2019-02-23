@@ -705,6 +705,10 @@ impl Curses {
         let height = self.bottom - self.top;
         let width = self.right - self.left;
 
+        if height < 3 || width < 4 {
+            panic!("printing area is two small with width: {}, height: {}", width, height);
+        }
+
         let preview_height = match self.preview_size {
             Margin::Fixed(x) => x,
             Margin::Percent(x) => height * x / 100,
