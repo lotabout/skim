@@ -3,6 +3,7 @@ use tuikit::attr::{Attr, Effect, Color};
 use std::default::Default;
 use vte::Perform;
 use std::mem;
+use std::borrow::Cow;
 
 /// An ANSI Parser, will parse one line at a time.
 ///
@@ -10,16 +11,20 @@ use std::mem;
 /// lines, the parser will recognize it.
 pub struct ANSIParser {
     partial_str: String,
-    fragments: Vec<(Attr, String)>,
     last_attr: Attr,
+
+    stripped: String,
+    fragments: Vec<(Attr, Cow<'static, str>)>,
 }
 
 impl Default for ANSIParser {
     fn default() -> Self {
         ANSIParser {
             partial_str: String::new(),
-            fragments: Vec::new(),
             last_attr: Attr::default(),
+
+            stripped: String::new(),
+            fragments: Vec::new(),
         }
     }
 }
@@ -137,8 +142,9 @@ impl ANSIParser {
             return;
         }
 
-        let str = mem::replace(&mut self.partial_str, String::new());
-        self.fragments.push((self.last_attr, str));
+        let string = mem::replace(&mut self.partial_str, String::new());
+        self.stripped.push_str(&string);
+        self.fragments.push((self.last_attr, Cow::Owned(string)));
     }
 
     // accept a new attr
@@ -159,10 +165,9 @@ impl ANSIParser {
         }
         self.save_str();
 
+        let stripped = mem::replace(&mut self.stripped, String::new());
         let fragments = mem::replace(&mut self.fragments, Vec::new());
-        AnsiString {
-            fragments,
-        }
+        AnsiString::new(stripped, fragments)
     }
 }
 
@@ -172,22 +177,35 @@ impl ANSIParser {
 ///
 /// It is internally represented as Vec<(attr, string)>
 pub struct AnsiString {
-    fragments: Vec<(Attr, String)>,
+    stripped: Cow<'static, str>,
+    fragments: Vec<(Attr, Cow<'static, str>)>,
 }
 
 impl AnsiString {
-    pub fn new_empty() -> AnsiString {
-        AnsiString {
+    pub fn new_empty() -> Self {
+        Self {
+            stripped: Cow::Owned(String::new()),
             fragments: Vec::new(),
         }
     }
 
-    pub fn into_inner(self) -> String {
-        let mut ret = String::new();
-        for (_attr, string) in self.fragments.into_iter() {
-            ret.push_str(&string);
+    pub fn new_string(string: String) -> Self {
+        let stripped: Cow<'static, str> = Cow::Owned(string);
+        Self {
+            stripped: stripped.clone(),
+            fragments: vec![(Attr::default(), stripped.clone())]
         }
-        ret
+    }
+
+    pub fn new(stripped: String, fragments: Vec<(Attr, Cow<'static, str>)>) -> Self {
+        Self {
+            stripped: Cow::Owned(stripped),
+            fragments,
+        }
+    }
+
+    pub fn into_inner(self) -> String {
+        self.stripped.into()
     }
 
     pub fn iter(&self) -> AnsiStringIterator {
@@ -201,18 +219,22 @@ impl AnsiString {
     pub fn from_str(raw: &str) -> AnsiString {
         ANSIParser::default().parse_ansi(raw)
     }
+
+    pub fn get_stripped(&self) -> &str {
+        &self.stripped
+    }
 }
 
 /// An iterator over all the (char, attr) characters.
 pub struct AnsiStringIterator<'a> {
-    fragments: &'a Vec<(Attr, String)>,
+    fragments: &'a Vec<(Attr, Cow<'a, str>)>,
     fragment_idx: usize,
     attr: Attr,
     chars_iter: Option<std::str::Chars<'a>>,
 }
 
 impl<'a> AnsiStringIterator<'a> {
-    pub fn new(fragments: &'a Vec<(Attr, String)>) -> Self {
+    pub fn new(fragments: &'a Vec<(Attr, Cow<'a, str>)>) -> Self {
         Self {
             fragments,
             fragment_idx: 0,

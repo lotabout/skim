@@ -16,9 +16,11 @@ use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthChar;
 use crate::util::escape_single_quote;
 use crate::previewer::PreviewInput;
+use crate::theme::{ColorTheme, DEFAULT_THEME};
+use tuikit::attr::{Attr, Effect};
 
 // write query & returns (y,x) after query
-pub type QueryPrintClosure = Box<Fn(&mut Window) -> (u16, u16) + Send>;
+pub type QueryPrintClosure = Box<Fn(&mut Window) -> (usize, usize) + Send>;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -37,11 +39,11 @@ pub struct Model {
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
-    height: u16,
-    width: u16,
-    query_end_x: u16,
+    height: usize,
+    width: usize,
+    query_end_x: usize,
 
-    reserved_height: u16, // sum of lines needed for: query, status & headers
+    reserved_height: usize, // sum of lines needed for: query, status & headers
 
     pub tabstop: usize,
 
@@ -66,7 +68,8 @@ pub struct Model {
     print_query: bool,
     print_cmd: bool,
     no_hscroll: bool,
-    inline_info: bool
+    inline_info: bool,
+    theme: ColorTheme,
 }
 
 impl Model {
@@ -105,7 +108,8 @@ impl Model {
             print_query: false,
             print_cmd: false,
             no_hscroll: false,
-            inline_info: false
+            inline_info: false,
+            theme: DEFAULT_THEME,
         }
     }
 
@@ -164,6 +168,8 @@ impl Model {
                 self.headers.push(AnsiString::from_str(header));
             }
         }
+
+        self.theme = ColorTheme::init_from_options(options);
     }
 
     pub fn run(&mut self, mut curses: Curses) {
@@ -328,13 +334,13 @@ impl Model {
                     }
                     Event::EvActPageDown => {
                         //debug!("model:redraw_items_and_status");
-                        let height = 1 - i32::from(self.height);
+                        let height = 1 - (self.height as i32);
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
                     Event::EvActPageUp => {
                         //debug!("model:redraw_items_and_status");
-                        let height = i32::from(self.height) - 1;
+                        let height = (self.height as i32) - 1;
                         self.act_move_line_cursor(height);
                         self.act_redraw_items_and_status(&mut curses);
                     }
@@ -394,9 +400,7 @@ impl Model {
     fn draw_items(&mut self, curses: &mut Window) {
         // cursor should be placed on query, so store cursor before printing
         let (old_y, old_x) = curses.getyx();
-
         let (h, _) = curses.get_maxyx();
-        let h = h as usize;
 
         // screen-line: y         <--->   item-line: (height - y - 1)
         //              h-1                          h-(h-1)-1 = 0
@@ -404,15 +408,23 @@ impl Model {
         // screen-line: (h-l-1)   <--->   item-line: l
 
         let lower = self.item_cursor;
-        let max_upper = self.item_cursor + h - (self.reserved_height as usize);
+        let max_upper = self.item_cursor + h - self.reserved_height;
         let upper = min(max_upper, self.items.len());
+
+        debug!("draw_items, lower: {}, upper: {}, height: {}", lower, upper, h);
+
+        // clear item area
+        for i in lower..upper {
+            curses.mv(self.get_item_height(i, h), 0);
+            curses.clrtoeol();
+        }
 
         for i in lower..upper {
             let l = i - lower;
             curses.mv(self.get_item_height(l, h), 0);
             // print the cursor label
             let label = if l == self.line_cursor { ">" } else { " " };
-            curses.cprint(label, COLOR_CURSOR, true);
+            curses.print_with_attr(label, self.theme.cursor());
 
             let item = Arc::clone(
                 self.items
@@ -420,15 +432,12 @@ impl Model {
                     .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", i)),
             );
             self.draw_item(curses, &item, l == self.line_cursor);
-            curses.attr_on(0);
         }
 
         // clear rest of lines
-        // It is an optimization to avoid flickering by avoid erasing contents and then draw new
-        // ones
         for i in upper..max_upper {
             let l = i - lower;
-            curses.mv(self.get_item_height(l, h) as u16, 0);
+            curses.mv(self.get_item_height(l, h), 0);
             curses.clrtoeol();
         }
 
@@ -436,16 +445,15 @@ impl Model {
         curses.mv(old_y, old_x);
     }
 
-    fn get_item_height(&self, l: usize, h: usize) -> u16 {
-        let res = if self.reverse {
-            l + (self.reserved_height as usize)
+    fn get_item_height(&self, l: usize, h: usize) -> usize {
+        if self.reverse {
+            l + self.reserved_height
         } else {
-            h - (self.reserved_height as usize) - 1 - l
-        };
-        res as u16
+            h - self.reserved_height - 1 - l
+        }
     }
 
-    fn get_status_position(&self, cursor_y: u16) -> (u16, u16) {
+    fn get_status_position(&self, cursor_y: usize) -> (usize, usize) {
         match (self.inline_info, self.reverse){
             (false, true) => (1, 0),
             (false, false) => ({ self.height + self.reserved_height - 2 }, 0),
@@ -463,58 +471,59 @@ impl Model {
         curses.clrtoeol();
 
         if self.inline_info{
-            curses.cprint("  <", COLOR_PROMPT, false);
+            curses.print_with_attr("  <", self.theme.prompt());
         };
 
         // display spinner
         if self.reader_stopped {
-            self.print_char(curses, ' ', COLOR_NORMAL, false);
+            self.print_char(curses, ' ', self.theme.normal());
         } else {
             let time = self.timer.elapsed();
             let mills = (time.as_secs() * 1000) as u32 + time.subsec_millis();
             let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-            self.print_char(curses, SPINNERS[index as usize], COLOR_SPINNER, true);
+            self.print_char(curses, SPINNERS[index as usize], self.theme.spinner());
         }
 
         // display matched/total number
-        curses.cprint(
+        curses.print_with_attr(
             format!(" {}/{}", self.items.len(), self.num_read).as_ref(),
-            COLOR_INFO,
-            false,
+            self.theme.info()
         );
 
         // display the matcher mode
         if !self.matcher_mode.is_empty() {
-            curses.cprint(format!("/{}", &self.matcher_mode).as_ref(), COLOR_INFO, false);
+            curses.print_with_attr(format!("/{}", &self.matcher_mode).as_ref(), self.theme.info());
         }
 
         // display the percentage of the number of processed items
         if self.num_processed < self.num_read {
-            curses.cprint(
+            curses.print_with_attr(
                 format!(" ({}%) ", self.num_processed * 100 / self.num_read).as_ref(),
-                COLOR_INFO,
-                false,
+                self.theme.info()
             )
         }
 
         // selected number
         if self.multi_selection && !self.selected.is_empty() {
-            curses.cprint(format!(" [{}]", self.selected.len()).as_ref(), COLOR_INFO, true);
+            curses.print_with_attr(
+                format!(" [{}]", self.selected.len()).as_ref(),
+                Attr { effect: Effect::BOLD, ..self.theme.info()}
+            );
         }
 
         // item cursor
         let line_num_str = format!(" {} ", self.item_cursor + self.line_cursor);
         curses.mv(
             status_y,
-            self.width - (line_num_str.len() as u16),
+            self.width - line_num_str.len(),
         );
-        curses.cprint(&line_num_str, COLOR_INFO, true);
+        curses.print_with_attr(&line_num_str, Attr { effect: Effect::BOLD, ..self.theme.info()});
 
         // restore cursor
         curses.mv(y, x);
     }
 
-    fn get_header_height(&self, query_y: u16, maxy:u16) -> Option<u16> {
+    fn get_header_height(&self, query_y: usize, maxy:usize) -> Option<usize> {
         let (status_height, _) = self.get_status_position(query_y);
         let res = if self.reverse {status_height + 1} else {status_height - 1};
 
@@ -534,7 +543,7 @@ impl Model {
             return;
         }
         let yh = yh.unwrap();
-        let direction = if self.reverse {1} else {-1};
+        let direction = if self.reverse {1 as i64} else {-1};
 
         let mut printer = LinePrinter::builder()
             .container_width(self.width as usize)
@@ -543,17 +552,13 @@ impl Model {
             .build();
 
         for (i, header) in self.headers.iter().enumerate() {
-            let nyh = (i64::from(yh)+(direction*(i as i64))) as u16;
+            let nyh = ((yh as i64) +direction*(i as i64)) as usize;
             curses.mv(nyh, 0);
             curses.clrtoeol();
             curses.mv(nyh, 2);
-            for (ch, attrs) in header.iter(){
-                for (_, attr) in attrs {
-                    curses.attr_on(*attr);
-                }
-                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+            for (ch, attr) in header.iter(){
+                printer.print_char(curses, ch, self.theme.normal(), false);
             }
-
         }
         // restore cursor
         curses.mv(y, x);
@@ -566,7 +571,7 @@ impl Model {
         //debug!("model:draw_query");
 
         // print query
-        curses.mv((if self.reverse { 0 } else { h - 1 }) as u16, 0);
+        curses.mv(if self.reverse { 0 } else { h - 1 }, 0);
         if ! self.inline_info {
             curses.clrtoeol();
         }
@@ -579,9 +584,9 @@ impl Model {
         let index = matched_item.item.get_full_index();
 
         if self.selected.contains_key(&index) {
-            curses.cprint(">", COLOR_SELECTED, true);
+            curses.print_with_attr(">", self.theme.selected());
         } else {
-            curses.cprint(" ", if is_current { COLOR_CURRENT } else { COLOR_NORMAL }, false);
+            curses.print_with_attr(" ", if is_current { self.theme.current()} else { self.theme.normal() });
         }
 
         let (y, x) = curses.getyx();
@@ -618,27 +623,23 @@ impl Model {
         // print out the original content
         curses.mv(y, x);
         printer.reset();
-        if is_current {
-            curses.attr_on(COLOR_CURRENT);
-        }
-
         if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
-            for (ch, attrs) in item.get_text_struct().as_ref().unwrap().iter(){
-                for (_, attr) in attrs {
-                    if is_current && ansi_contains_reset(*attr) {
-                        curses.attr_on(COLOR_CURRENT);
-                    } else {
-                        curses.attr_on(*attr);
-                    }
-                }
-                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+            for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter(){
+//                for (_, attr) in attrs {
+//                    if is_current && ansi_contains_reset(*attr) {
+//                        curses.attr_on(COLOR_CURRENT);
+//                    } else {
+//                        curses.attr_on(*attr);
+//                    }
+//                }
+                printer.print_char(curses, ch, attr, false);
             }
         } else {
             for ch in item.get_text().chars(){
-                printer.print_char(curses, ch, COLOR_NORMAL, false, false);
+                printer.print_char(curses, ch, self.theme.normal(), false);
             }
         }
-        curses.attr_on(0);
+
         curses.clrtoeol();
 
         // print the highlighted content
@@ -651,22 +652,20 @@ impl Model {
                 for (ch_idx, &ch) in text.iter().enumerate() {
                     match matched_indics_iter.peek() {
                         Some(&&match_idx) if ch_idx == match_idx => {
-                            printer.print_char(curses, ch, COLOR_MATCHED, is_current, false);
+                            printer.print_char(curses, ch, self.theme.matched(), false);
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
-                            printer.print_char(curses, ch, COLOR_NORMAL, false, true);
+                            printer.print_char(curses, ch, self.theme.normal(), true);
                         }
                     }
                 }
-                curses.attr_on(0);
             }
 
             Some(MatchedRange::Range(start, end)) => {
                 for (idx, &ch) in text.iter().enumerate() {
-                    printer.print_char(curses, ch, COLOR_MATCHED, is_current, !(idx >= start && idx < end));
+                    printer.print_char(curses, ch, self.theme.matched(), !(idx >= start && idx < end));
                 }
-                curses.attr_on(0);
             }
 
             _ => {}
@@ -682,12 +681,9 @@ impl Model {
             return;
         }
 
-        curses.draw_border();
         if self.preview_cmd.is_none() {
             return;
         }
-
-        curses.attr_on(0);
 
         // cursor should be placed on query, so store cursor before printing
         let (lines, cols) = curses.get_maxyx();
@@ -719,17 +715,16 @@ impl Model {
     }
 
     fn handle_preview_output(&mut self, curses: &mut Window, aoutput: AnsiString){
-
         debug!("model:draw_preview: output = {:?}", &aoutput);
 
         curses.mv(0, 0);
-        aoutput.print(curses);
-        curses.attr_on(0);
-
+        for (ch, attr) in aoutput.iter() {
+            curses.add_char_with_attr(ch, attr);
+        }
         curses.clrtoend();
     }
 
-    fn inject_preview_command<'a>(&'a self, text: &str) -> Cow<'a, str> {
+    fn inject_preview_command(&self, text: &str) -> Cow<str> {
         let cmd = self.preview_cmd
             .as_ref()
             .expect("model:inject_preview_command: invalid preview command");
@@ -753,15 +748,15 @@ impl Model {
         })
     }
 
-    fn print_char(&self, curses: &mut Window, ch: char, color: u16, is_bold: bool) {
+    fn print_char(&self, curses: &mut Window, ch: char, attr: Attr) {
         if ch != '\t' {
-            curses.caddch(ch, color, is_bold);
+            curses.add_char_with_attr(ch, attr);
         } else {
             // handle tabstop
             let (_, x) = curses.getyx();
             let rest = self.tabstop - (x as usize - 2) % self.tabstop;
             for _ in 0..rest {
-                curses.caddch(' ', color, is_bold);
+                curses.add_char_with_attr(' ', attr);
             }
         }
     }
@@ -775,7 +770,7 @@ impl Model {
         let mut item_cursor = self.item_cursor as i32;
         let item_len = self.items.len() as i32;
 
-        let height = i32::from(self.height);
+        let height = self.height as i32;
 
         line_cursor += diff;
         if line_cursor >= height {
@@ -952,17 +947,17 @@ impl LinePrinter {
         self.end = self.start + self.container_width;
     }
 
-    fn caddch(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
+    fn caddch(&mut self, curses: &mut Window, ch: char, attr: Attr, skip: bool) {
         let w = ch.width().unwrap_or(2);
 
         if skip {
-            curses.move_cursor_right(w as u16);
+            curses.move_cursor_right(w);
         } else {
-            curses.caddch(ch, color, is_bold);
+            curses.add_char_with_attr(ch, attr);
         }
     }
 
-    fn print_char_raw(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
+    fn print_char_raw(&mut self, curses: &mut Window, ch: char, attr: Attr, skip: bool) {
         // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
         // the hidden chracter
 
@@ -976,23 +971,23 @@ impl LinePrinter {
         } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
             // print left ".."
             for _ in 0..min(w, current - self.start + 1) {
-                self.caddch(curses, '.', color, is_bold, skip);
+                self.caddch(curses, '.', attr, skip);
             }
         } else if self.end - current <= 2 && (self.text_width > self.end) {
             // print right ".."
             for _ in 0..min(w, self.end - current) {
-                self.caddch(curses, '.', color, is_bold, skip);
+                self.caddch(curses, '.', attr, skip);
             }
         } else {
-            self.caddch(curses, ch, color, is_bold, skip);
+            self.caddch(curses, ch, attr, skip);
         }
 
         self.current += w as i32;
     }
 
-    pub fn print_char(&mut self, curses: &mut Window, ch: char, color: u16, is_bold: bool, skip: bool) {
+    pub fn print_char(&mut self, curses: &mut Window, ch: char, attr: Attr, skip: bool) {
         if ch != '\t' {
-            self.print_char_raw(curses, ch, color, is_bold, skip);
+            self.print_char_raw(curses, ch, attr, skip);
         } else {
             // handle tabstop
             let rest = if self.current < 0 {
@@ -1001,7 +996,7 @@ impl LinePrinter {
                 self.tabstop - (self.current as usize) % self.tabstop
             };
             for _ in 0..rest {
-                self.print_char_raw(curses, ' ', color, is_bold, skip);
+                self.print_char_raw(curses, ' ', attr, skip);
             }
         }
     }

@@ -141,16 +141,16 @@ impl Query {
         Box::new(move |curses| {
             match mode {
                 QueryMode::CMD => {
-                    curses.cprint(&cmd_prompt, COLOR_PROMPT, false);
+                    curses.print_with_attr(&cmd_prompt, curses.theme.prompt());
                 }
                 QueryMode::QUERY => {
-                    curses.cprint(&query_prompt, COLOR_PROMPT, false);
+                    curses.print_with_attr(&query_prompt, curses.theme.prompt());
                 }
             }
 
-            curses.printw(&before);
+            curses.print(&before);
             let (cursor_y, cursor_x) = curses.getyx();
-            curses.printw(&after);
+            curses.print(&after);
             let (qend_y, qend_x) = curses.getyx();
             curses.mv(cursor_y, cursor_x);
             (qend_y, qend_x)

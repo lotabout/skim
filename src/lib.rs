@@ -19,13 +19,13 @@ mod score;
 mod sender;
 mod util;
 mod previewer;
+mod theme;
 
 use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
 use item::Item;
 use nix::libc;
-use nix::sys::signal::{pthread_sigmask, sigaction, SaFlags, SigAction, SigHandler, SigSet, SigmaskHow, Signal};
 pub use options::SkimOptions;
 pub use output::SkimOutput;
 use std::env;
@@ -36,6 +36,7 @@ use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use tuikit::term::{Term, TermOptions, TermHeight};
 
 const REFRESH_DURATION: u64 = 200;
 
@@ -45,30 +46,19 @@ extern "C" fn handle_sigwiwnch(_: i32) {}
 
 impl Skim {
     pub fn run_with(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> Option<SkimOutput> {
-        let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
-        //------------------------------------------------------------------------------
-        // register terminal resize event, `pthread_sigmask` should be run before any thread.
+        let min_height = options
+            .min_height
+            .map(Skim::parse_height_string)
+            .expect("min_height should have default values");
+        let height = options
+            .height
+            .map(Skim::parse_height_string)
+            .expect("height should have default values");
 
-        let mut sigset = SigSet::empty();
-        sigset.add(Signal::SIGWINCH);
-        let _ = pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&sigset), None);
-
-        // SIGWINCH is ignored by mac by default, thus we need to register an empty handler
-        let action = SigAction::new(SigHandler::Handler(handle_sigwiwnch), SaFlags::empty(), SigSet::empty());
-        unsafe {
-            let _ = sigaction(Signal::SIGWINCH, &action);
-        }
-
-        let tx_input_clone = tx_input.clone();
-        thread::spawn(move || {
-            // listen to the resize event;
-            loop {
-                let _errno = sigset.wait();
-                if tx_input_clone.send((EvActRedraw, Box::new(true))).is_err() {
-                    break;
-                }
-            }
-        });
+        let term = Arc::new(Term::with_options(TermOptions::default()
+            .min_height(min_height)
+            .height(height))
+            .unwrap());
 
         //------------------------------------------------------------------------------
         // curses
@@ -91,7 +81,7 @@ impl Skim {
             }
         });
 
-        let curses = Curses::new(&options);
+        let curses = Curses::new(term.clone(), &options);
 
         //------------------------------------------------------------------------------
         // query
@@ -116,8 +106,9 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // input
+        let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
         let tx_input_clone = tx_input.clone();
-        let mut input = input::Input::new(tx_input_clone);
+        let mut input = input::Input::new(term.clone(), tx_input_clone);
 
         input.parse_keymaps(&options.bind);
 
@@ -357,5 +348,15 @@ impl Skim {
         }
 
         ret
+    }
+
+    // 10 -> TermHeight::Fixed(10)
+    // 10% -> TermHeight::Percent(10)
+    fn parse_height_string(string: &str) -> TermHeight {
+        if string.ends_with('%') {
+            TermHeight::Percent(string[0..string.len() - 1].parse().unwrap_or(100))
+        } else {
+            TermHeight::Fixed(string.parse().unwrap_or(0))
+        }
     }
 }

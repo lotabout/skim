@@ -2,7 +2,23 @@
 use tuikit::attr::{Color, Effect, Attr};
 use crate::options::SkimOptions;
 
-pub const DEFAULT_THEME: ColorTheme = ColorTheme::dark256();
+pub const DEFAULT_THEME: ColorTheme = ColorTheme {
+    fg:               Color::Default,
+    bg:               Color::Default,
+    matched:          Color::AnsiValue(108),
+    matched_bg:       Color::AnsiValue(0),
+    current:          Color::AnsiValue(254),
+    current_bg:       Color::AnsiValue(236),
+    current_match:    Color::AnsiValue(151),
+    current_match_bg: Color::AnsiValue(236),
+    spinner:          Color::AnsiValue(148),
+    info:             Color::AnsiValue(144),
+    prompt:           Color::AnsiValue(110),
+    cursor:           Color::AnsiValue(161),
+    selected:         Color::AnsiValue(168),
+    header:           Color::AnsiValue(109),
+    border:           Color::AnsiValue(59),
+};
 
 #[rustfmt::skip]
 #[derive(Copy, Clone, Debug)]
@@ -134,9 +150,9 @@ impl ColorTheme {
                 let r = u8::from_str_radix(&color[1][1..3], 16).unwrap_or(255);
                 let g = u8::from_str_radix(&color[1][3..5], 16).unwrap_or(255);
                 let b = u8::from_str_radix(&color[1][5..7], 16).unwrap_or(255);
-                ColorWrapper(Box::new(color::Rgb(r, g, b)))
+                Color::Rgb(r, g, b)
             } else {
-                ColorWrapper(Box::new(color::AnsiValue(color[1].parse::<u8>().unwrap_or(255))))
+                Color::AnsiValue(color[1].parse::<u8>().unwrap_or(255))
             };
 
             match color[0] {

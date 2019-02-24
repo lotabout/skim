@@ -12,8 +12,8 @@ use std::thread;
 
 pub struct PreviewInput {
     pub cmd: String,
-    pub lines: u16,
-    pub columns: u16,
+    pub lines: usize,
+    pub columns: usize,
 }
 
 struct PreviewThread {
