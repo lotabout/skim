@@ -103,7 +103,7 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     let mut ret = HashMap::new();
     ret.insert(Key::ESC, (Event::EvActAbort, None));
     ret.insert(Key::Ctrl('c'), (Event::EvActAbort, None));
-    ret.insert(Key::Char('g'), (Event::EvActAbort, None));
+    ret.insert(Key::Ctrl('g'), (Event::EvActAbort, None));
 
     ret.insert(Key::Enter, (Event::EvActAccept, None));
 
