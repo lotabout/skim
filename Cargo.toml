@@ -9,6 +9,7 @@ repository = "https://github.com/lotabout/skim"
 readme  = "README.md"
 keywords = ["fuzzy", "menu", "util"]
 license = "MIT"
+edition = "2018"
 
 [lib]
 name = "skim"
@@ -25,11 +26,12 @@ regex = "0.2"
 lazy_static = "0.2.8"
 shlex = "0.1.1"
 unicode-width = "0.1.4"
-termion = "1.5.1"
 log = "0.3.8"
 env_logger = "0.4.3"
 time = "0.1.38"
 clap = "2.26.2"
+tuikit = "0.1.3"
+vte = "0.3.3"
 
 [features]
 default = []

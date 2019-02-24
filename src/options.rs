@@ -270,8 +270,9 @@ impl<'a> SkimOptions<'a> {
         Self { inline_info, ..self }
     }
     pub fn header(self, header: &'a str) -> Self {
-        Self { header: Some(header),
-               ..self
+        Self {
+            header: Some(header),
+            ..self
         }
     }
 }
@@ -311,7 +312,7 @@ impl<'a> Default for SkimOptions<'a> {
             print_cmd: false,
             no_hscroll: false,
             inline_info: false,
-            header: None
+            header: None,
         }
     }
 }

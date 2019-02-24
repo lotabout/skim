@@ -1,4 +1,4 @@
-use item::Item;
+use crate::item::Item;
 use std::sync::Arc;
 
 pub struct SkimOutput {

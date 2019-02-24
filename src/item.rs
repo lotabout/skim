@@ -1,8 +1,8 @@
 // An item is line of text that read from `find` command or stdin together with
 // the internal states, such as selected or not
 
-use ansi::{ANSIParser, AnsiString};
-use field::*;
+use crate::ansi::{ANSIParser, AnsiString};
+use crate::field::*;
 use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -69,7 +69,7 @@ impl<'a> Item {
             ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
-            AnsiString{stripped: parse_transform_fields(delimiter, &orig_text, trans_fields), ansi_states: Vec::new()}
+            AnsiString::new_string(parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if ansi_enabled {
             // not transformed, ansi
             ansi_parser.parse_ansi(&orig_text)
@@ -79,9 +79,9 @@ impl<'a> Item {
         };
 
         let mut ret = Item {
-            index: index,
+            index,
             orig_text: orig_text.into_owned(),
-            text: text,
+            text,
             chars: Vec::new(),
             using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
@@ -109,7 +109,7 @@ impl<'a> Item {
         if !self.using_transform_fields && !self.ansi_enabled {
             &self.orig_text
         } else {
-            &self.text.stripped
+            &self.text.get_stripped()
         }
     }
 
@@ -131,7 +131,7 @@ impl<'a> Item {
             let text = ansi_parser.parse_ansi(&self.orig_text);
             Cow::Owned(text.into_inner())
         } else if !self.using_transform_fields && self.ansi_enabled {
-            Cow::Borrowed(&self.text.stripped)
+            Cow::Borrowed(self.text.get_stripped())
         } else {
             Cow::Borrowed(&self.orig_text)
         }

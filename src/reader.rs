@@ -1,5 +1,5 @@
-use event::{Event, EventArg, EventReceiver, EventSender};
-use item::Item;
+use crate::event::{Event, EventArg, EventReceiver, EventSender};
+use crate::item::Item;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
@@ -12,10 +12,10 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use field::FieldRange;
-use options::SkimOptions;
+use crate::field::FieldRange;
+use crate::options::SkimOptions;
+use crate::sender::CachedSender;
 use regex::Regex;
-use sender::CachedSender;
 use std::env;
 
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -49,8 +49,7 @@ impl ReaderOption {
         }
 
         if let Some(delimiter) = options.delimiter {
-            self.delimiter =
-                Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
+            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
         if let Some(transform_fields) = options.with_nth {
@@ -95,7 +94,8 @@ impl Reader {
     }
 
     pub fn parse_options(&mut self, options: &SkimOptions) {
-        let mut option = self.option
+        let mut option = self
+            .option
             .write()
             .expect("reader:parse_options: failed to lock option");
         option.parse_options(options);
@@ -121,7 +121,8 @@ impl Reader {
             match ev {
                 Event::EvReaderRestart => {
                     // close existing command or file if exists
-                    let (cmd, query, force_update) = *arg.downcast::<(String, String, bool)>()
+                    let (cmd, query, force_update) = *arg
+                        .downcast::<(String, String, bool)>()
                         .expect("reader:EvReaderRestart: failed to get argument");
                     if !force_update && cmd == last_command && query == last_query {
                         continue;

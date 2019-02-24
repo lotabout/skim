@@ -1,12 +1,12 @@
-use event::{Event, EventReceiver, EventSender};
-use item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::event::{Event, EventReceiver, EventSender};
+use crate::item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-use options::SkimOptions;
+use crate::options::SkimOptions;
+use crate::score;
 use regex::Regex;
-use score;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -136,7 +136,8 @@ impl Matcher {
             match ev {
                 Event::EvMatcherRestart => {
                     num_processed = 0;
-                    let query = arg.downcast::<String>()
+                    let query = arg
+                        .downcast::<String>()
                         .expect("matcher:EvMatcherRestart: failed to get arguments");
 
                     // notifiy the model that the query had been changed
@@ -147,14 +148,16 @@ impl Matcher {
                         MatcherMode::Exact => "EX".to_string(),
                         _ => "".to_string(),
                     };
-                    let _ = self.tx_result
+                    let _ = self
+                        .tx_result
                         .send((Event::EvModelNotifyMatcherMode, Box::new(mode_string)));
 
                     matcher_engine = Some(EngineFactory::build(&query, matcher_mode));
                 }
 
                 Event::EvMatcherNewItem => {
-                    let items: ItemGroup = *arg.downcast()
+                    let items: ItemGroup = *arg
+                        .downcast()
                         .expect("matcher:EvMatcherNewItem: failed to get arguments");
                     num_processed += items.len();
 
@@ -165,7 +168,8 @@ impl Matcher {
                     }
 
                     // report the number of processed items
-                    let _ = self.tx_result
+                    let _ = self
+                        .tx_result
                         .send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                 }
 
@@ -175,7 +179,8 @@ impl Matcher {
                 Event::EvSenderStopped => {
                     // Since matcher is single threaded, sender stopped means all items are
                     // processed.
-                    let _ = self.tx_result
+                    let _ = self
+                        .tx_result
                         .send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
                     let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
                 }
@@ -214,9 +219,9 @@ fn build_rank(score: i64, index: i64, begin: i64, end: i64) -> [i64; 4] {
     for (idx, criteria) in (*RANK_CRITERION
         .read()
         .expect("matcher:build_rank: failed to lock RANK_CRITERION"))
-        .iter()
-        .enumerate()
-        .take(4)
+    .iter()
+    .enumerate()
+    .take(4)
     {
         rank[idx] = match *criteria {
             RankCriteria::Score => score,

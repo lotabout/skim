@@ -1,12 +1,5 @@
-extern crate env_logger;
-extern crate nix;
-extern crate regex;
-extern crate termion;
-extern crate unicode_width;
 #[macro_use]
 extern crate log;
-extern crate clap;
-
 #[macro_use]
 extern crate lazy_static;
 mod ansi;
@@ -20,85 +13,62 @@ mod model;
 mod options;
 mod orderedvec;
 mod output;
+mod previewer;
 mod query;
 mod reader;
 mod score;
 mod sender;
+mod theme;
 mod util;
-mod previewer;
 
 use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
 use item::Item;
-use nix::libc;
-use nix::sys::signal::{pthread_sigmask, sigaction, SaFlags, SigAction, SigHandler, SigSet, SigmaskHow, Signal};
+use nix::unistd::isatty;
 pub use options::SkimOptions;
 pub use output::SkimOutput;
 use std::env;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::io::BufRead;
+use std::io::BufReader;
+use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use tuikit::term::{Term, TermHeight, TermOptions};
 
 const REFRESH_DURATION: u64 = 200;
 
 pub struct Skim {}
 
-extern "C" fn handle_sigwiwnch(_: i32) {}
-
 impl Skim {
     pub fn run_with(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> Option<SkimOutput> {
-        let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
-        //------------------------------------------------------------------------------
-        // register terminal resize event, `pthread_sigmask` should be run before any thread.
+        let min_height = options
+            .min_height
+            .map(Skim::parse_height_string)
+            .expect("min_height should have default values");
+        let height = options
+            .height
+            .map(Skim::parse_height_string)
+            .expect("height should have default values");
 
-        let mut sigset = SigSet::empty();
-        sigset.add(Signal::SIGWINCH);
-        let _ = pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&sigset), None);
-
-        // SIGWINCH is ignored by mac by default, thus we need to register an empty handler
-        let action = SigAction::new(SigHandler::Handler(handle_sigwiwnch), SaFlags::empty(), SigSet::empty());
-        unsafe {
-            let _ = sigaction(Signal::SIGWINCH, &action);
-        }
-
-        let tx_input_clone = tx_input.clone();
-        thread::spawn(move || {
-            // listen to the resize event;
-            loop {
-                let _errno = sigset.wait();
-                if tx_input_clone.send((EvActRedraw, Box::new(true))).is_err() {
-                    break;
-                }
-            }
-        });
+        let term = Arc::new(Term::with_options(TermOptions::default().min_height(min_height).height(height)).unwrap());
 
         //------------------------------------------------------------------------------
         // curses
 
-        // termion require the stdin to be terminal file
-        // see: https://github.com/ticki/termion/issues/64
-        // Here is a workaround. But reader will need to know the real stdin.
-        let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
-
+        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
         let source = source.or_else(|| {
-            if !istty {
-                unsafe {
-                    let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
-                    let tty = File::open("/dev/tty").expect("main: failed to open /dev/tty");
-                    libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
-                    Some(Box::new(BufReader::new(stdin)))
-                }
+            let stdin = std::io::stdin();
+            if !isatty(stdin.as_raw_fd()).unwrap_or(true) {
+                Some(Box::new(BufReader::new(stdin)))
             } else {
                 None
             }
         });
 
-        let curses = Curses::new(&options);
+        let curses = Curses::new(term.clone(), &options);
 
         //------------------------------------------------------------------------------
         // query
@@ -123,8 +93,9 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // input
+        let (tx_input, rx_input): (EventSender, EventReceiver) = channel();
         let tx_input_clone = tx_input.clone();
-        let mut input = input::Input::new(tx_input_clone);
+        let mut input = input::Input::new(term.clone(), tx_input_clone);
 
         input.parse_keymaps(&options.bind);
 
@@ -140,12 +111,12 @@ impl Skim {
 
         model.parse_options(&options);
 
-        if options.preview.is_some(){
+        if options.preview.is_some() {
             let (tx_preview, rx_preview) = channel();
             model.set_previewer(tx_preview);
             // previewer
             let tx_model_clone = tx_model.clone();
-            std::thread::spawn(move ||{
+            std::thread::spawn(move || {
                 previewer::run(rx_preview, tx_model_clone);
             });
         }
@@ -355,14 +326,20 @@ impl Skim {
                     let _ = tx_model.send((EvActRedraw, Box::new(query.get_print_func())));
                 }
 
-                EvReportCursorPos => {
-                    let (y, x): (u16, u16) = *arg.downcast().expect("EvReportCursorPos: failed to get arguments");
-                    debug!("main:EvReportCursorPos: {}/{}", y, x);
-                }
                 _ => {}
             }
         }
 
         ret
+    }
+
+    // 10 -> TermHeight::Fixed(10)
+    // 10% -> TermHeight::Percent(10)
+    fn parse_height_string(string: &str) -> TermHeight {
+        if string.ends_with('%') {
+            TermHeight::Percent(string[0..string.len() - 1].parse().unwrap_or(100))
+        } else {
+            TermHeight::Fixed(string.parse().unwrap_or(0))
+        }
     }
 }

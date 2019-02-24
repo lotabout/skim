@@ -149,6 +149,7 @@ class Tmux(object):
                 continue
             else:
                 self._go('send-keys', '-t', f'{target}', f'{key}')
+            time.sleep(0.01)
 
     def paste(self, content):
         subprocess.run(["tmux", "setb", f"{content}", ";",
@@ -535,6 +536,7 @@ class TestSkim(TestBase):
         ## the dot  accounts for spinner
         RE = re.compile(r'. ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])?')
         self.tmux.send_keys(f"echo -e 'a1\\na2\\na3\\na4' | {self.sk('--inline-info')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
         self.tmux.send_keys("a")
         self.tmux.until(lambda lines: lines[-1].find(INLINE_INFO_SEP) != -1)
         lines = self.tmux.capture()
@@ -549,6 +551,7 @@ class TestSkim(TestBase):
 
         # test that inline info is does not overwrite query
         self.tmux.send_keys(f"echo -e 'a1\\nabcd2\\nabcd3\\nabcd4' | {self.sk('--inline-info')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
         self.tmux.send_keys("bc", Ctrl("a"), "a")
         self.tmux.until(lambda lines: lines[-1].find(INLINE_INFO_SEP) != -1 and
                         lines[-1].split(INLINE_INFO_SEP)[0] == "> abc ")

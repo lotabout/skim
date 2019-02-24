@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::cmp::{min, max};
+use std::cmp::{max, min};
 
 lazy_static! {
     static ref FIELD_RANGE: Regex = Regex::new(r"^(?P<left>-?\d+)?(?P<sep>\.\.)?(?P<right>-?\d+)?$").unwrap();
@@ -63,7 +63,7 @@ impl FieldRange {
                 if num == 0 || num > length {
                     None
                 } else {
-                    Some((num-1, num))
+                    Some((num - 1, num))
                 }
             }
             LeftInf(right) => {
@@ -81,7 +81,7 @@ impl FieldRange {
                     None
                 } else {
                     let left = max(left, 1);
-                    Some((left-1, length))
+                    Some((left - 1, length))
                 }
             }
             Both(left, right) => {
@@ -90,7 +90,7 @@ impl FieldRange {
                 if length == 0 || right == 0 || left > right || left > length {
                     None
                 } else {
-                    Some((max(left, 1)-1, min(right, length)))
+                    Some((max(left, 1) - 1, min(right, length)))
                 }
             }
         }
@@ -98,7 +98,7 @@ impl FieldRange {
 
     fn translate_neg(idx: i32, length: usize) -> usize {
         let len = length as i32;
-        let idx = if idx < 0 {idx + len + 1} else {idx};
+        let idx = if idx < 0 { idx + len + 1 } else { idx };
         max(0, idx) as usize
     }
 }
@@ -115,7 +115,6 @@ fn get_ranges_by_delimiter(delimiter: &Regex, text: &str) -> Vec<(usize, usize)>
     ranges.push((last, text.len()));
     ranges
 }
-
 
 // e.g. delimiter = Regex::new(",").unwrap()
 // Note that this is differnt with `to_index_pair`, it uses delimiters like ".*?,"
