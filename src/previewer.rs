@@ -1,5 +1,5 @@
-use crate::event::{Event, EventSender};
 use crate::ansi::AnsiString;
+use crate::event::{Event, EventSender};
 use nix::libc;
 
 use std::env;

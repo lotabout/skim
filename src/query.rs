@@ -100,7 +100,8 @@ impl Query {
     }
 
     pub fn get_cmd(&self) -> String {
-        let arg: String = self.cmd_before
+        let arg: String = self
+            .cmd_before
             .iter()
             .cloned()
             .chain(self.cmd_after.iter().cloned().rev())

@@ -13,30 +13,27 @@ mod model;
 mod options;
 mod orderedvec;
 mod output;
+mod previewer;
 mod query;
 mod reader;
 mod score;
 mod sender;
-mod util;
-mod previewer;
 mod theme;
+mod util;
 
 use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
 use item::Item;
-use nix::libc;
 pub use options::SkimOptions;
 pub use output::SkimOutput;
 use std::env;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::io::BufRead;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tuikit::term::{Term, TermOptions, TermHeight};
+use tuikit::term::{Term, TermHeight, TermOptions};
 
 const REFRESH_DURATION: u64 = 200;
 
@@ -53,31 +50,10 @@ impl Skim {
             .map(Skim::parse_height_string)
             .expect("height should have default values");
 
-        let term = Arc::new(Term::with_options(TermOptions::default()
-            .min_height(min_height)
-            .height(height))
-            .unwrap());
+        let term = Arc::new(Term::with_options(TermOptions::default().min_height(min_height).height(height)).unwrap());
 
         //------------------------------------------------------------------------------
         // curses
-
-        // termion require the stdin to be terminal file
-        // see: https://github.com/ticki/termion/issues/64
-        // Here is a workaround. But reader will need to know the real stdin.
-        let istty = unsafe { libc::isatty(libc::STDIN_FILENO as i32) } != 0;
-
-        let source = source.or_else(|| {
-            if !istty {
-                unsafe {
-                    let stdin = File::from_raw_fd(libc::dup(libc::STDIN_FILENO));
-                    let tty = File::open("/dev/tty").expect("main: failed to open /dev/tty");
-                    libc::dup2(tty.into_raw_fd(), libc::STDIN_FILENO);
-                    Some(Box::new(BufReader::new(stdin)))
-                }
-            } else {
-                None
-            }
-        });
 
         let curses = Curses::new(term.clone(), &options);
 
@@ -122,12 +98,12 @@ impl Skim {
 
         model.parse_options(&options);
 
-        if options.preview.is_some(){
+        if options.preview.is_some() {
             let (tx_preview, rx_preview) = channel();
             model.set_previewer(tx_preview);
             // previewer
             let tx_model_clone = tx_model.clone();
-            std::thread::spawn(move ||{
+            std::thread::spawn(move || {
                 previewer::run(rx_preview, tx_model_clone);
             });
         }

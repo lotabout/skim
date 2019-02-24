@@ -3,9 +3,9 @@ use crate::event::{parse_action, Event, EventSender};
 /// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
 use std::collections::HashMap;
 use std::sync::Arc;
-use tuikit::term::Term;
-use tuikit::key::{Key, from_keyname};
 use tuikit::event::Event as TuiEvent;
+use tuikit::key::{from_keyname, Key};
+use tuikit::term::Term;
 
 pub struct Input {
     tx_input: EventSender,
@@ -44,9 +44,9 @@ impl Input {
                             let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
                         }
                     }
-                }
+                },
 
-                Ok(TuiEvent::Resize {..}) => {
+                Ok(TuiEvent::Resize { .. }) => {
                     let _ = self.tx_input.send((Event::EvActRedraw, Box::new(true)));
                 }
 

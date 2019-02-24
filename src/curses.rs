@@ -3,13 +3,13 @@
 
 //use ncurses::*;
 use crate::options::SkimOptions;
-use std::cmp::min;
-use unicode_width::UnicodeWidthChar;
-use std::sync::Arc;
-use tuikit::term::Term;
-use tuikit::attr::Attr;
-use tuikit::screen::{Screen, Cell};
 use crate::theme::{ColorTheme, DEFAULT_THEME};
+use std::cmp::min;
+use std::sync::Arc;
+use tuikit::attr::Attr;
+use tuikit::screen::{Cell, Screen};
+use tuikit::term::Term;
+use unicode_width::UnicodeWidthChar;
 
 //==============================================================================
 const MIN_HEIGHT: usize = 3;
@@ -98,13 +98,13 @@ impl Window {
     fn calc_size(border: &Option<Direction>, top: usize, right: usize, bottom: usize, left: usize) -> (usize, usize) {
         match *border {
             Some(Direction::Up) | Some(Direction::Down) => (right - left, bottom - top - 1),
-            Some(Direction::Left) | Some(Direction::Right) => (right - left-1, bottom - top),
+            Some(Direction::Left) | Some(Direction::Right) => (right - left - 1, bottom - top),
             None => (right - left, bottom - top),
         }
     }
 
     pub fn reshape(&mut self, top: usize, right: usize, bottom: usize, left: usize) {
-//        debug!("window:reshape, TRBL: {}/{}/{}/{}", self.top, self.right, self.bottom, self.left);
+        // debug!("window:reshape, TRBL: {}/{}/{}/{}", self.top, self.right, self.bottom, self.left);
         self.top = top;
         self.right = right;
         self.bottom = bottom;
@@ -164,10 +164,6 @@ impl Window {
         }
     }
 
-    pub fn add_char(&mut self, ch: char) {
-        self.add_char_with_attr(ch, self.theme.normal());
-    }
-
     pub fn add_char_with_attr(&mut self, ch: char, attr: Attr) {
         self.add_char_inner(ch, attr);
     }
@@ -215,7 +211,7 @@ impl Window {
             return;
         }
 
-        self.screen.put_cell(y, x, Cell {ch, attr});
+        self.screen.put_cell(y, x, Cell { ch, attr });
 
         if target_x > max_x {
             self.mv(y + 1, 0);
@@ -243,41 +239,46 @@ impl Window {
 
     fn adjust_cursor_offset(&self, y: usize, x: usize) -> (usize, usize) {
         let (row, col) = match self.border {
-            Some(Direction::Up) => (y+1, x),
-            Some(Direction::Left) => (y, x+1),
-            _ => (y, x)
+            Some(Direction::Up) => (y + 1, x),
+            Some(Direction::Left) => (y, x + 1),
+            _ => (y, x),
         };
 
         (self.top + row, self.left + col)
     }
 
     fn draw_border(&mut self, term: &Term) {
-        debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
+        debug!(
+            "curses:window:draw_border: TRBL: {}, {}, {}, {}",
+            self.top, self.right, self.bottom, self.left
+        );
         match self.border {
             Some(Direction::Up) => {
-                let _ = term.print_with_attr(self.top,
-                                     self.left,
-                                     &"─".repeat(self.right - self.left),
-                                     self.theme.border());
+                let _ = term.print_with_attr(
+                    self.top,
+                    self.left,
+                    &"─".repeat(self.right - self.left),
+                    self.theme.border(),
+                );
             }
             Some(Direction::Down) => {
-                let _ = term.print_with_attr(self.bottom-1,
-                                     self.left,
-                                     &"─".repeat(self.right - self.left),
-                                     self.theme.border());
+                let _ = term.print_with_attr(
+                    self.bottom - 1,
+                    self.left,
+                    &"─".repeat(self.right - self.left),
+                    self.theme.border(),
+                );
             }
-            Some(Direction::Left) => for i in self.top..self.bottom {
-                let _ = term.print_with_attr(i,
-                                     self.left,
-                                     "│",
-                                     self.theme.border());
-            },
-            Some(Direction::Right) => for i in self.top..self.bottom {
-                let _ = term.print_with_attr(i,
-                                     self.right-1,
-                                     "│",
-                                     self.theme.border());
-            },
+            Some(Direction::Left) => {
+                for i in self.top..self.bottom {
+                    let _ = term.print_with_attr(i, self.left, "│", self.theme.border());
+                }
+            }
+            Some(Direction::Right) => {
+                for i in self.top..self.bottom {
+                    let _ = term.print_with_attr(i, self.right - 1, "│", self.theme.border());
+                }
+            }
             _ => {}
         }
     }
@@ -366,7 +367,10 @@ impl Curses {
             preview_shown: preview_cmd_exist && preview_shown,
 
             win_main: Window::new(WindowOption::default()),
-            win_preview: Window::new(WindowOption {wrap: preview_wrap, ..WindowOption::default()}),
+            win_preview: Window::new(WindowOption {
+                wrap: preview_wrap,
+                ..WindowOption::default()
+            }),
 
             theme: ColorTheme::init_from_options(options),
         };

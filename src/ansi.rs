@@ -1,9 +1,9 @@
 // Parse ANSI attr code
-use tuikit::attr::{Attr, Effect, Color};
-use std::default::Default;
-use vte::Perform;
-use std::mem;
 use std::borrow::Cow;
+use std::default::Default;
+use std::mem;
+use tuikit::attr::{Attr, Color, Effect};
+use vte::Perform;
 
 /// An ANSI Parser, will parse one line at a time.
 ///
@@ -171,7 +171,6 @@ impl ANSIParser {
     }
 }
 
-
 #[derive(Clone, Debug)]
 /// A String that contains ANSI state (e.g. colors)
 ///
@@ -193,7 +192,7 @@ impl AnsiString {
         let stripped: Cow<'static, str> = Cow::Owned(string);
         Self {
             stripped: stripped.clone(),
-            fragments: vec![(Attr::default(), stripped.clone())]
+            fragments: vec![(Attr::default(), stripped.clone())],
         }
     }
 
@@ -276,7 +275,8 @@ mod tests {
         let attr = Attr {
             fg: Color::Rgb(70, 130, 180),
             bg: Color::Rgb(5, 10, 15),
-            ..Attr::default()};
+            ..Attr::default()
+        };
 
         assert_eq!(Some(('h', attr)), it.next());
         assert_eq!(Some(('i', attr)), it.next());
@@ -298,4 +298,3 @@ mod tests {
         assert_eq!("ab", ansistring.into_inner())
     }
 }
-

@@ -130,10 +130,10 @@ pub fn fuzzy_match(choice: &[char], pattern: &[char]) -> Option<(i64, Vec<usize>
                 .map(|(back_ref, cur)| {
                     let adj_num = next.idx - cur.idx - 1;
                     let final_score = cur.final_score + next.score + if adj_num == 0 {
-                        BONUS_ADJACENCY
-                    } else {
-                        PENALTY_UNMATCHED * adj_num as i64
-                    };
+                            BONUS_ADJACENCY
+                        } else {
+                            PENALTY_UNMATCHED * adj_num as i64
+                        };
                     (back_ref, final_score, adj_num)
                 })
                 .max_by_key(|&(_, x, _)| x)

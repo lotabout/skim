@@ -1,7 +1,8 @@
-///! Handle the color theme
-use tuikit::attr::{Color, Effect, Attr};
 use crate::options::SkimOptions;
+///! Handle the color theme
+use tuikit::attr::{Attr, Color, Effect};
 
+#[rustfmt::skip]
 pub const DEFAULT_THEME: ColorTheme = ColorTheme {
     fg:               Color::Default,
     bg:               Color::Default,
@@ -41,6 +42,7 @@ pub struct ColorTheme {
 }
 
 #[rustfmt::skip]
+#[allow(dead_code)]
 impl ColorTheme {
     pub fn init_from_options(options: &SkimOptions) -> ColorTheme {
         // register

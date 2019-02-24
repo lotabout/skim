@@ -5,6 +5,9 @@ use crate::field::get_string_by_range;
 use crate::item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
 use crate::options::SkimOptions;
 use crate::orderedvec::OrderedVec;
+use crate::previewer::PreviewInput;
+use crate::theme::{ColorTheme, DEFAULT_THEME};
+use crate::util::escape_single_quote;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::{max, min};
@@ -12,11 +15,8 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use unicode_width::UnicodeWidthChar;
-use crate::util::escape_single_quote;
-use crate::previewer::PreviewInput;
-use crate::theme::{ColorTheme, DEFAULT_THEME};
 use tuikit::attr::{Attr, Effect};
+use unicode_width::UnicodeWidthChar;
 
 // write query & returns (y,x) after query
 pub type QueryPrintClosure = Box<Fn(&mut Window) -> (usize, usize) + Send>;
@@ -159,9 +159,9 @@ impl Model {
             self.inline_info = true;
         }
 
-        match options.header{
-            None => {},
-            Some("") => {},
+        match options.header {
+            None => {}
+            Some("") => {}
             Some(header) => {
                 self.reserved_height += 1;
                 self.headers.push(AnsiString::from_str(header));
@@ -195,7 +195,8 @@ impl Model {
 
                     Event::EvModelDrawQuery => {
                         //debug!("model:EvModelDrawQuery:query");
-                        let print_query_func = *arg.downcast::<QueryPrintClosure>()
+                        let print_query_func = *arg
+                            .downcast::<QueryPrintClosure>()
                             .expect("model:EvModelDrawQuery: failed to get argument");
                         self.draw_query(&mut curses.win_main, &print_query_func);
                         curses.refresh();
@@ -207,14 +208,16 @@ impl Model {
                     }
                     Event::EvModelNewPreview => {
                         //debug!("model:EvModelNewPreview:handle_preview_output");
-                        let preview_output = *arg.downcast::<AnsiString>()
+                        let preview_output = *arg
+                            .downcast::<AnsiString>()
                             .expect("model:EvModelNewPreview: failed to get argument");
                         self.handle_preview_output(&mut curses.win_preview, preview_output);
                     }
 
                     Event::EvModelNotifyProcessed => {
                         //debug!("model:EvModelNotifyProcessed:items_and_status");
-                        let num_processed = *arg.downcast::<usize>()
+                        let num_processed = *arg
+                            .downcast::<usize>()
                             .expect("model:EvModelNotifyProcessed: failed to get argument");
                         self.num_processed = num_processed;
 
@@ -236,7 +239,8 @@ impl Model {
                     }
 
                     Event::EvModelNotifyMatcherMode => {
-                        self.matcher_mode = *arg.downcast()
+                        self.matcher_mode = *arg
+                            .downcast()
                             .expect("model:EvModelNotifyMatcherMode: failed to get argument");
                     }
 
@@ -279,9 +283,16 @@ impl Model {
                         break;
                     }
                     Event::EvActAbort => {
-                        if let Some(tx_preview) = &self.tx_preview{
-                            tx_preview.send((Event::EvActAbort,
-                                             PreviewInput{cmd: "".into(), lines: 0, columns:0}))
+                        if let Some(tx_preview) = &self.tx_preview {
+                            tx_preview
+                                .send((
+                                    Event::EvActAbort,
+                                    PreviewInput {
+                                        cmd: "".into(),
+                                        lines: 0,
+                                        columns: 0,
+                                    },
+                                ))
                                 .expect("Failed to send to tx_preview");
                         }
                         let tx_ack: Sender<bool> = *arg.downcast().expect("model:EvActAbort: failed to get argument");
@@ -362,7 +373,8 @@ impl Model {
 
                     Event::EvActRedraw => {
                         //debug!("model:EvActRedraw:act_redraw");
-                        let print_query_func = *arg.downcast::<QueryPrintClosure>()
+                        let print_query_func = *arg
+                            .downcast::<QueryPrintClosure>()
                             .expect("model:EvActRedraw: failed to get argument");
                         self.act_redraw(&mut curses, print_query_func);
                     }
@@ -454,7 +466,7 @@ impl Model {
     }
 
     fn get_status_position(&self, cursor_y: usize) -> (usize, usize) {
-        match (self.inline_info, self.reverse){
+        match (self.inline_info, self.reverse) {
             (false, true) => (1, 0),
             (false, false) => ({ self.height + self.reserved_height - 2 }, 0),
             (true, _) => (cursor_y, self.query_end_x),
@@ -470,7 +482,7 @@ impl Model {
         curses.mv(status_y, status_x);
         curses.clrtoeol();
 
-        if self.inline_info{
+        if self.inline_info {
             curses.print_with_attr("  <", self.theme.prompt());
         };
 
@@ -487,7 +499,7 @@ impl Model {
         // display matched/total number
         curses.print_with_attr(
             format!(" {}/{}", self.items.len(), self.num_read).as_ref(),
-            self.theme.info()
+            self.theme.info(),
         );
 
         // display the matcher mode
@@ -499,7 +511,7 @@ impl Model {
         if self.num_processed < self.num_read {
             curses.print_with_attr(
                 format!(" ({}%) ", self.num_processed * 100 / self.num_read).as_ref(),
-                self.theme.info()
+                self.theme.info(),
             )
         }
 
@@ -507,29 +519,39 @@ impl Model {
         if self.multi_selection && !self.selected.is_empty() {
             curses.print_with_attr(
                 format!(" [{}]", self.selected.len()).as_ref(),
-                Attr { effect: Effect::BOLD, ..self.theme.info()}
+                Attr {
+                    effect: Effect::BOLD,
+                    ..self.theme.info()
+                },
             );
         }
 
         // item cursor
         let line_num_str = format!(" {} ", self.item_cursor + self.line_cursor);
-        curses.mv(
-            status_y,
-            self.width - line_num_str.len(),
+        curses.mv(status_y, self.width - line_num_str.len());
+        curses.print_with_attr(
+            &line_num_str,
+            Attr {
+                effect: Effect::BOLD,
+                ..self.theme.info()
+            },
         );
-        curses.print_with_attr(&line_num_str, Attr { effect: Effect::BOLD, ..self.theme.info()});
 
         // restore cursor
         curses.mv(y, x);
     }
 
-    fn get_header_height(&self, query_y: usize, maxy:usize) -> Option<usize> {
+    fn get_header_height(&self, query_y: usize, maxy: usize) -> Option<usize> {
         let (status_height, _) = self.get_status_position(query_y);
-        let res = if self.reverse {status_height + 1} else {status_height - 1};
+        let res = if self.reverse {
+            status_height + 1
+        } else {
+            status_height - 1
+        };
 
-        if self.reserved_height +1 < maxy && maxy > 3 {
+        if self.reserved_height + 1 < maxy && maxy > 3 {
             Some(res)
-         } else {
+        } else {
             None
         }
     }
@@ -543,7 +565,7 @@ impl Model {
             return;
         }
         let yh = yh.unwrap();
-        let direction = if self.reverse {1 as i64} else {-1};
+        let direction = if self.reverse { 1 as i64 } else { -1 };
 
         let mut printer = LinePrinter::builder()
             .container_width(self.width as usize)
@@ -552,11 +574,11 @@ impl Model {
             .build();
 
         for (i, header) in self.headers.iter().enumerate() {
-            let nyh = ((yh as i64) +direction*(i as i64)) as usize;
+            let nyh = ((yh as i64) + direction * (i as i64)) as usize;
             curses.mv(nyh, 0);
             curses.clrtoeol();
             curses.mv(nyh, 2);
-            for (ch, attr) in header.iter(){
+            for (ch, attr) in header.iter() {
                 printer.print_char(curses, ch, self.theme.normal().extend(attr), false);
             }
         }
@@ -572,18 +594,21 @@ impl Model {
 
         // print query
         curses.mv(if self.reverse { 0 } else { h - 1 }, 0);
-        if ! self.inline_info {
+        if !self.inline_info {
             curses.clrtoeol();
         }
         let (_, x) = print_query_func(curses);
         self.query_end_x = x;
-
     }
 
     fn draw_item(&self, curses: &mut Window, matched_item: &MatchedItem, is_current: bool) {
         let index = matched_item.item.get_full_index();
 
-        let default_attr = if is_current { self.theme.current() } else { self.theme.normal() };
+        let default_attr = if is_current {
+            self.theme.current()
+        } else {
+            self.theme.normal()
+        };
 
         if self.selected.contains_key(&index) {
             curses.print_with_attr(">", default_attr.extend(self.theme.selected()));
@@ -626,11 +651,11 @@ impl Model {
         curses.mv(y, x);
         printer.reset();
         if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
-            for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter(){
+            for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter() {
                 printer.print_char(curses, ch, default_attr.extend(attr), false);
             }
         } else {
-            for ch in item.get_text().chars(){
+            for ch in item.get_text().chars() {
                 printer.print_char(curses, ch, default_attr, false);
             }
         }
@@ -659,7 +684,12 @@ impl Model {
 
             Some(MatchedRange::Range(start, end)) => {
                 for (idx, &ch) in text.iter().enumerate() {
-                    printer.print_char(curses, ch, default_attr.extend(self.theme.matched()), !(idx >= start && idx < end));
+                    printer.print_char(
+                        curses,
+                        ch,
+                        default_attr.extend(self.theme.matched()),
+                        !(idx >= start && idx < end),
+                    );
                 }
             }
 
@@ -667,7 +697,7 @@ impl Model {
         }
     }
 
-    pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>){
+    pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>) {
         self.tx_preview = Some(tx_preview);
     }
 
@@ -692,7 +722,7 @@ impl Model {
         let item = Arc::clone(
             self.items
                 .get(current_idx)
-                .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", current_idx))
+                .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", current_idx)),
         );
         let highlighted_content = item.item.get_orig_text();
 
@@ -701,15 +731,20 @@ impl Model {
         debug!("model:draw_preview: cmd: '{:?}'", cmd);
 
         if let Some(tx_preview) = &self.tx_preview {
-            tx_preview.send((Event::EvModelNewPreview , PreviewInput{
-                cmd: cmd.to_string(),
-                lines,
-                columns: cols,
-            })).expect("failed to send to previewer");
+            tx_preview
+                .send((
+                    Event::EvModelNewPreview,
+                    PreviewInput {
+                        cmd: cmd.to_string(),
+                        lines,
+                        columns: cols,
+                    },
+                ))
+                .expect("failed to send to previewer");
         }
     }
 
-    fn handle_preview_output(&mut self, curses: &mut Window, aoutput: AnsiString){
+    fn handle_preview_output(&mut self, curses: &mut Window, aoutput: AnsiString) {
         debug!("model:draw_preview: output = {:?}", &aoutput);
 
         curses.mv(0, 0);
@@ -720,7 +755,8 @@ impl Model {
     }
 
     fn inject_preview_command(&self, text: &str) -> Cow<str> {
-        let cmd = self.preview_cmd
+        let cmd = self
+            .preview_cmd
             .as_ref()
             .expect("model:inject_preview_command: invalid preview command");
         debug!("replace: {:?}, text: {:?}", cmd, text);
@@ -790,7 +826,8 @@ impl Model {
         }
 
         let cursor = self.item_cursor + self.line_cursor;
-        let current_item = self.items
+        let current_item = self
+            .items
             .get(cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
@@ -827,7 +864,8 @@ impl Model {
         // select the current one
         if !self.items.is_empty() {
             let cursor = self.item_cursor + self.line_cursor;
-            let current_item = self.items
+            let current_item = self
+                .items
                 .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let index = current_item.item.get_full_index();

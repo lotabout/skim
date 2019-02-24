@@ -14,8 +14,8 @@ use std::time::Duration;
 
 use crate::field::FieldRange;
 use crate::options::SkimOptions;
-use regex::Regex;
 use crate::sender::CachedSender;
+use regex::Regex;
 use std::env;
 
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -49,8 +49,7 @@ impl ReaderOption {
         }
 
         if let Some(delimiter) = options.delimiter {
-            self.delimiter =
-                Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
+            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
         if let Some(transform_fields) = options.with_nth {
@@ -95,7 +94,8 @@ impl Reader {
     }
 
     pub fn parse_options(&mut self, options: &SkimOptions) {
-        let mut option = self.option
+        let mut option = self
+            .option
             .write()
             .expect("reader:parse_options: failed to lock option");
         option.parse_options(options);
@@ -121,7 +121,8 @@ impl Reader {
             match ev {
                 Event::EvReaderRestart => {
                     // close existing command or file if exists
-                    let (cmd, query, force_update) = *arg.downcast::<(String, String, bool)>()
+                    let (cmd, query, force_update) = *arg
+                        .downcast::<(String, String, bool)>()
                         .expect("reader:EvReaderRestart: failed to get argument");
                     if !force_update && cmd == last_command && query == last_query {
                         continue;
