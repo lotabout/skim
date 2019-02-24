@@ -583,10 +583,12 @@ impl Model {
     fn draw_item(&self, curses: &mut Window, matched_item: &MatchedItem, is_current: bool) {
         let index = matched_item.item.get_full_index();
 
+        let default_attr = if is_current { self.theme.current() } else { self.theme.normal() };
+
         if self.selected.contains_key(&index) {
-            curses.print_with_attr(">", self.theme.selected());
+            curses.print_with_attr(">", default_attr.extend(self.theme.selected()));
         } else {
-            curses.print_with_attr(" ", if is_current { self.theme.current()} else { self.theme.normal() });
+            curses.print_with_attr(" ", default_attr);
         }
 
         let (y, x) = curses.getyx();
@@ -625,18 +627,11 @@ impl Model {
         printer.reset();
         if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
             for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter(){
-//                for (_, attr) in attrs {
-//                    if is_current && ansi_contains_reset(*attr) {
-//                        curses.attr_on(COLOR_CURRENT);
-//                    } else {
-//                        curses.attr_on(*attr);
-//                    }
-//                }
-                printer.print_char(curses, ch, attr, false);
+                printer.print_char(curses, ch, default_attr.extend(attr), false);
             }
         } else {
             for ch in item.get_text().chars(){
-                printer.print_char(curses, ch, self.theme.normal(), false);
+                printer.print_char(curses, ch, default_attr, false);
             }
         }
 
@@ -652,11 +647,11 @@ impl Model {
                 for (ch_idx, &ch) in text.iter().enumerate() {
                     match matched_indics_iter.peek() {
                         Some(&&match_idx) if ch_idx == match_idx => {
-                            printer.print_char(curses, ch, self.theme.matched(), false);
+                            printer.print_char(curses, ch, default_attr.extend(self.theme.matched()), false);
                             let _ = matched_indics_iter.next();
                         }
                         Some(_) | None => {
-                            printer.print_char(curses, ch, self.theme.normal(), true);
+                            printer.print_char(curses, ch, default_attr, true);
                         }
                     }
                 }
@@ -664,7 +659,7 @@ impl Model {
 
             Some(MatchedRange::Range(start, end)) => {
                 for (idx, &ch) in text.iter().enumerate() {
-                    printer.print_char(curses, ch, self.theme.matched(), !(idx >= start && idx < end));
+                    printer.print_char(curses, ch, default_attr.extend(self.theme.matched()), !(idx >= start && idx < end));
                 }
             }
 

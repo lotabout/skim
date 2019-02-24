@@ -223,7 +223,7 @@ dependencies = [
 [[package]]
 name = "tuikit"
 version = "0.1.1"
-source = "git+https://github.com/lotabout/tuikit.git#ee48858d4c499f00f282d5c959c6e781a1cfb106"
+source = "git+https://github.com/lotabout/tuikit.git#8413ec680dc3edd26615d39ad1cbdb8317f9990c"
 dependencies = [
  "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",

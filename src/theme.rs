@@ -236,7 +236,7 @@ impl ColorTheme {
     pub fn cursor(&self) -> Attr {
         Attr {
             fg: self.cursor,
-            bg: self.bg,
+            bg: self.current_bg,
             effect: Effect::empty(),
         }
     }
@@ -244,7 +244,7 @@ impl ColorTheme {
     pub fn selected(&self) -> Attr {
         Attr {
             fg: self.selected,
-            bg: self.bg,
+            bg: self.current_bg,
             effect: Effect::empty(),
         }
     }
