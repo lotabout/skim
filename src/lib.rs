@@ -42,8 +42,6 @@ const REFRESH_DURATION: u64 = 200;
 
 pub struct Skim {}
 
-extern "C" fn handle_sigwiwnch(_: i32) {}
-
 impl Skim {
     pub fn run_with(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> Option<SkimOutput> {
         let min_height = options
@@ -339,10 +337,6 @@ impl Skim {
                     let _ = tx_model.send((EvActRedraw, Box::new(query.get_print_func())));
                 }
 
-                EvReportCursorPos => {
-                    let (y, x): (u16, u16) = *arg.downcast().expect("EvReportCursorPos: failed to get arguments");
-                    debug!("main:EvReportCursorPos: {}/{}", y, x);
-                }
                 _ => {}
             }
         }

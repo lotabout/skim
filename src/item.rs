@@ -8,7 +8,6 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::default::Default;
 use std::sync::Arc;
-use tuikit::attr::Attr;
 
 // An item will store everything that one line input will need to be operated and displayed.
 //

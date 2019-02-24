@@ -1,12 +1,7 @@
 use crate::event::{parse_action, Event, EventSender};
 /// Input will listens to user input, modify the query string, send special
 /// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
-use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::fs::File;
-use std::io::prelude::*;
-use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use tuikit::term::Term;
 use tuikit::key::{Key, from_keyname};
@@ -51,7 +46,7 @@ impl Input {
                     }
                 }
 
-                Ok(TuiEvent::Resize { width, height }) => {
+                Ok(TuiEvent::Resize {..}) => {
                     let _ = self.tx_input.send((Event::EvActRedraw, Box::new(true)));
                 }
 
@@ -107,65 +102,65 @@ impl Input {
 fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     let mut ret = HashMap::new();
     ret.insert(Key::ESC, (Event::EvActAbort, None));
-    ret.insert(Key::Ctrl('C'), (Event::EvActAbort, None));
-    ret.insert(Key::Char('G'), (Event::EvActAbort, None));
+    ret.insert(Key::Ctrl('c'), (Event::EvActAbort, None));
+    ret.insert(Key::Char('g'), (Event::EvActAbort, None));
 
     ret.insert(Key::Enter, (Event::EvActAccept, None));
 
     ret.insert(Key::Left, (Event::EvActBackwardChar, None));
-    ret.insert(Key::Ctrl('B'), (Event::EvActBackwardChar, None));
+    ret.insert(Key::Ctrl('b'), (Event::EvActBackwardChar, None));
 
-    ret.insert(Key::Char('H'), (Event::EvActBackwardDeleteChar, None));
+    ret.insert(Key::Ctrl('h'), (Event::EvActBackwardDeleteChar, None));
     ret.insert(Key::Backspace, (Event::EvActBackwardDeleteChar, None));
 
     ret.insert(Key::AltBackspace, (Event::EvActBackwardKillWord, None));
 
-    ret.insert(Key::Alt('B'), (Event::EvActBackwardWord, None));
+    ret.insert(Key::Alt('b'), (Event::EvActBackwardWord, None));
     ret.insert(Key::ShiftLeft, (Event::EvActBackwardWord, None));
 
-    ret.insert(Key::Ctrl('A'), (Event::EvActBeginningOfLine, None));
-    //ret.insert(Key::Alt('B'),  (Event::EvActCancel, None));
-    ret.insert(Key::Ctrl('L'), (Event::EvActClearScreen, None));
+    ret.insert(Key::Ctrl('a'), (Event::EvActBeginningOfLine, None));
+    //ret.insert(Key::Alt('b'),  (Event::EvActCancel, None));
+    ret.insert(Key::Ctrl('l'), (Event::EvActClearScreen, None));
     ret.insert(Key::Del, (Event::EvActDeleteChar, None));
-    ret.insert(Key::Ctrl('D'), (Event::EvActDeleteCharEOF, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActDeselectAll, None));
+    ret.insert(Key::Ctrl('d'), (Event::EvActDeleteCharEOF, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActDeselectAll, None));
 
-    ret.insert(Key::Ctrl('J'), (Event::EvActDown, None));
-    ret.insert(Key::Ctrl('N'), (Event::EvActDown, None));
+    ret.insert(Key::Ctrl('j'), (Event::EvActDown, None));
+    ret.insert(Key::Ctrl('n'), (Event::EvActDown, None));
     ret.insert(Key::Down, (Event::EvActDown, None));
 
-    ret.insert(Key::Ctrl('E'), (Event::EvActEndOfLine, None));
+    ret.insert(Key::Ctrl('e'), (Event::EvActEndOfLine, None));
     ret.insert(Key::End, (Event::EvActEndOfLine, None));
 
-    ret.insert(Key::Ctrl('F'), (Event::EvActForwardChar, None));
+    ret.insert(Key::Ctrl('f'), (Event::EvActForwardChar, None));
     ret.insert(Key::Right, (Event::EvActForwardChar, None));
 
-    ret.insert(Key::Alt('F'), (Event::EvActForwardWord, None));
+    ret.insert(Key::Alt('f'), (Event::EvActForwardWord, None));
     ret.insert(Key::ShiftRight, (Event::EvActForwardWord, None));
 
-    //ret.insert(Key::Alt('Z'),  (Event::EvActIgnore, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActIgnore, None));
 
-    ret.insert(Key::Alt('D'), (Event::EvActKillWord, None));
-    //ret.insert(Key::Ctrl('N'), (Event::EvActNextHistory, None));
+    ret.insert(Key::Alt('d'), (Event::EvActKillWord, None));
+    //ret.insert(Key::Ctrl('n'), (Event::EvActNextHistory, None));
     ret.insert(Key::PageDown, (Event::EvActPageDown, None));
     ret.insert(Key::PageUp, (Event::EvActPageUp, None));
-    ret.insert(Key::Ctrl('R'), (Event::EvActRotateMode, None));
-    ret.insert(Key::Alt('H'), (Event::EvActScrollLeft, None));
-    ret.insert(Key::Alt('L'), (Event::EvActScrollRight, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActSelectAll, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActToggle, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActToggleAll, None));
+    ret.insert(Key::Ctrl('r'), (Event::EvActRotateMode, None));
+    ret.insert(Key::Alt('h'), (Event::EvActScrollLeft, None));
+    ret.insert(Key::Alt('l'), (Event::EvActScrollRight, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActSelectAll, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActToggle, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActToggleAll, None));
     ret.insert(Key::Tab, (Event::EvActToggleDown, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActToggleIn, None));
-    ret.insert(Key::Ctrl('Q'), (Event::EvActToggleInteractive, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActToggleOut, None));
-    //ret.insert(Key::Alt('Z'),  (Event::EvActToggleSort, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActToggleIn, None));
+    ret.insert(Key::Ctrl('q'), (Event::EvActToggleInteractive, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActToggleOut, None));
+    //ret.insert(Key::Alt('z'),  (Event::EvActToggleSort, None));
     ret.insert(Key::BackTab, (Event::EvActToggleUp, None));
-    ret.insert(Key::Ctrl('U'), (Event::EvActUnixLineDiscard, None));
-    ret.insert(Key::Ctrl('W'), (Event::EvActUnixWordRubout, None));
-    ret.insert(Key::Ctrl('P'), (Event::EvActUp, None));
-    ret.insert(Key::Ctrl('K'), (Event::EvActUp, None));
+    ret.insert(Key::Ctrl('u'), (Event::EvActUnixLineDiscard, None));
+    ret.insert(Key::Ctrl('w'), (Event::EvActUnixWordRubout, None));
+    ret.insert(Key::Ctrl('p'), (Event::EvActUp, None));
+    ret.insert(Key::Ctrl('k'), (Event::EvActUp, None));
     ret.insert(Key::Up, (Event::EvActUp, None));
-    ret.insert(Key::Ctrl('U'), (Event::EvActYank, None));
+    ret.insert(Key::Ctrl('y'), (Event::EvActYank, None));
     ret
 }

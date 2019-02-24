@@ -1,4 +1,3 @@
-use crate::curses::*;
 use crate::model::QueryPrintClosure;
 use crate::options::SkimOptions;
 use std::mem;

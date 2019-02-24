@@ -9,7 +9,6 @@ use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::HashMap;
-use std::convert::From;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -407,6 +406,7 @@ impl Model {
         //              0                            h-1
         // screen-line: (h-l-1)   <--->   item-line: l
 
+        // (lower, upper) are the bounds of self.items
         let lower = self.item_cursor;
         let max_upper = self.item_cursor + h - self.reserved_height;
         let upper = min(max_upper, self.items.len());
@@ -414,8 +414,8 @@ impl Model {
         debug!("draw_items, lower: {}, upper: {}, height: {}", lower, upper, h);
 
         // clear item area
-        for i in lower..upper {
-            curses.mv(self.get_item_height(i, h), 0);
+        for i in lower..max_upper {
+            curses.mv(self.get_item_height(i - lower, h), 0);
             curses.clrtoeol();
         }
 
@@ -557,7 +557,7 @@ impl Model {
             curses.clrtoeol();
             curses.mv(nyh, 2);
             for (ch, attr) in header.iter(){
-                printer.print_char(curses, ch, self.theme.normal(), false);
+                printer.print_char(curses, ch, self.theme.normal().extend(attr), false);
             }
         }
         // restore cursor

@@ -3,8 +3,7 @@
 
 //use ncurses::*;
 use crate::options::SkimOptions;
-use std::cmp::{max, min};
-use std::io::prelude::*;
+use std::cmp::min;
 use unicode_width::UnicodeWidthChar;
 use std::sync::Arc;
 use tuikit::term::Term;
@@ -35,6 +34,7 @@ pub enum Margin {
 // +------------+ end_line
 // |
 // |
+// row `bottom` and column `right` should not be used.
 
 pub struct Window {
     top: usize,
@@ -98,7 +98,7 @@ impl Window {
     fn calc_size(border: &Option<Direction>, top: usize, right: usize, bottom: usize, left: usize) -> (usize, usize) {
         match *border {
             Some(Direction::Up) | Some(Direction::Down) => (right - left, bottom - top - 1),
-            Some(Direction::Left) | Some(Direction::Right) => (right - left, bottom - top),
+            Some(Direction::Left) | Some(Direction::Right) => (right - left-1, bottom - top),
             None => (right - left, bottom - top),
         }
     }
@@ -129,12 +129,6 @@ impl Window {
 
     pub fn getyx(&self) -> (usize, usize) {
         (self.current_y, self.current_x)
-    }
-
-    pub fn clear(&mut self) {
-        self.screen.clear();
-        self.current_x = 0;
-        self.current_y = 0;
     }
 
     pub fn clrtoeol(&mut self) {
@@ -240,10 +234,11 @@ impl Window {
 
         for (row, col, &cell) in self.screen.iter_cell() {
             let (y, x) = self.adjust_cursor_offset(row, col);
-            term.put_cell(y, x, cell);
+            let _ = term.put_cell(y, x, cell);
         }
 
-        term.set_cursor(self.current_y, self.current_x);
+        let (row, col) = self.adjust_cursor_offset(self.current_y, self.current_x);
+        let _ = term.set_cursor(row, col);
     }
 
     fn adjust_cursor_offset(&self, y: usize, x: usize) -> (usize, usize) {
@@ -257,29 +252,29 @@ impl Window {
     }
 
     fn draw_border(&mut self, term: &Term) {
-        //debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
+        debug!("curses:window:draw_border: TRBL: {}, {}, {}, {}", self.top, self.right, self.bottom, self.left);
         match self.border {
             Some(Direction::Up) => {
-                term.print_with_attr(self.top,
+                let _ = term.print_with_attr(self.top,
                                      self.left,
-                                     &"─".repeat((self.right - self.left)),
+                                     &"─".repeat(self.right - self.left),
                                      self.theme.border());
             }
             Some(Direction::Down) => {
-                term.print_with_attr(self.bottom,
+                let _ = term.print_with_attr(self.bottom-1,
                                      self.left,
-                                     &"─".repeat((self.right - self.left)),
+                                     &"─".repeat(self.right - self.left),
                                      self.theme.border());
             }
             Some(Direction::Left) => for i in self.top..self.bottom {
-                term.print_with_attr(i,
+                let _ = term.print_with_attr(i,
                                      self.left,
                                      "│",
                                      self.theme.border());
             },
             Some(Direction::Right) => for i in self.top..self.bottom {
-                term.print_with_attr(i,
-                                     self.right,
+                let _ = term.print_with_attr(i,
+                                     self.right-1,
                                      "│",
                                      self.theme.border());
             },
@@ -340,12 +335,8 @@ pub struct Curses {
 
 unsafe impl Send for Curses {}
 
-const CURSES_BUF_SIZE: usize = 100 * 1024;
-
 impl Curses {
     pub fn new(term: Arc<Term>, options: &SkimOptions) -> Self {
-        let (max_y, _) = term.term_size().expect("failed to get term size");
-
         let margins = options
             .margin
             .map(Curses::parse_margin)
@@ -537,6 +528,6 @@ impl Curses {
     pub fn refresh(&mut self) {
         self.win_preview.write_to_term(&self.term);
         self.win_main.write_to_term(&self.term);
-        self.term.present();
+        let _ = self.term.present();
     }
 }

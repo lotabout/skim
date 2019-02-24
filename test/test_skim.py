@@ -535,6 +535,7 @@ class TestSkim(TestBase):
         ## the dot  accounts for spinner
         RE = re.compile(r'. ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])?')
         self.tmux.send_keys(f"echo -e 'a1\\na2\\na3\\na4' | {self.sk('--inline-info')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
         self.tmux.send_keys("a")
         self.tmux.until(lambda lines: lines[-1].find(INLINE_INFO_SEP) != -1)
         lines = self.tmux.capture()

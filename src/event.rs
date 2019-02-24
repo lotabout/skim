@@ -34,8 +34,6 @@ pub enum Event {
 
     EvActAddChar,
 
-    EvReportCursorPos,
-
     // user bind actions
     EvActAbort,
     EvActAccept,
