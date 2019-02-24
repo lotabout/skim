@@ -149,6 +149,7 @@ class Tmux(object):
                 continue
             else:
                 self._go('send-keys', '-t', f'{target}', f'{key}')
+            time.sleep(0.01)
 
     def paste(self, content):
         subprocess.run(["tmux", "setb", f"{content}", ";",
@@ -238,7 +239,6 @@ class TestBase(unittest.TestCase):
         self.tmux.send_keys(Key("Enter"))
         self.tmux.until(until_predicate, debug_info="SK args: {}".format(sk_options))
         self.tmux.send_keys(Key('Enter'))
-        time.sleep(0.01)
 
 
 class TestSkim(TestBase):
