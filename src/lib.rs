@@ -25,10 +25,13 @@ use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
 use item::Item;
+use nix::unistd::isatty;
 pub use options::SkimOptions;
 pub use output::SkimOutput;
 use std::env;
 use std::io::BufRead;
+use std::io::BufReader;
+use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::{channel, sync_channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -54,6 +57,16 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // curses
+
+        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
+        let source = source.or_else(|| {
+            let stdin = std::io::stdin();
+            if !isatty(stdin.as_raw_fd()).unwrap_or(true) {
+                Some(Box::new(BufReader::new(stdin)))
+            } else {
+                None
+            }
+        });
 
         let curses = Curses::new(term.clone(), &options);
 
