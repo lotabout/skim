@@ -527,6 +527,7 @@ impl Curses {
         self.win_preview.close();
         self.win_main.close();
         self.refresh();
+        let _ = self.term.pause();
     }
 
     pub fn refresh(&mut self) {
