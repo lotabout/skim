@@ -724,11 +724,9 @@ impl Model {
                 .get(current_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", current_idx)),
         );
-        let highlighted_content = item.item.get_orig_text();
 
-        debug!("model:draw_preview: highlighted_content: '{:?}'", highlighted_content);
-        let cmd = self.inject_preview_command(&highlighted_content);
-        debug!("model:draw_preview: cmd: '{:?}'", cmd);
+        let current_line = item.item.get_output_text();
+        let cmd = self.inject_preview_command(&current_line);
 
         if let Some(tx_preview) = &self.tx_preview {
             tx_preview
