@@ -32,6 +32,7 @@ time = "0.1.38"
 clap = "2.26.2"
 tuikit = "0.1.4"
 vte = "0.3.3"
+skiplist = "0.2.10"
 
 [features]
 default = []

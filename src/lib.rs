@@ -11,7 +11,6 @@ mod item;
 mod matcher;
 mod model;
 mod options;
-mod orderedvec;
 mod output;
 mod previewer;
 mod query;

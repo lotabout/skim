@@ -4,7 +4,6 @@ use crate::event::{Event, EventReceiver};
 use crate::field::get_string_by_range;
 use crate::item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
 use crate::options::SkimOptions;
-use crate::orderedvec::OrderedVec;
 use crate::previewer::PreviewInput;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::escape_single_quote;
@@ -17,6 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuikit::attr::{Attr, Effect};
 use unicode_width::UnicodeWidthChar;
+use skiplist::OrderedSkipList;
 
 // write query & returns (y,x) after query
 pub type QueryPrintClosure = Box<Fn(&mut Window) -> (usize, usize) + Send>;
@@ -32,7 +32,7 @@ lazy_static! {
 
 pub struct Model {
     rx_cmd: EventReceiver,
-    items: OrderedVec<Arc<MatchedItem>>, // all items
+    items: OrderedSkipList<Arc<MatchedItem>>, // all items
     selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     item_cursor: usize, // the index of matched item currently highlighted.
@@ -75,7 +75,7 @@ impl Model {
     pub fn new(rx_cmd: EventReceiver) -> Self {
         Model {
             rx_cmd,
-            items: OrderedVec::new(),
+            items: OrderedSkipList::new(),
             num_read: 0,
             num_processed: 0,
             selected: HashMap::new(),
@@ -404,7 +404,7 @@ impl Model {
 
     fn insert_new_items(&mut self, items: MatchedItemGroup) {
         for item in items {
-            self.items.push(Arc::new(item));
+            self.items.insert(Arc::new(item));
         }
     }
 
@@ -440,7 +440,7 @@ impl Model {
 
             let item = Arc::clone(
                 self.items
-                    .get(i)
+                    .get(&i)
                     .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", i)),
             );
             self.draw_item(curses, &item, l == self.line_cursor);
@@ -721,7 +721,7 @@ impl Model {
 
         let item = Arc::clone(
             self.items
-                .get(current_idx)
+                .get(&current_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", current_idx)),
         );
 
@@ -826,7 +826,7 @@ impl Model {
         let cursor = self.item_cursor + self.line_cursor;
         let current_item = self
             .items
-            .get(cursor)
+            .get(&cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
@@ -864,7 +864,7 @@ impl Model {
             let cursor = self.item_cursor + self.line_cursor;
             let current_item = self
                 .items
-                .get(cursor)
+                .get(&cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
