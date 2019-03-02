@@ -9,6 +9,7 @@ use crate::score;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use rayon::prelude::*;
 
 lazy_static! {
     static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![
@@ -89,7 +90,7 @@ impl Matcher {
         let (tx_matcher, rx_matcher): (EventSender, EventReceiver) = channel();
         let matcher_restart = Arc::new(AtomicBool::new(false));
         // start a new thread listening for EvMatcherRestart, that means the query had been
-        // changed, so that matcher shoudl discard all previous events.
+        // changed, so that matcher should discard all previous events.
         {
             let matcher_restart = Arc::clone(&matcher_restart);
             thread::spawn(move || {
@@ -162,7 +163,7 @@ impl Matcher {
                     num_processed += items.len();
                     if let Some(mat) = matcher_engine.as_ref() {
                         let matched_items: MatchedItemGroup =
-                            items.into_iter().filter_map(|item| mat.match_item(item)).collect();
+                            items.into_par_iter().filter_map(|item| mat.match_item(item)).collect();
                         let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
                     }
 
@@ -208,7 +209,7 @@ impl Matcher {
 }
 
 // A match engine will execute the matching algorithm
-trait MatchEngine {
+trait MatchEngine: Sync {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem>;
     fn display(&self) -> String;
 }
