@@ -134,7 +134,9 @@ pub fn get_string_by_range<'a>(delimiter: &Regex, text: &'a str, range: &str) ->
     FieldRange::from_str(range).and_then(|field| get_string_by_field(delimiter, text, &field))
 }
 
-// -> a vector of the matching fields.
+// -> a vector of the matching fields (byte wise).
+// Given delimiter `,`, text: "a,b,c"
+// &[Single(2), LeftInf(2)] => [(2, 4), (0, 4)]
 pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange]) -> Vec<(usize, usize)> {
     let ranges = get_ranges_by_delimiter(delimiter, text);
 
@@ -143,9 +145,7 @@ pub fn parse_matching_fields(delimiter: &Regex, text: &str, fields: &[FieldRange
         if let Some((start, stop)) = field.to_index_pair(ranges.len()) {
             let &(begin, _) = &ranges[start];
             let &(end, _) = ranges.get(stop).unwrap_or(&(text.len(), 0));
-            let first = (&text[..begin]).chars().count();
-            let last = first + (&text[begin..end]).chars().count();
-            ret.push((first, last));
+            ret.push((begin, end));
         }
     }
     ret
@@ -279,18 +279,21 @@ mod test {
         // delimiter is ","
         let re = Regex::new(",").unwrap();
 
+        // bytes:3  3  3 3
+        //       中,华,人,民,E,F",
+
         assert_eq!(
             super::parse_matching_fields(
                 &re,
                 &"中,华,人,民,E,F",
                 &vec![Single(2), Single(4), Single(-1), Single(-7)]
             ),
-            vec![(2, 4), (6, 8), (10, 11)]
+            vec![(4, 8), (12, 16), (18, 19)]
         );
 
         assert_eq!(
             super::parse_matching_fields(&re, &"中,华,人,民,E,F", &vec![LeftInf(3), LeftInf(-6), LeftInf(-7)]),
-            vec![(0, 6), (0, 2)]
+            vec![(0, 12), (0, 4)]
         );
 
         assert_eq!(
@@ -299,7 +302,7 @@ mod test {
                 &"中,华,人,民,E,F",
                 &vec![RightInf(5), RightInf(-2), RightInf(-1), RightInf(7)]
             ),
-            vec![(8, 11), (8, 11), (10, 11)]
+            vec![(16, 19), (16, 19), (18, 19)]
         );
 
         assert_eq!(
@@ -308,7 +311,7 @@ mod test {
                 &"中,华,人,民,E,F",
                 &vec![Both(3, 3), Both(-8, 2), Both(6, 10), Both(-8, -5)]
             ),
-            vec![(4, 6), (0, 4), (10, 11), (0, 4)]
+            vec![(8, 12), (0, 8), (18, 19), (0, 8)]
         );
     }
 

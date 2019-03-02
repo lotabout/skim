@@ -160,7 +160,6 @@ impl Matcher {
                         .downcast()
                         .expect("matcher:EvMatcherNewItem: failed to get arguments");
                     num_processed += items.len();
-
                     if let Some(mat) = matcher_engine.as_ref() {
                         let matched_items: MatchedItemGroup =
                             items.into_iter().filter_map(|item| mat.match_item(item)).collect();
@@ -265,8 +264,8 @@ impl MatchEngine for RegexEngine {
                 break;
             }
 
-            let source: String = item.get_chars()[start..end].iter().cloned().collect();
-            matched_result = score::regex_match(&source, &self.query_regex).map(|(s, e)| (s + start, e + start));
+            matched_result = score::regex_match(&item.get_text()[start..end], &self.query_regex)
+                .map(|(s, e)| (s + start, e + start));
 
             if matched_result.is_some() {
                 break;
@@ -280,7 +279,7 @@ impl MatchEngine for RegexEngine {
         Some(
             MatchedItem::builder(item)
                 .rank(rank)
-                .matched_range(MatchedRange::Range(begin, end))
+                .matched_range(MatchedRange::ByteRange(begin, end))
                 .build(),
         )
     }
@@ -300,14 +299,12 @@ impl MatchEngine for RegexEngine {
 #[derive(Debug)]
 struct FuzzyEngine {
     query: String,
-    query_chars: Vec<char>,
 }
 
 impl FuzzyEngine {
     pub fn builder(query: &str) -> Self {
         FuzzyEngine {
             query: query.to_string(),
-            query_chars: query.chars().collect(),
         }
     }
 
@@ -321,15 +318,15 @@ impl MatchEngine for FuzzyEngine {
         // iterate over all matching fields:
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
-            let source = &item.get_chars()[start..end];
-
-            matched_result = score::fuzzy_match(source, &self.query_chars).map(|(s, vec)| {
-                if start != 0 {
-                    (s, vec.iter().map(|x| x + start).collect())
-                } else {
-                    (s, vec)
-                }
-            });
+            matched_result = score::fuzzy_match(&item.get_text()[start..end], &self.query)
+                .map(|(s, vec)| {
+                    if start != 0 {
+                        let start_char = &item.get_text()[..start].chars().count();
+                        (s, vec.iter().map(|x| x + start_char).collect())
+                    } else {
+                        (s, vec)
+                    }
+                });
 
             if matched_result.is_some() {
                 break;
@@ -392,9 +389,7 @@ impl ExactEngine {
                 break;
             }
 
-            let chars: Vec<_> = item.get_text().chars().collect();
-            let source: String = chars[start..end].iter().cloned().collect();
-            matched_result = score::exact_match(&source, &self.query);
+            matched_result = score::exact_match(&item.get_text()[start..end], &self.query);
 
             if matched_result.is_some() {
                 range_start = start;
@@ -412,7 +407,7 @@ impl ExactEngine {
         Some(
             MatchedItem::builder(item)
                 .rank(rank)
-                .matched_range(MatchedRange::Range(begin, end))
+                .matched_range(MatchedRange::ByteRange(begin, end))
                 .build(),
         )
     }
@@ -551,7 +546,7 @@ impl AndEngine {
         let mut ranges = vec![];
         for item in items {
             match item.matched_range {
-                Some(MatchedRange::Range(start, end)) => {
+                Some(MatchedRange::ByteRange(start, end)) => {
                     ranges.extend(start..end);
                 }
                 Some(MatchedRange::Chars(vec)) => {

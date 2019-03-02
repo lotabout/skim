@@ -618,22 +618,26 @@ impl Model {
 
         let (y, x) = curses.getyx();
 
+        let text = matched_item.item.get_text();
         debug!("model:draw_item: {:?}", matched_item);
-        let (match_start, match_end) = match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indics)) => {
-                if !matched_indics.is_empty() {
-                    (matched_indics[0], matched_indics[matched_indics.len() - 1] + 1)
+        let (match_start_char, match_end_char) = match matched_item.matched_range {
+            Some(MatchedRange::Chars(ref matched_indices)) => {
+                if !matched_indices.is_empty() {
+                    (matched_indices[0], matched_indices[matched_indices.len() - 1] + 1)
                 } else {
                     (0, 0)
                 }
             }
-            Some(MatchedRange::Range(match_start, match_end)) => (match_start, match_end),
+            Some(MatchedRange::ByteRange(match_start, match_end)) => {
+                let match_start_char = text[..match_start].chars().count();
+                let diff = text[match_start..match_end].chars().count();
+                (match_start_char, match_start_char+diff)
+            },
             None => (0, 0),
         };
+        let (shift, full_width) = reshape_string(&text, self.width as usize, match_start_char, match_end_char, self.tabstop);
 
         let item = &matched_item.item;
-        let text: Vec<_> = item.get_text().chars().collect();
-        let (shift, full_width) = reshape_string(&text, self.width as usize, match_start, match_end, self.tabstop);
 
         debug!(
             "model:draw_item: shift: {:?}, width:{:?}, full_width: {:?}",
@@ -666,14 +670,15 @@ impl Model {
         curses.mv(y, x);
         printer.reset();
         match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indics)) => {
-                let mut matched_indics_iter = matched_indics.iter().peekable();
+            Some(MatchedRange::Chars(ref matched_indices)) => {
+                let mut matched_indices_iter = matched_indices.iter().peekable();
 
-                for (ch_idx, &ch) in text.iter().enumerate() {
-                    match matched_indics_iter.peek() {
+                for (ch_idx, ch) in text.chars().enumerate() {
+                    match matched_indices_iter.peek() {
                         Some(&&match_idx) if ch_idx == match_idx => {
+                            debug!("index: {}, ch: {}", ch_idx, ch);
                             printer.print_char(curses, ch, default_attr.extend(self.theme.matched()), false);
-                            let _ = matched_indics_iter.next();
+                            let _ = matched_indices_iter.next();
                         }
                         Some(_) | None => {
                             printer.print_char(curses, ch, default_attr, true);
@@ -682,8 +687,8 @@ impl Model {
                 }
             }
 
-            Some(MatchedRange::Range(start, end)) => {
-                for (idx, &ch) in text.iter().enumerate() {
+            Some(MatchedRange::ByteRange(start, end)) => {
+                for (idx, ch) in text.char_indices() {
                     printer.print_char(
                         curses,
                         ch,
@@ -1037,10 +1042,10 @@ impl LinePrinter {
 // helper functions
 
 // return an array, arr[i] store the display width till char[i]
-fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
+fn accumulate_text_width(text: &str, tabstop: usize) -> Vec<usize> {
     let mut ret = Vec::new();
     let mut w = 0;
-    for &ch in text.iter() {
+    for ch in text.chars() {
         w += if ch == '\t' {
             tabstop - (w % tabstop)
         } else {
@@ -1058,7 +1063,7 @@ fn accumulate_text_width(text: &[char], tabstop: usize) -> Vec<usize> {
 //
 // return (left_shift, full_print_width)
 fn reshape_string(
-    text: &[char],
+    text: &str,
     container_width: usize,
     match_start: usize,
     match_end: usize,
@@ -1080,7 +1085,7 @@ fn reshape_string(
     } else {
         acc_width[match_start - 1]
     };
-    let w2 = if match_end >= text.len() {
+    let w2 = if match_end >= acc_width.len() {
         full_width - w1
     } else {
         acc_width[match_end] - w1
@@ -1104,26 +1109,22 @@ fn reshape_string(
 mod tests {
     use super::{accumulate_text_width, reshape_string};
 
-    fn to_chars(s: &str) -> Vec<char> {
-        s.to_string().chars().collect()
-    }
-
     #[test]
     fn test_accumulate_text_width() {
         assert_eq!(
-            accumulate_text_width(&to_chars(&"abcdefg"), 8),
+            accumulate_text_width("abcdefg", 8),
             vec![1, 2, 3, 4, 5, 6, 7]
         );
         assert_eq!(
-            accumulate_text_width(&to_chars(&"ab中de国g"), 8),
+            accumulate_text_width("ab中de国g", 8),
             vec![1, 2, 4, 5, 6, 8, 9]
         );
         assert_eq!(
-            accumulate_text_width(&to_chars(&"ab\tdefg"), 8),
+            accumulate_text_width("ab\tdefg", 8),
             vec![1, 2, 8, 9, 10, 11, 12]
         );
         assert_eq!(
-            accumulate_text_width(&to_chars(&"ab中\te国g"), 8),
+            accumulate_text_width("ab中\te国g", 8),
             vec![1, 2, 4, 8, 9, 11, 12]
         );
     }
@@ -1131,10 +1132,10 @@ mod tests {
     #[test]
     fn test_reshape_string() {
         // no match, left fixed to 0
-        assert_eq!(reshape_string(&to_chars(&"abc"), 10, 0, 0, 8), (0, 3));
-        assert_eq!(reshape_string(&to_chars(&"a\tbc"), 8, 0, 0, 8), (0, 10));
-        assert_eq!(reshape_string(&to_chars(&"a\tb\tc"), 10, 0, 0, 8), (0, 17));
-        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc"), 8, 0, 0, 8), (0, 17));
-        assert_eq!(reshape_string(&to_chars(&"a\t中b\tc012345"), 8, 0, 0, 8), (0, 23));
+        assert_eq!(reshape_string("abc", 10, 0, 0, 8), (0, 3));
+        assert_eq!(reshape_string("a\tbc", 8, 0, 0, 8), (0, 10));
+        assert_eq!(reshape_string("a\tb\tc", 10, 0, 0, 8), (0, 17));
+        assert_eq!(reshape_string("a\t中b\tc", 8, 0, 0, 8), (0, 17));
+        assert_eq!(reshape_string("a\t中b\tc012345", 8, 0, 0, 8), (0, 23));
     }
 }

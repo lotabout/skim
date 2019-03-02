@@ -31,9 +31,6 @@ pub struct Item {
     // The text that will shown into the screen. Can be transformed.
     text: AnsiString,
 
-    // cache of the lower case version of text. To improve speed
-    chars: Vec<char>,
-
     matching_ranges: Vec<(usize, usize)>,
 
     // For the transformed ANSI case, the output will need another transform.
@@ -82,25 +79,17 @@ impl<'a> Item {
             index,
             orig_text: orig_text.into_owned(),
             text,
-            chars: Vec::new(),
             using_transform_fields: !trans_fields.is_empty(),
             matching_ranges: Vec::new(),
             ansi_enabled,
         };
 
-        let chars: Vec<char> = if ret.get_text().as_bytes().is_ascii() {
-            ret.get_text().as_bytes().iter().map(|&s| s as char).collect()
-        } else {
-            ret.get_text().chars().collect()
-        };
-
         let matching_ranges = if !matching_fields.is_empty() {
             parse_matching_fields(delimiter, ret.get_text(), matching_fields)
         } else {
-            vec![(0, chars.len())]
+            vec![(0, ret.get_text().len())]
         };
 
-        ret.chars = chars;
         ret.matching_ranges = matching_ranges;
         ret
     }
@@ -133,10 +122,6 @@ impl<'a> Item {
         }
     }
 
-    pub fn get_chars(&self) -> &[char] {
-        &self.chars
-    }
-
     pub fn get_index(&self) -> usize {
         self.index.1
     }
@@ -156,7 +141,6 @@ impl Clone for Item {
             index: self.index,
             orig_text: self.orig_text.clone(),
             text: self.text.clone(),
-            chars: self.chars.clone(),
             using_transform_fields: self.using_transform_fields,
             matching_ranges: self.matching_ranges.clone(),
             ansi_enabled: self.ansi_enabled,
@@ -173,15 +157,15 @@ pub type Rank = [i64; 4]; // score, index, start, end
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
 pub enum MatchedRange {
-    Range(usize, usize),
-    Chars(Vec<usize>),
+    ByteRange(usize, usize), // range of bytes
+    Chars(Vec<usize>), // individual characters matched
 }
 
 #[derive(Clone, Debug)]
 pub struct MatchedItem {
     pub item: Arc<Item>,
     pub rank: Rank,
-    pub matched_range: Option<MatchedRange>, // range of chars that metched the pattern
+    pub matched_range: Option<MatchedRange>, // range of chars that matched the pattern
 }
 
 impl MatchedItem {
