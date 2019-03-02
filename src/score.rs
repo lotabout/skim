@@ -187,7 +187,7 @@ pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usiz
     }
 }
 
-// Pattern may appear in sevearl places, return the first and last occurrence
+// Pattern may appear in several places, return the first and last occurrence
 pub fn exact_match(choice: &str, pattern: &str) -> Option<((usize, usize), (usize, usize))> {
     // search from the start
     let start_pos = choice.find(pattern)?;
