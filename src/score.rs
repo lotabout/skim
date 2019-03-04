@@ -9,7 +9,7 @@ pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i64, Vec<usize>)> {
         return Some((0, Vec::new()));
     }
 
-    fuzzy_matcher::fuzzy_indices(choice, pattern)
+    fuzzy_matcher::skim::fuzzy_indices(choice, pattern)
 }
 
 pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)> {
