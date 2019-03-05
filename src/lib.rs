@@ -3,6 +3,7 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 mod ansi;
+mod casmutex;
 mod curses;
 mod event;
 mod field;
