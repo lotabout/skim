@@ -4,20 +4,19 @@
 ///! 1. It uses CAS for locking, more efficient in low contention
 ///! 2. Use `.lock()` instead of `.lock().unwrap()` to retrieve the guard.
 ///! 3. It doesn't handle poison so data is still available on thread panic.
-
-use std::sync::atomic::AtomicBool;
 use std::cell::UnsafeCell;
-use std::sync::atomic::Ordering;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 pub struct CasMutex<T: ?Sized> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T: ?Sized + Send> Send for CasMutex<T> { }
-unsafe impl<T: ?Sized + Send> Sync for CasMutex<T> { }
+unsafe impl<T: ?Sized + Send> Send for CasMutex<T> {}
+unsafe impl<T: ?Sized + Send> Sync for CasMutex<T> {}
 
 pub struct CasMutexGuard<'a, T: ?Sized + 'a> {
     // funny underscores due to how Deref/DerefMut currently work (they
@@ -26,12 +25,12 @@ pub struct CasMutexGuard<'a, T: ?Sized + 'a> {
 }
 
 impl<'a, T: ?Sized + 'a> CasMutexGuard<'a, T> {
-    pub fn new(pool: &'a CasMutex<T>) -> CasMutexGuard<'a, T>{
+    pub fn new(pool: &'a CasMutex<T>) -> CasMutexGuard<'a, T> {
         Self { __lock: pool }
     }
 }
 
-unsafe impl<'a, T: ?Sized + Sync> Sync for CasMutexGuard<'a, T> { }
+unsafe impl<'a, T: ?Sized + Sync> Sync for CasMutexGuard<'a, T> {}
 
 impl<T> CasMutex<T> {
     pub fn new(t: T) -> CasMutex<T> {
@@ -44,7 +43,10 @@ impl<T> CasMutex<T> {
 
 impl<T: ?Sized> CasMutex<T> {
     pub fn lock(&self) -> CasMutexGuard<T> {
-        while let Err(_) = self.locked.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst) {}
+        while let Err(_) = self
+            .locked
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {}
         CasMutexGuard::new(self)
     }
 }
@@ -66,7 +68,11 @@ impl<'mutex, T: ?Sized> DerefMut for CasMutexGuard<'mutex, T> {
 impl<'a, T: ?Sized> Drop for CasMutexGuard<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        while let Err(_) = self.__lock.locked.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst) {}
+        while let Err(_) = self
+            .__lock
+            .locked
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+        {}
     }
 }
 
@@ -104,10 +110,16 @@ mod tests {
         for _ in 0..K {
             let tx2 = tx.clone();
             let m2 = m.clone();
-            thread::spawn(move|| { inc(&m2); tx2.send(()).unwrap(); });
+            thread::spawn(move || {
+                inc(&m2);
+                tx2.send(()).unwrap();
+            });
             let tx2 = tx.clone();
             let m2 = m.clone();
-            thread::spawn(move|| { inc(&m2); tx2.send(()).unwrap(); });
+            thread::spawn(move || {
+                inc(&m2);
+                tx2.send(()).unwrap();
+            });
         }
 
         drop(tx);
@@ -116,7 +128,6 @@ mod tests {
         }
         assert_eq!(*m.lock(), J * K * 2);
     }
-
 
     #[test]
     fn test_mutex_unsized() {
