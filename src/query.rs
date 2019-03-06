@@ -1,3 +1,4 @@
+use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::model::QueryPrintClosure;
 use crate::options::SkimOptions;
 use std::mem;
@@ -38,28 +39,28 @@ impl Query {
         }
     }
 
+    pub fn from_options(options: &SkimOptions) -> Self {
+        let mut query = Self::builder();
+        query.parse_options(options);
+        query
+    }
+
     pub fn base_cmd(mut self, base_cmd: &str) -> Self {
         self.base_cmd = base_cmd.to_owned();
         self
     }
 
-    // currently they are not used, but will in the future
     #[cfg(test)]
     pub fn query(mut self, query: &str) -> Self {
         self.query_before = query.chars().collect();
         self
     }
 
-    //pub fn cmd(mut self, cmd: &str) -> Self {
-    //self.cmd_before = cmd.chars().collect();
-    //self
-    //}
-
     pub fn build(self) -> Self {
         self
     }
 
-    pub fn parse_options(&mut self, options: &SkimOptions) {
+    fn parse_options(&mut self, options: &SkimOptions) {
         // some options accept multiple values, thus take the last one
 
         if let Some(base_cmd) = options.cmd {
@@ -343,6 +344,139 @@ impl Query {
             self.act_add_char(c);
         }
         let _ = mem::replace(&mut self.yank, yank);
+    }
+
+    fn query_changed(
+        &self,
+        query_before_len: usize,
+        query_after_len: usize,
+        cmd_before_len: usize,
+        cmd_after_len: usize,
+    ) -> bool {
+        self.query_before.len() != query_before_len
+            || self.query_after.len() != query_after_len
+            || self.cmd_before.len() != cmd_before_len
+            || self.cmd_after.len() != cmd_after_len
+    }
+}
+
+impl EventHandler for Query {
+    fn accept_event(&self, event: Event) -> bool {
+        use crate::event::Event::*;
+        match event {
+            EvActDeleteCharEOF => !self.get_query().is_empty(),
+            EvActAddChar
+            | EvActBackwardDeleteChar
+            | EvActDeleteChar
+            | EvActBackwardChar
+            | EvActBackwardDeleteChar
+            | EvActBackwardKillWord
+            | EvActBackwardWord
+            | EvActBeginningOfLine
+            | EvActDeleteChar
+            | EvActEndOfLine
+            | EvActForwardChar
+            | EvActForwardWord
+            | EvActKillLine
+            | EvActKillWord
+            | EvActNextHistory
+            | EvActPreviousHistory
+            | EvActUnixLineDiscard
+            | EvActUnixWordRubout
+            | EvActYank
+            | EvActToggleInteractive => true,
+            _ => false,
+        }
+    }
+
+    fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen {
+        let query_before_len = self.query_before.len();
+        let query_after_len = self.query_after.len();
+        let cmd_before_len = self.cmd_before.len();
+        let cmd_after_len = self.cmd_after.len();
+
+        match event {
+            EvActAddChar => {
+                let ch: char = *arg.downcast().expect("EvActAddChar: failed to get argument");
+                self.act_add_char(ch);
+            }
+
+            EvActBackwardDeleteChar => {
+                self.act_backward_delete_char();
+            }
+
+            EvActDeleteChar | EvActDeleteCharEOF => {
+                self.act_delete_char();
+            }
+
+            EvActBackwardChar => {
+                self.act_backward_char();
+            }
+
+            EvActBackwardDeleteChar => {
+                self.act_backward_delete_char();
+            }
+
+            EvActBackwardKillWord => {
+                self.act_backward_kill_word();
+            }
+
+            EvActBackwardWord => {
+                self.act_backward_word();
+            }
+
+            EvActBeginningOfLine => {
+                self.act_beginning_of_line();
+            }
+
+            EvActEndOfLine => {
+                self.act_end_of_line();
+            }
+
+            EvActForwardChar => {
+                self.act_forward_char();
+            }
+
+            EvActForwardWord => {
+                self.act_forward_word();
+            }
+
+            EvActKillLine => {
+                self.act_kill_line();
+            }
+
+            EvActKillWord => {
+                self.act_kill_word();
+            }
+
+            EvActNextHistory | EvActPreviousHistory => {
+                unimplemented!();
+            }
+
+            EvActUnixLineDiscard => {
+                self.act_line_discard();
+            }
+
+            EvActUnixWordRubout => {
+                self.act_unix_word_rubout();
+            }
+
+            EvActYank => {
+                self.act_yank();
+            }
+
+            EvActToggleInteractive => {
+                self.act_query_toggle_interactive();
+            }
+
+            _ => {}
+        }
+
+        if self.query_changed(query_before_len, query_after_len, cmd_before_len, cmd_after_len) {
+            UpdateScreen::Redraw
+        } else {
+            UpdateScreen::DontRedraw
+        }
     }
 }
 

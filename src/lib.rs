@@ -77,8 +77,7 @@ impl Skim {
             Ok("") | Err(_) => "find .".to_owned(),
             Ok(val) => val.to_owned(),
         };
-        let mut query = query::Query::builder().base_cmd(&default_command).build();
-        query.parse_options(&options);
+        let mut query = query::Query::from_options(&options).base_cmd(&default_command).build();
 
         //------------------------------------------------------------------------------
         // reader -- read items from stdin or output of comment
@@ -181,93 +180,8 @@ impl Skim {
         while let Ok((ev, arg)) = rx_input.recv() {
             debug!("main: got event {:?}", ev);
             match ev {
-                EvActAddChar => {
-                    let ch: char = *arg.downcast().expect("EvActAddChar: failed to get argument");
-                    query.act_add_char(ch);
-                    on_query_change(&query);
-                }
-
-                EvActBackwardDeleteChar => {
-                    query.act_backward_delete_char();
-                    on_query_change(&query);
-                }
-
-                EvActDeleteChar => {
-                    query.act_delete_char();
-                    on_query_change(&query);
-                }
-
                 EvActDeleteCharEOF => {
-                    if query.get_query() == "" {
-                        let _ = tx_input.send((EvActAbort, Box::new(true))); // trigger draw
-                    } else {
-                        let _ = tx_input.send((EvActDeleteChar, Box::new(true))); // trigger draw
-                    }
-                }
-
-                EvActBackwardChar => {
-                    query.act_backward_char();
-                    redraw_query(&query);
-                }
-
-                EvActForwardChar => {
-                    query.act_forward_char();
-                    redraw_query(&query);
-                }
-
-                EvActBackwardKillWord => {
-                    query.act_backward_kill_word();
-                    on_query_change(&query);
-                }
-
-                EvActUnixWordRubout => {
-                    query.act_unix_word_rubout();
-                    on_query_change(&query);
-                }
-
-                EvActBackwardWord => {
-                    query.act_backward_word();
-                    redraw_query(&query);
-                }
-
-                EvActForwardWord => {
-                    query.act_forward_word();
-                    redraw_query(&query);
-                }
-
-                EvActBeginningOfLine => {
-                    query.act_beginning_of_line();
-                    redraw_query(&query);
-                }
-
-                EvActEndOfLine => {
-                    query.act_end_of_line();
-                    redraw_query(&query);
-                }
-
-                EvActKillLine => {
-                    query.act_kill_line();
-                    on_query_change(&query);
-                }
-
-                EvActUnixLineDiscard => {
-                    query.act_line_discard();
-                    on_query_change(&query);
-                }
-
-                EvActKillWord => {
-                    query.act_kill_word();
-                    on_query_change(&query);
-                }
-
-                EvActYank => {
-                    query.act_yank();
-                    on_query_change(&query);
-                }
-
-                EvActToggleInteractive => {
-                    query.act_query_toggle_interactive();
-                    redraw_query(&query);
+                    let _ = tx_input.send((EvActAbort, Box::new(true))); // trigger draw
                 }
 
                 EvActRotateMode => {
