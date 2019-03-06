@@ -1,6 +1,5 @@
-// An item is line of text that read from `find` command or stdin together with
-// the internal states, such as selected or not
-
+///! An item is line of text that read from `find` command or stdin together with
+///! the internal states, such as selected or not
 use crate::ansi::{ANSIParser, AnsiString};
 use crate::field::*;
 use regex::Regex;
@@ -9,17 +8,16 @@ use std::cmp::Ordering;
 use std::default::Default;
 use std::sync::Arc;
 
-// An item will store everything that one line input will need to be operated and displayed.
-//
-// What's special about an item?
-// The simplest version of an item is a line of string, but things are getting more complex:
-// - The conversion of lower/upper case is slow in rust, because it involds unicode.
-// - We may need to interpret the ANSI codes in the text.
-// - The text can be transformed and limited while searching.
-
-// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
-// more than one line.
-
+/// An item will store everything that one line input will need to be operated and displayed.
+///
+/// What's special about an item?
+/// The simplest version of an item is a line of string, but things are getting more complex:
+/// - The conversion of lower/upper case is slow in rust, because it involds unicode.
+/// - We may need to interpret the ANSI codes in the text.
+/// - The text can be transformed and limited while searching.
+///
+/// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
+/// more than one line.
 #[derive(Debug)]
 pub struct Item {
     // (num of run, number of index)
@@ -158,7 +156,7 @@ pub type Rank = [i64; 4]; // score, index, start, end
 #[allow(dead_code)]
 pub enum MatchedRange {
     ByteRange(usize, usize), // range of bytes
-    Chars(Vec<usize>), // individual characters matched
+    Chars(Vec<usize>),       // individual characters matched
 }
 
 #[derive(Clone, Debug)]

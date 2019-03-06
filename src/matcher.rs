@@ -1,15 +1,14 @@
 use crate::event::{Event, EventReceiver, EventSender};
 use crate::item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::options::SkimOptions;
+use crate::score;
+use rayon::prelude::*;
+use regex::Regex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
-
-use crate::options::SkimOptions;
-use crate::score;
-use regex::Regex;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use rayon::prelude::*;
 
 lazy_static! {
     static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![
@@ -319,15 +318,14 @@ impl MatchEngine for FuzzyEngine {
         // iterate over all matching fields:
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
-            matched_result = score::fuzzy_match(&item.get_text()[start..end], &self.query)
-                .map(|(s, vec)| {
-                    if start != 0 {
-                        let start_char = &item.get_text()[..start].chars().count();
-                        (s, vec.iter().map(|x| x + start_char).collect())
-                    } else {
-                        (s, vec)
-                    }
-                });
+            matched_result = score::fuzzy_match(&item.get_text()[start..end], &self.query).map(|(s, vec)| {
+                if start != 0 {
+                    let start_char = &item.get_text()[..start].chars().count();
+                    (s, vec.iter().map(|x| x + start_char).collect())
+                } else {
+                    (s, vec)
+                }
+            });
 
             if matched_result.is_some() {
                 break;

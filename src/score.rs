@@ -1,8 +1,7 @@
+use fuzzy_matcher;
 ///! score is responsible for calculating the scores of the similarity between
 ///! the query and the choice.
-
 use regex::Regex;
-use fuzzy_matcher;
 
 pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i64, Vec<usize>)> {
     if pattern.is_empty() || choice.is_empty() {
