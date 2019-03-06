@@ -78,6 +78,21 @@ pub enum Event {
     EvActYank,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum UpdateScreen {
+    /// Redraw the screen
+    Redraw,
+    /// Don't redraw the screen
+    DontRedraw,
+}
+
+pub trait EventHandler {
+    fn accept_event(&self, event: Event) -> bool;
+
+    /// handle event, return whether
+    fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen;
+}
+
 #[rustfmt::skip]
 pub fn parse_action(action: &str) -> Option<Event> {
     match action {
