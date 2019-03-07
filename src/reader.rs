@@ -23,6 +23,51 @@ use std::time::Duration;
 
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
+pub struct ReaderControl {
+    stopped: Arc<AtomicBool>,
+    thread_reader: JoinHandle<()>,
+    items: Arc<CasMutex<Vec<Arc<Item>>>>,
+}
+
+impl ReaderControl {
+    pub fn kill(self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        self.thread_reader.join();
+    }
+}
+
+pub struct Reader {
+    option: Arc<ReaderOption>,
+}
+
+impl Reader {
+    pub fn with_options(mut self, options: &SkimOptions) -> Self {
+        Self {
+            option: Arc::new(ReaderOption::with_options(&options)),
+        }
+    }
+
+    pub fn run(&mut self, cmd: &str, source_file: Option<Box<BufRead + Send>>) -> ReaderControl {
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_clone = stopped.clone();
+        stopped.store(false, Ordering::SeqCst);
+        let items = Arc::new(CasMutex::new(Vec::new()));
+        let items_clone = items.clone();
+        let option_clone = self.option.clone();
+
+        // start the new command
+        thread_reader = Some(thread::spawn(move || {
+            reader(cmd, stopped_clone, items_clone, option_clone, source_file);
+        }));
+
+        ReaderControl {
+            stopped,
+            thread_reader,
+            items,
+        }
+    }
+}
+
 struct ReaderOption {
     pub use_ansi_color: bool,
     pub default_arg: String,
@@ -81,98 +126,6 @@ impl ReaderOption {
     }
 }
 
-pub struct Reader {
-    rx_cmd: EventReceiver,
-    items: Arc<CasMutex<Vec<Item>>>,
-    option: Arc<ReaderOption>,
-    data_source: Option<Box<BufRead + Send>>, // used to support piped output
-}
-
-impl Reader {
-    pub fn new(
-        rx_cmd: EventReceiver,
-        items: Arc<CasMutex<Vec<Item>>>,
-        data_source: Option<Box<BufRead + Send>>,
-    ) -> Self {
-        Reader {
-            rx_cmd,
-            items,
-            option: Arc::new(ReaderOption::new()),
-            data_source,
-        }
-    }
-
-    pub fn parse_options(mut self, options: &SkimOptions) -> Self {
-        self.option = Arc::new(ReaderOption::with_options(&options));
-        self
-    }
-
-    pub fn run(&mut self) {
-        // event loop
-        let mut thread_reader: Option<JoinHandle<()>> = None;
-        let reader_stopped: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-
-        let mut last_command = "".to_string();
-        let mut last_query = "".to_string();
-
-        while let Ok((ev, arg)) = self.rx_cmd.recv() {
-            match ev {
-                Event::EvReaderRestart => {
-                    // close existing command or file if exists
-                    let (cmd, query, force_update) = *arg
-                        .downcast::<(String, String, bool)>()
-                        .expect("reader:EvReaderRestart: failed to get argument");
-                    if !force_update && cmd == last_command && query == last_query {
-                        continue;
-                    }
-
-                    // restart command with new `command`
-                    if cmd != last_command {
-                        // stop existing command
-                        reader_stopped.store(true, Ordering::SeqCst);
-                        thread_reader.take().map(|thrd| thrd.join());
-
-                        // create needed data for thread
-                        reader_stopped.store(false, Ordering::SeqCst);
-                        let cmd_clone = cmd.clone();
-                        let option_clone = self.option.clone();
-                        let query_clone = query.clone();
-                        let data_source = self.data_source.take();
-                        let stopped = reader_stopped.clone();
-
-                        // start the new command
-                        let items_clone = self.items.clone();
-                        thread_reader = Some(thread::spawn(move || {
-                            reader(&cmd_clone, stopped, items_clone, option_clone, data_source);
-                        }));
-                    }
-
-                    last_command = cmd;
-                    last_query = query;
-                }
-
-                ev @ Event::EvActAccept | ev @ Event::EvActAbort => {
-                    // stop existing command
-                    reader_stopped.store(true, Ordering::SeqCst);
-                    thread_reader.take().map(|thrd| thrd.join());
-                    let tx_ack: Sender<usize> = *arg.downcast().expect("reader:EvActAccept: failed to get argument");
-                    let _ = tx_ack.send(0);
-
-                    // pass the event to sender
-                    let _ = tx_sender.send((ev, Box::new(true)));
-
-                    // quit the loop
-                    break;
-                }
-
-                _ => {
-                    // do nothing
-                }
-            }
-        }
-    }
-}
-
 fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
     let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let mut command = Command::new(shell)
@@ -203,7 +156,7 @@ lazy_static! {
 fn reader(
     cmd: &str,
     stopped: Arc<AtomicBool>,
-    items: Arc<CasMutex<Vec<Item>>>,
+    items: Arc<CasMutex<Vec<Arc<Item>>>>,
     option: Arc<ReaderOption>,
     source_file: Option<Box<BufRead + Send>>,
 ) {
@@ -274,7 +227,7 @@ fn reader(
                 {
                     // save item into pool
                     let mut vec = items.lock();
-                    vec.push(item);
+                    vec.push(Arc::new(item));
                     index += 1;
                 }
 
