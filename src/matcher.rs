@@ -1,13 +1,16 @@
+use crate::casmutex::CasMutex;
 use crate::event::{Event, EventReceiver, EventSender};
 use crate::item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use crate::options::SkimOptions;
+use crate::orderredvec::OrderedVec;
 use crate::score;
 use rayon::prelude::*;
 use regex::Regex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 lazy_static! {
@@ -31,26 +34,53 @@ enum Algorithm {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum MatcherMode {
+pub enum MatcherMode {
     Regex,
     Fuzzy,
     Exact,
 }
 
+pub struct MatcherControl {
+    stopped: Arc<AtomicBool>,
+    processed: Arc<AtomicUsize>,
+    items: Arc<CasMutex<OrderedVec<MatchedItem>>>,
+    thread_matcher: JoinHandle<()>,
+}
+
+impl MatcherControl {
+    pub fn get_num_processed(&self) -> usize {
+        self.processed.load(Ordering::Relaxed)
+    }
+
+    pub fn kill(self) {
+        self.stopped.store(true, Ordering::Relaxed);
+        self.thread_matcher.join();
+    }
+
+    pub fn into_items(self) -> Arc<CasMutex<OrderedVec<MatchedItem>>> {
+        while !self.stopped.load(Ordering::Relaxed) {}
+        self.items.clone()
+    }
+}
+
 pub struct Matcher {
-    tx_result: EventSender,
     mode: MatcherMode,
 }
 
 impl Matcher {
-    pub fn new(tx_result: EventSender) -> Self {
+    pub fn new() -> Self {
         Matcher {
-            tx_result,
             mode: MatcherMode::Fuzzy,
         }
     }
 
-    pub fn parse_options(&mut self, options: &SkimOptions) {
+    pub fn with_options(options: &SkimOptions) -> Self {
+        let mut matcher = Self::new();
+        matcher.parse_options(&options);
+        matcher
+    }
+
+    fn parse_options(&mut self, options: &SkimOptions) {
         if let Some(ref tie_breaker) = options.tiebreak {
             let mut vec = Vec::new();
             for criteria in tie_breaker.split(',') {
@@ -85,124 +115,35 @@ impl Matcher {
         }
     }
 
-    pub fn run(&self, rx_item: EventReceiver) {
-        let (tx_matcher, rx_matcher): (EventSender, EventReceiver) = channel();
-        let matcher_restart = Arc::new(AtomicBool::new(false));
-        // start a new thread listening for EvMatcherRestart, that means the query had been
-        // changed, so that matcher should discard all previous events.
-        {
-            let matcher_restart = Arc::clone(&matcher_restart);
-            thread::spawn(move || {
-                while let Ok((ev, arg)) = rx_item.recv() {
-                    debug!("matcher: rx_item: {:?}", ev);
-                    match ev {
-                        Event::EvMatcherRestart => {
-                            matcher_restart.store(true, Ordering::Relaxed);
+    pub fn run(&self, query: &str, items: &[Arc<Item>], mode: Option<MatcherMode>) -> MatcherControl {
+        let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_clone = stopped.clone();
+        let processed = Arc::new(AtomicUsize::new(0));
+        let processed_clone = processed.clone();
+        let matched_items = Arc::new(CasMutex::new(OrderedVec::new()));
+        let matched_items_clone = matched_items.clone();
 
-                            let _ = tx_matcher.send((ev, Box::new(true)));
-                            while matcher_restart.load(Ordering::Relaxed) {
-                                thread::sleep(Duration::from_millis(10));
-                            }
-
-                            let _ = tx_matcher.send((ev, arg));
-                        }
-
-                        Event::EvActAccept | Event::EvActAbort => {
-                            // quit the loop
-                            break;
-                        }
-
-                        _ => {
-                            // pass through all other events
-                            let _ = tx_matcher.send((ev, arg));
-                        }
-                    }
+        let thread_matcher = thread::spawn(move || {
+            for item in items {
+                if stopped.load(Ordering::Relaxed) {
+                    break;
                 }
-            });
-        }
 
-        let mut matcher_engine: Option<Box<MatchEngine>> = None;
-        let mut num_processed: usize = 0;
-        let mut matcher_mode = self.mode;
-
-        while let Ok((ev, arg)) = rx_matcher.recv() {
-            debug!("matcher: rx_matcher: {:?}", ev);
-            if matcher_restart.load(Ordering::Relaxed) {
-                while let Ok(_) = rx_matcher.try_recv() {}
-                matcher_restart.store(false, Ordering::Relaxed);
-                continue;
+                processed.fetch_add(1, Ordering::Relaxed);
+                if let Some(matched_item) = matcher_engine.match_item(*item) {
+                    let mut pool = matched_items.lock();
+                    pool.push(matched_item);
+                }
             }
+            stopped.store(true, Ordering::Relaxed);
+        });
 
-            match ev {
-                Event::EvMatcherRestart => {
-                    num_processed = 0;
-                    let query = arg
-                        .downcast::<String>()
-                        .expect("matcher:EvMatcherRestart: failed to get arguments");
-
-                    // notifiy the model that the query had been changed
-                    let _ = self.tx_result.send((Event::EvModelRestart, Box::new(true)));
-
-                    let mode_string = match matcher_mode {
-                        MatcherMode::Regex => "RE".to_string(),
-                        MatcherMode::Exact => "EX".to_string(),
-                        _ => "".to_string(),
-                    };
-                    let _ = self
-                        .tx_result
-                        .send((Event::EvModelNotifyMatcherMode, Box::new(mode_string)));
-
-                    matcher_engine = Some(EngineFactory::build(&query, matcher_mode));
-                }
-
-                Event::EvMatcherNewItem => {
-                    let items: ItemGroup = *arg
-                        .downcast()
-                        .expect("matcher:EvMatcherNewItem: failed to get arguments");
-                    num_processed += items.len();
-                    if let Some(mat) = matcher_engine.as_ref() {
-                        let matched_items: MatchedItemGroup =
-                            items.into_par_iter().filter_map(|item| mat.match_item(item)).collect();
-                        let _ = self.tx_result.send((Event::EvModelNewItem, Box::new(matched_items)));
-                    }
-
-                    // report the number of processed items
-                    let _ = self
-                        .tx_result
-                        .send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
-                }
-
-                Event::EvReaderStopped | Event::EvReaderStarted => {
-                    let _ = self.tx_result.send((ev, arg));
-                }
-                Event::EvSenderStopped => {
-                    // Since matcher is single threaded, sender stopped means all items are
-                    // processed.
-                    let _ = self
-                        .tx_result
-                        .send((Event::EvModelNotifyProcessed, Box::new(num_processed)));
-                    let _ = self.tx_result.send((Event::EvMatcherStopped, arg));
-                }
-
-                Event::EvActRotateMode => {
-                    if self.mode == MatcherMode::Regex {
-                        // sk started with regex mode.
-                        matcher_mode = if matcher_mode == self.mode {
-                            MatcherMode::Fuzzy
-                        } else {
-                            MatcherMode::Regex
-                        };
-                    } else {
-                        matcher_mode = if matcher_mode == self.mode {
-                            MatcherMode::Regex
-                        } else {
-                            self.mode
-                        }
-                    }
-                }
-
-                _ => {}
-            }
+        MatcherControl {
+            stopped: stopped_clone,
+            processed: processed_clone,
+            items: matched_items_clone,
+            thread_matcher,
         }
     }
 }
