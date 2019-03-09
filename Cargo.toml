@@ -30,7 +30,7 @@ log = "0.3.8"
 env_logger = "0.4.3"
 time = "0.1.38"
 clap = "2.26.2"
-tuikit = "0.1.5"
+tuikit = { git = "https://github.com/lotabout/tuikit.git" }
 vte = "0.3.3"
 skiplist = "0.2.10"
 fuzzy-matcher = "0.2.0"

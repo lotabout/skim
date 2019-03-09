@@ -1,7 +1,10 @@
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::model::QueryPrintClosure;
 use crate::options::SkimOptions;
+use crate::theme::{ColorTheme, DEFAULT_THEME};
 use std::mem;
+use tuikit::prelude::*;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -9,7 +12,7 @@ enum QueryMode {
     QUERY,
 }
 
-pub struct Query {
+pub struct Query<'a> {
     cmd_before: Vec<char>,
     cmd_after: Vec<char>,
     query_before: Vec<char>,
@@ -21,6 +24,8 @@ pub struct Query {
     replstr: String,
     query_prompt: String,
     cmd_prompt: String,
+
+    theme: &'a ColorTheme,
 }
 
 impl Query {
@@ -36,6 +41,7 @@ impl Query {
             replstr: "{}".to_string(),
             query_prompt: "> ".to_string(),
             cmd_prompt: "c> ".to_string(),
+            theme: &DEFAULT_THEME,
         }
     }
 
@@ -50,9 +56,13 @@ impl Query {
         self
     }
 
-    #[cfg(test)]
     pub fn query(mut self, query: &str) -> Self {
         self.query_before = query.chars().collect();
+        self
+    }
+
+    pub fn theme(mut self, theme: &ColorTheme) -> Self {
+        self.theme = theme;
         self
     }
 
@@ -132,30 +142,11 @@ impl Query {
         }
     }
 
-    pub fn get_print_func(&self) -> QueryPrintClosure {
-        let before = self.get_before();
-        let after = self.get_after();
-        let mode = self.mode;
-        let cmd_prompt = self.cmd_prompt.clone();
-        let query_prompt = self.query_prompt.clone();
-
-        Box::new(move |curses| {
-            match mode {
-                QueryMode::CMD => {
-                    curses.print_with_attr(&cmd_prompt, curses.theme.prompt());
-                }
-                QueryMode::QUERY => {
-                    curses.print_with_attr(&query_prompt, curses.theme.prompt());
-                }
-            }
-
-            curses.print(&before);
-            let (cursor_y, cursor_x) = curses.getyx();
-            curses.print(&after);
-            let (qend_y, qend_x) = curses.getyx();
-            curses.mv(cursor_y, cursor_x);
-            (qend_y, qend_x)
-        })
+    fn get_prompt(&self) -> &str {
+        match mode {
+            QueryMode::CMD => &self.cmd_prompt,
+            QueryMode::QUERY => &self.query_prompt,
+        }
     }
 
     fn get_ref(&mut self) -> (&mut Vec<char>, &mut Vec<char>) {
@@ -477,6 +468,24 @@ impl EventHandler for Query {
         } else {
             UpdateScreen::DontRedraw
         }
+    }
+}
+
+impl Draw for Query {
+    fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+        let before = self.get_before();
+        let after = self.get_after();
+        let prompt = self.get_prompt();
+
+        canvas.print_with_attr(0, 0, prompt, self.theme.prompt())?;
+        let col = prompt.width();
+
+        canvas.print_with_attr(0, col, &before, self.theme.normal())?;
+        let col = col + &before.width();
+        canvas.print_with_attr(0, col, &after, self.theme.normal())?;
+        canvas.set_cursor(0, col)?;
+        canvas.show_cursor(true)?;
+        Ok(())
     }
 }
 
