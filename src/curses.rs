@@ -11,6 +11,8 @@ use tuikit::screen::{Cell, Screen};
 use tuikit::term::Term;
 use unicode_width::UnicodeWidthChar;
 
+trait Canvas {}
+
 //==============================================================================
 const MIN_HEIGHT: usize = 3;
 const MIN_WIDTH: usize = 4;
@@ -37,6 +39,7 @@ pub enum Margin {
 // row `bottom` and column `right` should not be used.
 
 pub struct Window {
+    // position of the window on screen (excluding bottom & right)
     top: usize,
     bottom: usize,
     left: usize,

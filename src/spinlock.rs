@@ -1,4 +1,4 @@
-///! Mutex implemented using AtomicBool
+///! SpinLock implemented using AtomicBool
 ///! Just like Mutex except:
 ///!
 ///! 1. It uses CAS for locking, more efficient in low contention
@@ -10,30 +10,30 @@ use std::ops::DerefMut;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
-pub struct CasMutex<T: ?Sized> {
+pub struct SpinLock<T: ?Sized> {
     locked: AtomicBool,
     data: UnsafeCell<T>,
 }
 
-unsafe impl<T: ?Sized + Send> Send for CasMutex<T> {}
-unsafe impl<T: ?Sized + Send> Sync for CasMutex<T> {}
+unsafe impl<T: ?Sized + Send> Send for SpinLock<T> {}
+unsafe impl<T: ?Sized + Send> Sync for SpinLock<T> {}
 
-pub struct CasMutexGuard<'a, T: ?Sized + 'a> {
+pub struct SpinLockGuard<'a, T: ?Sized + 'a> {
     // funny underscores due to how Deref/DerefMut currently work (they
     // disregard field privacy).
-    __lock: &'a CasMutex<T>,
+    __lock: &'a SpinLock<T>,
 }
 
-impl<'a, T: ?Sized + 'a> CasMutexGuard<'a, T> {
-    pub fn new(pool: &'a CasMutex<T>) -> CasMutexGuard<'a, T> {
+impl<'a, T: ?Sized + 'a> SpinLockGuard<'a, T> {
+    pub fn new(pool: &'a SpinLock<T>) -> SpinLockGuard<'a, T> {
         Self { __lock: pool }
     }
 }
 
-unsafe impl<'a, T: ?Sized + Sync> Sync for CasMutexGuard<'a, T> {}
+unsafe impl<'a, T: ?Sized + Sync> Sync for SpinLockGuard<'a, T> {}
 
-impl<T> CasMutex<T> {
-    pub fn new(t: T) -> CasMutex<T> {
+impl<T> SpinLock<T> {
+    pub fn new(t: T) -> SpinLock<T> {
         Self {
             locked: AtomicBool::new(false),
             data: UnsafeCell::new(t),
@@ -41,17 +41,17 @@ impl<T> CasMutex<T> {
     }
 }
 
-impl<T: ?Sized> CasMutex<T> {
-    pub fn lock(&self) -> CasMutexGuard<T> {
+impl<T: ?Sized> SpinLock<T> {
+    pub fn lock(&self) -> SpinLockGuard<T> {
         while let Err(_) = self
             .locked
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         {}
-        CasMutexGuard::new(self)
+        SpinLockGuard::new(self)
     }
 }
 
-impl<'mutex, T: ?Sized> Deref for CasMutexGuard<'mutex, T> {
+impl<'mutex, T: ?Sized> Deref for SpinLockGuard<'mutex, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -59,13 +59,13 @@ impl<'mutex, T: ?Sized> Deref for CasMutexGuard<'mutex, T> {
     }
 }
 
-impl<'mutex, T: ?Sized> DerefMut for CasMutexGuard<'mutex, T> {
+impl<'mutex, T: ?Sized> DerefMut for SpinLockGuard<'mutex, T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.__lock.data.get() }
     }
 }
 
-impl<'a, T: ?Sized> Drop for CasMutexGuard<'a, T> {
+impl<'a, T: ?Sized> Drop for SpinLockGuard<'a, T> {
     #[inline]
     fn drop(&mut self) {
         while let Err(_) = self
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn smoke() {
-        let m = CasMutex::new(());
+        let m = SpinLock::new(());
         drop(m.lock());
         drop(m.lock());
     }
@@ -98,9 +98,9 @@ mod tests {
         const J: u32 = 1000;
         const K: u32 = 3;
 
-        let m = Arc::new(CasMutex::new(0));
+        let m = Arc::new(SpinLock::new(0));
 
-        fn inc(m: &CasMutex<u32>) {
+        fn inc(m: &SpinLock<u32>) {
             for _ in 0..J {
                 *m.lock() += 1;
             }
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_mutex_unsized() {
-        let mutex: &CasMutex<[i32]> = &CasMutex::new([1, 2, 3]);
+        let mutex: &SpinLock<[i32]> = &SpinLock::new([1, 2, 3]);
         {
             let b = &mut *mutex.lock();
             b[0] = 4;

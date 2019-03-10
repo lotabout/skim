@@ -12,31 +12,17 @@ pub enum Event {
     EvInputKey,
     EvInputInvalid,
 
-    EvMatcherNewItem,
-    EvMatcherRestart,
-    EvMatcherStopped,
-
-    EvModelDrawQuery,
-    EvModelDrawInfo,
-    EvModelNewItem,
-    EvModelNewPreview,
-    EvModelNotifyProcessed,
-    EvModelNotifyMatcherMode,
-    EvModelRestart,
+    EvMatcherDone,
 
     EvReaderNewItem,
     EvReaderStarted,
     EvReaderStopped,
     EvReaderRestart,
 
-    EvSenderRestart,
-    EvSenderStopped,
-
-    EvActAddChar,
-
     // user bind actions
     EvActAbort,
     EvActAccept,
+    EvActAddChar,
     EvActBackwardChar,
     EvActBackwardDeleteChar,
     EvActBackwardKillWord,

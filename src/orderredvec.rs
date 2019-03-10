@@ -3,12 +3,14 @@
 // in order. Other items are kept unordered and are sorted on demand.
 
 const ORDERED_SIZE: usize = 300;
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone)]
 pub struct OrderedVec<T: Ord> {
-    ordered: Vec<T>,
-    unordered: Vec<T>,
-    sorted: bool,
+    ordered: RefCell<Vec<T>>,
+    unordered: RefCell<Vec<T>>,
+    sorted: AtomicBool,
 }
 
 impl<T> OrderedVec<T>
@@ -17,9 +19,9 @@ where
 {
     pub fn new() -> Self {
         OrderedVec {
-            ordered: Vec::with_capacity(ORDERED_SIZE),
-            unordered: Vec::with_capacity(ORDERED_SIZE * 2),
-            sorted: false,
+            ordered: RefCell::new(Vec::with_capacity(ORDERED_SIZE)),
+            unordered: RefCell::new(Vec::with_capacity(ORDERED_SIZE * 2)),
+            sorted: AtomicBool::new(false),
         }
     }
 
@@ -27,7 +29,7 @@ where
         self.ordered.push(item);
         let mut pos = self.ordered.len() - 1;
         while pos > 0 && self.ordered[pos] < self.ordered[pos - 1] {
-            self.ordered.swap(pos, pos - 1);
+            self.ordered.borrow_mut().swap(pos, pos - 1);
             pos -= 1;
         }
     }
@@ -46,10 +48,10 @@ where
         };
 
         self.unordered.push(smaller);
-        self.sorted = false;
+        self.sorted.store(false, Ordering::Relaxed);
     }
 
-    pub fn get(&mut self, index: usize) -> Option<&T> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.ordered.len() {
             return self.ordered.get(index);
         }
@@ -58,9 +60,9 @@ where
             return None;
         }
 
-        if !self.sorted {
+        if !self.sorted.load(Ordering::Relaxed) {
             self.unordered.sort_by(|a, b| a.cmp(b));
-            self.sorted = true;
+            self.sorted.store(true, Ordering::Relaxed);
         }
 
         self.unordered.get(index - self.ordered.len())
@@ -73,7 +75,7 @@ where
     pub fn clear(&mut self) {
         self.ordered.clear();
         self.unordered.clear();
-        self.sorted = true;
+        self.sorted.store(true, Ordering::Relaxed);
     }
 
     pub fn iter<'a>(&'a self) -> Box<Iterator<Item = &T> + 'a> {

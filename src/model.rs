@@ -1,11 +1,16 @@
 use crate::ansi::AnsiString;
 use crate::curses::*;
-use crate::event::{Event, EventReceiver};
+use crate::event::{Event, EventHandler, EventReceiver, EventSender, UpdateScreen};
 use crate::field::get_string_by_range;
 use crate::item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
 use crate::orderredvec::OrderedVec;
 use crate::previewer::PreviewInput;
+use crate::query::Query;
+use crate::reader::{Reader, ReaderControl};
+use crate::selection::Selection;
+use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::escape_single_quote;
 use regex::{Captures, Regex};
@@ -30,26 +35,15 @@ lazy_static! {
     static ref REFRESH_DURATION: Duration = Duration::from_millis(200);
 }
 
-pub struct Model {
+pub struct Model<'a> {
+    reader: Reader,
+    query: Query<'a>,
+    selection: Selection,
+    matcher: Matcher,
+
     rx_cmd: EventReceiver,
-    items: OrderedVec<Arc<MatchedItem>>, // all items
-    selected: HashMap<(usize, usize), Arc<MatchedItem>>,
+    tx_cmd: EventSender,
 
-    item_cursor: usize, // the index of matched item currently highlighted.
-    line_cursor: usize, // line No.
-    hscroll_offset: usize,
-    height: usize,
-    width: usize,
-    query_end_x: usize,
-
-    reserved_height: usize, // sum of lines needed for: query, status & headers
-
-    pub tabstop: usize,
-
-    reader_stopped: bool,
-    matcher_stopped: bool,
-    num_read: usize,
-    num_processed: usize,
     matcher_mode: String,
     timer: Instant,
 
@@ -59,7 +53,6 @@ pub struct Model {
     tx_preview: Option<Sender<(Event, PreviewInput)>>,
 
     // Options
-    multi_selection: bool,
     reverse: bool,
     preview_cmd: Option<String>,
     delimiter: Regex,
@@ -68,29 +61,13 @@ pub struct Model {
     print_cmd: bool,
     no_hscroll: bool,
     inline_info: bool,
-    theme: ColorTheme,
+    theme: &'a ColorTheme,
 }
 
 impl Model {
     pub fn new(rx_cmd: EventReceiver) -> Self {
         Model {
             rx_cmd,
-            items: OrderedVec::new(),
-            num_read: 0,
-            num_processed: 0,
-            selected: HashMap::new(),
-
-            item_cursor: 0,
-            line_cursor: 0,
-            hscroll_offset: 0,
-            height: 0,
-            width: 0,
-            reserved_height: 2, // = status + query (lines)
-            query_end_x: 0,
-            tabstop: 8,
-
-            reader_stopped: false,
-            matcher_stopped: false,
             timer: Instant::now(),
             matcher_mode: "".to_string(),
 
@@ -99,7 +76,6 @@ impl Model {
 
             tx_preview: None,
 
-            multi_selection: false,
             reverse: false,
             preview_cmd: None,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
@@ -108,7 +84,7 @@ impl Model {
             print_cmd: false,
             no_hscroll: false,
             inline_info: false,
-            theme: DEFAULT_THEME,
+            theme: &DEFAULT_THEME,
         }
     }
 
@@ -168,7 +144,58 @@ impl Model {
             }
         }
 
-        self.theme = ColorTheme::init_from_options(options);
+        self.theme = &ColorTheme::init_from_options(options);
+    }
+
+    pub fn start(&mut self) {
+        let mut cmd = self.query.get_cmd_query();
+        let mut query = self.query.get_query();
+
+        let mut reader_control = self.reader.run(&cmd);
+        let mut redraw = UpdateScreen::DontRedraw;
+        let mut matcher_control = None;
+
+        let items = Arc::new(SpinLock::new(Vec::new()));
+
+        while let Ok((ev, arg)) = self.rx_cmd.recv() {
+            if self.query.accept_event(ev) {
+                redraw = self.query.handle(ev, arg);
+
+                // re-reader if needed;
+                let new_cmd = self.query.get_cmd_query();
+                if new_cmd != cmd {
+                    cmd = new_cmd;
+                    reader_control.kill();
+                    reader_control = self.reader.run(&cmd);
+                }
+
+                // re-run matcher if needed
+                let new_query = self.query.get_query();
+                if query != new_query {
+                    query = new_query;
+                    matcher_control.take().map(|ctrl| ctrl.kill());
+                    items.lock().clear();
+                    self.tx_cmd.send(Event::EvMatcherDone);
+                }
+            } else if self.selection.accept_event(ev) {
+                redraw = self.selection.handle(ev, arg);
+            } else {
+                match ev {
+                    Event::EvMatcherDone => {
+                        redraw = UpdateScreen::Redraw;
+                        self.selection.replace_items(matcher_control.take().unwrap().into_items());
+
+                        // if there are new items, restart the matcher
+                        if !reader_control.is_empty() {
+                            let tx_cmd = self.tx_cmd.clone();
+                            matcher_control.replace(self.matcher.run(&query, items.clone(), None, || {
+                                self.txsend((Event::EvMatcherDone, Box::new(true)));
+                            }));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn run(&mut self, mut curses: Curses) {
@@ -586,122 +613,6 @@ impl Model {
         curses.mv(y, x);
     }
 
-    fn draw_query(&mut self, curses: &mut Window, print_query_func: &QueryPrintClosure) {
-        let (h, w) = curses.get_maxyx();
-        let (h, _) = (h as usize, w as usize);
-
-        //debug!("model:draw_query");
-
-        // print query
-        curses.mv(if self.reverse { 0 } else { h - 1 }, 0);
-        if !self.inline_info {
-            curses.clrtoeol();
-        }
-        let (_, x) = print_query_func(curses);
-        self.query_end_x = x;
-    }
-
-    fn draw_item(&self, curses: &mut Window, matched_item: &MatchedItem, is_current: bool) {
-        let index = matched_item.item.get_full_index();
-
-        let default_attr = if is_current {
-            self.theme.current()
-        } else {
-            self.theme.normal()
-        };
-
-        if self.selected.contains_key(&index) {
-            curses.print_with_attr(">", default_attr.extend(self.theme.selected()));
-        } else {
-            curses.print_with_attr(" ", default_attr);
-        }
-
-        let (y, x) = curses.getyx();
-
-        let text = matched_item.item.get_text();
-        debug!("model:draw_item: {:?}", matched_item);
-        let (match_start_char, match_end_char) = match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indices)) => {
-                if !matched_indices.is_empty() {
-                    (matched_indices[0], matched_indices[matched_indices.len() - 1] + 1)
-                } else {
-                    (0, 0)
-                }
-            }
-            Some(MatchedRange::ByteRange(match_start, match_end)) => {
-                let match_start_char = text[..match_start].chars().count();
-                let diff = text[match_start..match_end].chars().count();
-                (match_start_char, match_start_char+diff)
-            },
-            None => (0, 0),
-        };
-        let (shift, full_width) = reshape_string(&text, self.width as usize, match_start_char, match_end_char, self.tabstop);
-
-        let item = &matched_item.item;
-
-        debug!(
-            "model:draw_item: shift: {:?}, width:{:?}, full_width: {:?}",
-            shift, self.width, full_width
-        );
-        let mut printer = LinePrinter::builder()
-            .tabstop(self.tabstop)
-            .container_width(self.width as usize)
-            .shift(if self.no_hscroll { 0 } else { shift })
-            .text_width(full_width)
-            .hscroll_offset(self.hscroll_offset)
-            .build();
-
-        // print out the original content
-        curses.mv(y, x);
-        printer.reset();
-        if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
-            for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter() {
-                printer.print_char(curses, ch, default_attr.extend(attr), false);
-            }
-        } else {
-            for ch in item.get_text().chars() {
-                printer.print_char(curses, ch, default_attr, false);
-            }
-        }
-
-        curses.clrtoeol();
-
-        // print the highlighted content
-        curses.mv(y, x);
-        printer.reset();
-        match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indices)) => {
-                let mut matched_indices_iter = matched_indices.iter().peekable();
-
-                for (ch_idx, ch) in text.chars().enumerate() {
-                    match matched_indices_iter.peek() {
-                        Some(&&match_idx) if ch_idx == match_idx => {
-                            debug!("index: {}, ch: {}", ch_idx, ch);
-                            printer.print_char(curses, ch, default_attr.extend(self.theme.matched()), false);
-                            let _ = matched_indices_iter.next();
-                        }
-                        Some(_) | None => {
-                            printer.print_char(curses, ch, default_attr, true);
-                        }
-                    }
-                }
-            }
-
-            Some(MatchedRange::ByteRange(start, end)) => {
-                for (idx, ch) in text.char_indices() {
-                    printer.print_char(
-                        curses,
-                        ch,
-                        default_attr.extend(self.theme.matched()),
-                        !(idx >= start && idx < end),
-                    );
-                }
-            }
-
-            _ => {}
-        }
-    }
-
     pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>) {
         self.tx_preview = Some(tx_preview);
     }
@@ -907,235 +818,5 @@ impl Model {
         self.draw_status(&mut curses.win_main);
         curses.win_main.show_cursor();
         curses.refresh();
-    }
-}
-
-// use to print a single line, properly handle the tabsteop and shift of a string
-// e.g. a long line will be printed as `..some content` or `some content..` or `..some content..`
-// depends on the container's width and the size of the content.
-//
-// let's say we have a very long line with lots of useless information
-//                                |.. with lots of use..|             // only to show this
-//                                |<- container width ->|
-//             |<-    shift    -> |
-// |< hscroll >|
-
-struct LinePrinter {
-    start: usize,
-    end: usize,
-    current: i32,
-
-    tabstop: usize,
-    shift: usize,
-    text_width: usize,
-    container_width: usize,
-    hscroll_offset: usize,
-}
-
-impl LinePrinter {
-    pub fn builder() -> Self {
-        LinePrinter {
-            start: 0,
-            end: 0,
-            current: -1,
-
-            tabstop: 8,
-            shift: 0,
-            text_width: 0,
-            container_width: 0,
-            hscroll_offset: 0,
-        }
-    }
-
-    pub fn tabstop(mut self, tabstop: usize) -> Self {
-        self.tabstop = tabstop;
-        self
-    }
-
-    pub fn hscroll_offset(mut self, offset: usize) -> Self {
-        self.hscroll_offset = offset;
-        self
-    }
-
-    pub fn text_width(mut self, width: usize) -> Self {
-        self.text_width = width;
-        self
-    }
-
-    pub fn container_width(mut self, width: usize) -> Self {
-        self.container_width = width;
-        self
-    }
-
-    pub fn shift(mut self, shift: usize) -> Self {
-        self.shift = shift;
-        self
-    }
-
-    pub fn build(mut self) -> Self {
-        self.reset();
-        self
-    }
-
-    pub fn reset(&mut self) {
-        self.current = 0;
-        self.start = self.shift + self.hscroll_offset;
-        self.end = self.start + self.container_width;
-    }
-
-    fn caddch(&mut self, curses: &mut Window, ch: char, attr: Attr, skip: bool) {
-        let w = ch.width().unwrap_or(2);
-
-        if skip {
-            curses.move_cursor_right(w);
-        } else {
-            curses.add_char_with_attr(ch, attr);
-        }
-    }
-
-    fn print_char_raw(&mut self, curses: &mut Window, ch: char, attr: Attr, skip: bool) {
-        // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
-        // the hidden chracter
-
-        let w = ch.width().unwrap_or(2);
-
-        assert!(self.current >= 0);
-        let current = self.current as usize;
-
-        if current < self.start || current >= self.end {
-            // pass if it is hidden
-        } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
-            // print left ".."
-            for _ in 0..min(w, current - self.start + 1) {
-                self.caddch(curses, '.', attr, skip);
-            }
-        } else if self.end - current <= 2 && (self.text_width > self.end) {
-            // print right ".."
-            for _ in 0..min(w, self.end - current) {
-                self.caddch(curses, '.', attr, skip);
-            }
-        } else {
-            self.caddch(curses, ch, attr, skip);
-        }
-
-        self.current += w as i32;
-    }
-
-    pub fn print_char(&mut self, curses: &mut Window, ch: char, attr: Attr, skip: bool) {
-        if ch != '\t' {
-            self.print_char_raw(curses, ch, attr, skip);
-        } else {
-            // handle tabstop
-            let rest = if self.current < 0 {
-                self.tabstop
-            } else {
-                self.tabstop - (self.current as usize) % self.tabstop
-            };
-            for _ in 0..rest {
-                self.print_char_raw(curses, ' ', attr, skip);
-            }
-        }
-    }
-}
-
-//==============================================================================
-// helper functions
-
-// return an array, arr[i] store the display width till char[i]
-fn accumulate_text_width(text: &str, tabstop: usize) -> Vec<usize> {
-    let mut ret = Vec::new();
-    let mut w = 0;
-    for ch in text.chars() {
-        w += if ch == '\t' {
-            tabstop - (w % tabstop)
-        } else {
-            ch.width().unwrap_or(2)
-        };
-        ret.push(w);
-    }
-    ret
-}
-
-// "smartly" calculate the "start" position of the string in order to show the matched contents
-// for example, if the match appear in the end of a long string, we need to show the right part.
-// `xxxxxxxxxxxxxxxxxxxxxxxxxxMMxxxxxMxxxxx`
-//                shift ->|               |
-//
-// return (left_shift, full_print_width)
-fn reshape_string(
-    text: &str,
-    container_width: usize,
-    match_start: usize,
-    match_end: usize,
-    tabstop: usize,
-) -> (usize, usize) {
-    if text.is_empty() {
-        return (0, 0);
-    }
-
-    let acc_width = accumulate_text_width(text, tabstop);
-    let full_width = acc_width[acc_width.len() - 1];
-    if full_width <= container_width {
-        return (0, full_width);
-    }
-
-    // w1, w2, w3 = len_before_matched, len_matched, len_after_matched
-    let w1 = if match_start == 0 {
-        0
-    } else {
-        acc_width[match_start - 1]
-    };
-    let w2 = if match_end >= acc_width.len() {
-        full_width - w1
-    } else {
-        acc_width[match_end] - w1
-    };
-    let w3 = acc_width[acc_width.len() - 1] - w1 - w2;
-
-    if (w1 > w3 && w2 + w3 <= container_width) || (w3 <= 2) {
-        // right-fixed
-        //(right_fixed(&acc_width, container_width), full_width)
-        (full_width - container_width, full_width)
-    } else if w1 <= w3 && w1 + w2 <= container_width {
-        // left-fixed
-        (0, full_width)
-    } else {
-        // left-right
-        (acc_width[match_end] - container_width + 2, full_width)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{accumulate_text_width, reshape_string};
-
-    #[test]
-    fn test_accumulate_text_width() {
-        assert_eq!(
-            accumulate_text_width("abcdefg", 8),
-            vec![1, 2, 3, 4, 5, 6, 7]
-        );
-        assert_eq!(
-            accumulate_text_width("ab中de国g", 8),
-            vec![1, 2, 4, 5, 6, 8, 9]
-        );
-        assert_eq!(
-            accumulate_text_width("ab\tdefg", 8),
-            vec![1, 2, 8, 9, 10, 11, 12]
-        );
-        assert_eq!(
-            accumulate_text_width("ab中\te国g", 8),
-            vec![1, 2, 4, 8, 9, 11, 12]
-        );
-    }
-
-    #[test]
-    fn test_reshape_string() {
-        // no match, left fixed to 0
-        assert_eq!(reshape_string("abc", 10, 0, 0, 8), (0, 3));
-        assert_eq!(reshape_string("a\tbc", 8, 0, 0, 8), (0, 10));
-        assert_eq!(reshape_string("a\tb\tc", 10, 0, 0, 8), (0, 17));
-        assert_eq!(reshape_string("a\t中b\tc", 8, 0, 0, 8), (0, 17));
-        assert_eq!(reshape_string("a\t中b\tc012345", 8, 0, 0, 8), (0, 23));
     }
 }

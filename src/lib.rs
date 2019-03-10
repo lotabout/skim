@@ -3,7 +3,6 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 mod ansi;
-mod casmutex;
 mod curses;
 mod event;
 mod field;
@@ -18,10 +17,12 @@ mod previewer;
 mod query;
 mod reader;
 mod score;
-mod sender;
+mod selection;
+mod spinlock;
 mod theme;
 mod util;
 
+use crate::spinlock::SpinLock;
 use curses::Curses;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
@@ -84,9 +85,8 @@ impl Skim {
 
         debug!("reader start");
         let (tx_reader, rx_reader) = channel();
-        let (tx_item, rx_item) = sync_channel(128);
-        let mut reader = reader::Reader::new(rx_reader, tx_item.clone(), source);
-        reader.parse_options(&options);
+        let items = Arc::new(SpinLock::new(Vec::new()));
+        let mut reader = reader::Reader::new(rx_reader, items, source).parse_options(&options);
         thread::spawn(move || {
             reader.run();
         });

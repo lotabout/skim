@@ -1,9 +1,9 @@
-use crate::casmutex::CasMutex;
 use crate::event::{Event, EventReceiver, EventSender};
 use crate::item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
 use crate::options::SkimOptions;
 use crate::orderredvec::OrderedVec;
 use crate::score;
+use crate::spinlock::SpinLock;
 use rayon::prelude::*;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -43,7 +43,7 @@ pub enum MatcherMode {
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
     processed: Arc<AtomicUsize>,
-    items: Arc<CasMutex<OrderedVec<MatchedItem>>>,
+    items: Arc<SpinLock<OrderedVec<MatchedItem>>>,
     thread_matcher: JoinHandle<()>,
 }
 
@@ -57,7 +57,7 @@ impl MatcherControl {
         self.thread_matcher.join();
     }
 
-    pub fn into_items(self) -> Arc<CasMutex<OrderedVec<MatchedItem>>> {
+    pub fn into_items(self) -> Arc<SpinLock<OrderedVec<MatchedItem>>> {
         while !self.stopped.load(Ordering::Relaxed) {}
         self.items.clone()
     }
@@ -115,28 +115,38 @@ impl Matcher {
         }
     }
 
-    pub fn run(&self, query: &str, items: &[Arc<Item>], mode: Option<MatcherMode>) -> MatcherControl {
+    pub fn run<C>(
+        &self,
+        query: &str,
+        items: Arc<SpinLock<Vec<Arc<Item>>>>,
+        mode: Option<MatcherMode>,
+        callback: C,
+    ) -> MatcherControl
+    where
+        C: FnOnce(Arc<SpinLock<OrderedVec<MatchedItem>>>),
+    {
         let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         let processed = Arc::new(AtomicUsize::new(0));
         let processed_clone = processed.clone();
-        let matched_items = Arc::new(CasMutex::new(OrderedVec::new()));
+        let matched_items = Arc::new(SpinLock::new(OrderedVec::new()));
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
-            for item in items {
+            for &item in items.lock().iter() {
                 if stopped.load(Ordering::Relaxed) {
                     break;
                 }
 
                 processed.fetch_add(1, Ordering::Relaxed);
-                if let Some(matched_item) = matcher_engine.match_item(*item) {
+                if let Some(matched_item) = matcher_engine.match_item(item) {
                     let mut pool = matched_items.lock();
                     pool.push(matched_item);
                 }
             }
             stopped.store(true, Ordering::Relaxed);
+            callback(matched_items);
         });
 
         MatcherControl {

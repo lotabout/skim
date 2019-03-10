@@ -1,12 +1,12 @@
-/// Reader is used for reading items from datasource (e.g. stdin or command output)
-///
-/// After reading in a line, reader will save an item into the pool(items)
-use crate::casmutex::CasMutex;
 use crate::event::{Event, EventArg, EventReceiver, EventSender};
 use crate::field::FieldRange;
 use crate::item::Item;
 use crate::options::SkimOptions;
 use crate::sender::CachedSender;
+/// Reader is used for reading items from datasource (e.g. stdin or command output)
+///
+/// After reading in a line, reader will save an item into the pool(items)
+use crate::spinlock::SpinLock;
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
@@ -26,7 +26,7 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 pub struct ReaderControl {
     stopped: Arc<AtomicBool>,
     thread_reader: JoinHandle<()>,
-    items: Arc<CasMutex<Vec<Arc<Item>>>>,
+    items: Arc<SpinLock<Vec<Arc<Item>>>>,
 }
 
 impl ReaderControl {
@@ -34,26 +34,50 @@ impl ReaderControl {
         self.stopped.store(true, Ordering::SeqCst);
         self.thread_reader.join();
     }
+
+    pub fn take(&self) -> Vec<Arc<Item>> {
+        let items = self.items.lock();
+        let mut ret = Vec::with_capacity(items.len());
+        ret.append(items);
+        ret
+    }
+
+    pub fn is_empty(&self) -> bool {
+        let items = self.items.lock();
+        items.is_empty()
+    }
+
+    pub fn is_done(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
+    }
 }
 
 pub struct Reader {
     option: Arc<ReaderOption>,
+    source_file: Option<Box<BufRead + Send>>,
 }
 
 impl Reader {
     pub fn with_options(mut self, options: &SkimOptions) -> Self {
         Self {
             option: Arc::new(ReaderOption::with_options(&options)),
+            source_file: None,
         }
     }
 
-    pub fn run(&mut self, cmd: &str, source_file: Option<Box<BufRead + Send>>) -> ReaderControl {
+    pub fn source(mut self, source_file: Option<Box<BufRead + Send>>) -> Self {
+        self.source_file = source_file;
+        self
+    }
+
+    pub fn run(&mut self, cmd: &str) -> ReaderControl {
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         stopped.store(false, Ordering::SeqCst);
-        let items = Arc::new(CasMutex::new(Vec::new()));
+        let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
         let option_clone = self.option.clone();
+        let source_file = self.source_file.take();
 
         // start the new command
         thread_reader = Some(thread::spawn(move || {
@@ -156,7 +180,7 @@ lazy_static! {
 fn reader(
     cmd: &str,
     stopped: Arc<AtomicBool>,
-    items: Arc<CasMutex<Vec<Arc<Item>>>>,
+    items: Arc<SpinLock<Vec<Arc<Item>>>>,
     option: Arc<ReaderOption>,
     source_file: Option<Box<BufRead + Send>>,
 ) {
