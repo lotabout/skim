@@ -4,7 +4,6 @@ use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use std::mem;
 use tuikit::prelude::*;
-use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -473,15 +472,14 @@ impl EventHandler for Query {
 
 impl Draw for Query {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+        canvas.clear()?;
         let before = self.get_before();
         let after = self.get_after();
         let prompt = self.get_prompt();
 
-        canvas.print_with_attr(0, 0, prompt, self.theme.prompt())?;
-        let col = prompt.width();
-
-        canvas.print_with_attr(0, col, &before, self.theme.normal())?;
-        let col = col + &before.width();
+        let prompt_width = canvas.print_with_attr(0, 0, prompt, self.theme.prompt())?;
+        let before_width = canvas.print_with_attr(0, col, &before, self.theme.normal())?;
+        let col = prompt_width + before_width;
         canvas.print_with_attr(0, col, &after, self.theme.normal())?;
         canvas.set_cursor(0, col)?;
         canvas.show_cursor(true)?;
