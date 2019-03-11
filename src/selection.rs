@@ -1,8 +1,6 @@
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
-use crate::item::MatchedItem;
 use crate::item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
 /// Handle the selections of items
-use crate::orderredvec::OrderedVec;
 use crate::util::reshape_string;
 use crate::SkimOptions;
 use std::cmp::max;
@@ -11,9 +9,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
+use crate::theme::{ColorTheme, DEFAULT_THEME};
+use skiplist::OrderedSkipList;
 
 pub struct Selection {
-    items: OrderedVec<Arc<MatchedItem>>, // all items
+    items: OrderedSkipList<Arc<MatchedItem>>, // all items
     selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     //
@@ -38,12 +38,13 @@ pub struct Selection {
     multi_selection: bool,
     reverse: bool,
     no_hscroll: bool,
+    theme: Arc<ColorTheme>,
 }
 
 impl Selection {
     pub fn new() -> Self {
         Selection {
-            items: OrderedVec::new(),
+            items: OrderedSkipList::new(),
             selected: HashMap::new(),
             item_cursor: 0,
             line_cursor: 0,
@@ -53,10 +54,11 @@ impl Selection {
             multi_selection: false,
             reverse: false,
             no_hscroll: false,
+            theme: Arc::new(DEFAULT_THEME),
         }
     }
 
-    pub fn from_options(options: &SkimOptions) -> Self {
+    pub fn with_options(options: &SkimOptions) -> Self {
         let mut selection = Self::new();
         selection.parse_options(options);
         selection
@@ -81,10 +83,15 @@ impl Selection {
         }
     }
 
-    pub fn replace_items(&mut self, items: OrderedVec<Arc<MatchedItem>>) {
+    pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
+        self.theme = theme;
+        self
+    }
+
+    pub fn replace_items(&mut self, items: OrderedSkipList<Arc<MatchedItem>>) {
         self.items = items;
-        self.item_cursor = min(self.item_cursor, items.len());
-        self.line_cursor = min(self.line_cursor, items.len());
+        self.item_cursor = min(self.item_cursor, self.items.len());
+        self.line_cursor = min(self.line_cursor,self.items.len());
     }
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
@@ -120,7 +127,7 @@ impl Selection {
         let cursor = self.item_cursor + self.line_cursor;
         let current_item = self
             .items
-            .get(cursor)
+            .get(&cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
@@ -158,7 +165,7 @@ impl Selection {
             let cursor = self.item_cursor + self.line_cursor;
             let current_item = self
                 .items
-                .get(cursor)
+                .get(&cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
@@ -175,6 +182,7 @@ impl Selection {
 
 impl EventHandler for Selection {
     fn accept_event(&self, event: Event) -> bool {
+        use crate::event::Event::*;
         match event {
             EvActUp | EvActDown | EvActToggle | EvActToggleDown | EvActToggleUp | EvActToggleAll | EvActSelectAll
             | EvActDeselectAll | EvActPageDown | EvActPageUp | EvActScrollLeft | EvActScrollRight => true,
@@ -183,7 +191,7 @@ impl EventHandler for Selection {
     }
 
     fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen {
-        use event::Event::*;
+        use crate::event::Event::*;
         match event {
             EvActUp => {
                 self.act_move_line_cursor(1);
@@ -248,9 +256,9 @@ impl Selection {
 
         // print selection cursor
         if self.selected.contains_key(&index) {
-            curses.print_with_attr(">", default_attr.extend(self.theme.selected()));
+            canvas.print_with_attr(row, 0, ">", default_attr.extend(self.theme.selected()));
         } else {
-            curses.print_with_attr(" ", default_attr);
+            canvas.print_with_attr(row, 0, " ", default_attr);
         }
 
         let item = &matched_item.item;
@@ -288,11 +296,11 @@ impl Selection {
         // print out the original content
         if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
             for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter() {
-                printer.print_char(curses, ch, default_attr.extend(attr), false);
+                printer.print_char(canvas, ch, default_attr.extend(attr), false);
             }
         } else {
             for ch in item.get_text().chars() {
-                printer.print_char(curses, ch, default_attr, false);
+                printer.print_char(canvas, ch, default_attr, false);
             }
         }
 
@@ -305,11 +313,11 @@ impl Selection {
                 for (ch_idx, ch) in text.chars().enumerate() {
                     match matched_indices_iter.peek() {
                         Some(&&match_idx) if ch_idx == match_idx => {
-                            printer.print_char(curses, ch, default_attr.extend(self.theme.matched()), false);
+                            printer.print_char(canvas, ch, default_attr.extend(self.theme.matched()), false);
                             let _ = matched_indices_iter.next();
                         }
                         Some(_) | None => {
-                            printer.print_char(curses, ch, default_attr, true);
+                            printer.print_char(canvas, ch, default_attr, true);
                         }
                     }
                 }
@@ -318,7 +326,7 @@ impl Selection {
             Some(MatchedRange::ByteRange(start, end)) => {
                 for (idx, ch) in text.char_indices() {
                     printer.print_char(
-                        curses,
+                        canvas,
                         ch,
                         default_attr.extend(self.theme.matched()),
                         !(idx >= start && idx < end),
@@ -354,15 +362,17 @@ impl Draw for Selection {
 
             // print the cursor label
             let label = if line_no == self.line_cursor { ">" } else { " " };
-            let next_col = canvas.print_with_attr(line_no, 0, label, self.theme.cursor)?;
+            let next_col = canvas.print_with_attr(line_no, 0, label, self.theme.cursor())?;
 
             let item = self
                 .items
-                .get(i)
-                .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", i));
+                .get(&item_idx)
+                .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
-            self.draw_item(canvas, line_no, &item, l == self.line_cursor);
+            self.draw_item(canvas, line_no, &item, line_no == self.line_cursor);
         }
+
+        Ok(())
     }
 }
 

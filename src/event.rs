@@ -12,12 +12,15 @@ pub enum Event {
     EvInputKey,
     EvInputInvalid,
 
+    EvModelNewPreview,
+
     EvMatcherDone,
 
     EvReaderNewItem,
     EvReaderStarted,
     EvReaderStopped,
     EvReaderRestart,
+    EvHeartBeat,
 
     // user bind actions
     EvActAbort,

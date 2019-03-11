@@ -1,11 +1,11 @@
+///! Reader is used for reading items from datasource (e.g. stdin or command output)
+///!
+///! After reading in a line, reader will save an item into the pool(items)
+
 use crate::event::{Event, EventArg, EventReceiver, EventSender};
 use crate::field::FieldRange;
 use crate::item::Item;
 use crate::options::SkimOptions;
-use crate::sender::CachedSender;
-/// Reader is used for reading items from datasource (e.g. stdin or command output)
-///
-/// After reading in a line, reader will save an item into the pool(items)
 use crate::spinlock::SpinLock;
 use regex::Regex;
 use std::collections::HashMap;
@@ -20,6 +20,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use std::borrow::Cow;
 
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
@@ -36,9 +37,9 @@ impl ReaderControl {
     }
 
     pub fn take(&self) -> Vec<Arc<Item>> {
-        let items = self.items.lock();
+        let mut items = self.items.lock();
         let mut ret = Vec::with_capacity(items.len());
-        ret.append(items);
+        ret.append(&mut items);
         ret
     }
 
@@ -58,7 +59,7 @@ pub struct Reader {
 }
 
 impl Reader {
-    pub fn with_options(mut self, options: &SkimOptions) -> Self {
+    pub fn with_options(options: &SkimOptions) -> Self {
         Self {
             option: Arc::new(ReaderOption::with_options(&options)),
             source_file: None,
@@ -78,11 +79,12 @@ impl Reader {
         let items_clone = items.clone();
         let option_clone = self.option.clone();
         let source_file = self.source_file.take();
+        let cmd = cmd.to_string();
 
         // start the new command
-        thread_reader = Some(thread::spawn(move || {
-            reader(cmd, stopped_clone, items_clone, option_clone, source_file);
-        }));
+        let thread_reader = thread::spawn(move || {
+            reader(&cmd, stopped_clone, items_clone, option_clone, source_file);
+        });
 
         ReaderControl {
             stopped,
@@ -206,7 +208,7 @@ fn reader(
         command_stopped_clone.store(true, Ordering::Relaxed);
     });
 
-    let opt = option.read().expect("reader: failed to lock option");
+    let opt = option;
 
     // set the proper run number
     let run_num = { *RUN_NUM.read().expect("reader: failed to lock RUN_NUM") };

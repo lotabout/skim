@@ -1,9 +1,9 @@
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
-use crate::model::QueryPrintClosure;
 use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use std::mem;
 use tuikit::prelude::*;
+use std::sync::Arc;
 
 #[derive(Clone, Copy)]
 enum QueryMode {
@@ -11,7 +11,7 @@ enum QueryMode {
     QUERY,
 }
 
-pub struct Query<'a> {
+pub struct Query {
     cmd_before: Vec<char>,
     cmd_after: Vec<char>,
     query_before: Vec<char>,
@@ -24,7 +24,7 @@ pub struct Query<'a> {
     query_prompt: String,
     cmd_prompt: String,
 
-    theme: &'a ColorTheme,
+    theme: Arc<ColorTheme>,
 }
 
 impl Query {
@@ -40,7 +40,7 @@ impl Query {
             replstr: "{}".to_string(),
             query_prompt: "> ".to_string(),
             cmd_prompt: "c> ".to_string(),
-            theme: &DEFAULT_THEME,
+            theme: Arc::new(DEFAULT_THEME),
         }
     }
 
@@ -60,7 +60,7 @@ impl Query {
         self
     }
 
-    pub fn theme(mut self, theme: &ColorTheme) -> Self {
+    pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
         self.theme = theme;
         self
     }
@@ -142,7 +142,7 @@ impl Query {
     }
 
     fn get_prompt(&self) -> &str {
-        match mode {
+        match self.mode {
             QueryMode::CMD => &self.cmd_prompt,
             QueryMode::QUERY => &self.query_prompt,
         }
@@ -380,6 +380,8 @@ impl EventHandler for Query {
     }
 
     fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen {
+        use crate::event::Event::*;
+
         let query_before_len = self.query_before.len();
         let query_after_len = self.query_after.len();
         let cmd_before_len = self.cmd_before.len();
@@ -478,7 +480,7 @@ impl Draw for Query {
         let prompt = self.get_prompt();
 
         let prompt_width = canvas.print_with_attr(0, 0, prompt, self.theme.prompt())?;
-        let before_width = canvas.print_with_attr(0, col, &before, self.theme.normal())?;
+        let before_width = canvas.print_with_attr(0, prompt_width, &before, self.theme.normal())?;
         let col = prompt_width + before_width;
         canvas.print_with_attr(0, col, &after, self.theme.normal())?;
         canvas.set_cursor(0, col)?;

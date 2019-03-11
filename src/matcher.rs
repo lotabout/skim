@@ -1,7 +1,6 @@
 use crate::event::{Event, EventReceiver, EventSender};
-use crate::item::{Item, ItemGroup, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::item::{Item, MatchedItem, MatchedRange};
 use crate::options::SkimOptions;
-use crate::orderredvec::OrderedVec;
 use crate::score;
 use crate::spinlock::SpinLock;
 use rayon::prelude::*;
@@ -11,7 +10,7 @@ use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use skiplist::OrderedSkipList;
 
 lazy_static! {
     static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![
@@ -43,7 +42,7 @@ pub enum MatcherMode {
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
     processed: Arc<AtomicUsize>,
-    items: Arc<SpinLock<OrderedVec<MatchedItem>>>,
+    items: Arc<SpinLock<OrderedSkipList<Arc<MatchedItem>>>>,
     thread_matcher: JoinHandle<()>,
 }
 
@@ -57,7 +56,7 @@ impl MatcherControl {
         self.thread_matcher.join();
     }
 
-    pub fn into_items(self) -> Arc<SpinLock<OrderedVec<MatchedItem>>> {
+    pub fn into_items(self) -> Arc<SpinLock<OrderedSkipList<Arc<MatchedItem>>>> {
         while !self.stopped.load(Ordering::Relaxed) {}
         self.items.clone()
     }
@@ -123,26 +122,27 @@ impl Matcher {
         callback: C,
     ) -> MatcherControl
     where
-        C: FnOnce(Arc<SpinLock<OrderedVec<MatchedItem>>>),
+        C: FnOnce(Arc<SpinLock<OrderedSkipList<Arc<MatchedItem>>>>) + 'static + Send,
     {
         let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         let processed = Arc::new(AtomicUsize::new(0));
         let processed_clone = processed.clone();
-        let matched_items = Arc::new(SpinLock::new(OrderedVec::new()));
+        let matched_items = Arc::new(SpinLock::new(OrderedSkipList::new()));
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
-            for &item in items.lock().iter() {
+            let items = items.lock();
+            for item in items.iter() {
                 if stopped.load(Ordering::Relaxed) {
                     break;
                 }
 
                 processed.fetch_add(1, Ordering::Relaxed);
-                if let Some(matched_item) = matcher_engine.match_item(item) {
+                if let Some(matched_item) = matcher_engine.match_item(item.clone()) {
                     let mut pool = matched_items.lock();
-                    pool.push(matched_item);
+                    pool.insert(Arc::new(matched_item));
                 }
             }
             stopped.store(true, Ordering::Relaxed);
@@ -159,7 +159,7 @@ impl Matcher {
 }
 
 // A match engine will execute the matching algorithm
-trait MatchEngine: Sync {
+trait MatchEngine: Sync + Send {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem>;
     fn display(&self) -> String;
 }
