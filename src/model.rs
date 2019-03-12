@@ -22,7 +22,7 @@ use unicode_width::UnicodeWidthChar;
 use std::env;
 use crate::output::SkimOutput;
 use std::mem;
-use skiplist::OrderedSkipList;
+use crate::item::Item;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -40,11 +40,15 @@ pub struct Model {
     matcher: Matcher,
     term: Arc<Term>,
 
+    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+
     rx: EventReceiver,
     tx: EventSender,
 
     matcher_mode: String,
     timer: Instant,
+    reader_control: Option<ReaderControl>,
+    matcher_control: Option<MatcherControl>,
 
     preview_hidden: bool,
     headers: Vec<AnsiString>,
@@ -72,7 +76,7 @@ impl Model {
 
         let theme = Arc::new(ColorTheme::init_from_options(options));
         let query = Query::from_options(&options)
-            .base_cmd(&default_command)
+            .replace_base_cmd_if_not_set(&default_command)
             .theme(theme.clone())
             .build();
 
@@ -85,10 +89,13 @@ impl Model {
             selection,
             matcher,
             term,
+            items: Arc::new(SpinLock::new(Vec::new())),
 
             rx,
             tx,
             timer: Instant::now(),
+            reader_control: None,
+            matcher_control: None,
             matcher_mode: "".to_string(),
 
             preview_hidden: true,
@@ -153,63 +160,98 @@ impl Model {
     }
 
     pub fn start(&mut self) -> Option<SkimOutput> {
-        let mut cmd = self.query.get_cmd_query();
+        let mut cmd = self.query.get_cmd();
         let mut query = self.query.get_query();
 
-        let mut reader_control = self.reader.run(&cmd);
-        let mut redraw = UpdateScreen::DontRedraw;
-        let mut matcher_control: Option<MatcherControl> = None;
+        self.reader_control = Some(self.reader.run(&cmd));
 
-        let items = Arc::new(SpinLock::new(Vec::new()));
+        let mut redraw = UpdateScreen::Redraw;
 
         while let Ok((ev, arg)) = self.rx.recv() {
+            debug!("model: ev: {:?}, arg: {:?}", ev, arg);
             if self.query.accept_event(ev) {
                 redraw = self.query.handle(ev, arg);
+                let new_query = self.query.get_query();
+                let new_cmd = self.query.get_cmd();
 
                 // re-run reader & matcher if needed;
-                let new_cmd = self.query.get_cmd_query();
                 if new_cmd != cmd {
+                    debug!("cmd: {:?}, new: {:?}", cmd, new_cmd);
                     cmd = new_cmd;
-                    reader_control.kill();
-                    reader_control = self.reader.run(&cmd);
+                    self.reader_control.take().map(ReaderControl::kill);
+                    self.reader_control.replace(self.reader.run(&cmd));
+                    self.selection.clear();
+                    self.items.lock().clear();
 
                     // restart matcher
-                    matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
-                    items.lock().clear();
-                    self.tx.send((Event::EvMatcherDone, Box::new(true)));
-                }
-
-                // re-run matcher if needed
-                let new_query = self.query.get_query();
-                if query != new_query {
+                    self.matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
+                } else if query != new_query {
                     query = new_query;
-                    matcher_control.take().map(|ctrl| ctrl.kill());
-                    self.tx.send((Event::EvMatcherDone, Box::new(true)));
+
+                    // restart matcher
+                    self.selection.clear();
+                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    self.tx.send((Event::EvMatcherRestart, Box::new(true)));
                 }
             } else if self.selection.accept_event(ev) {
                 redraw = self.selection.handle(ev, arg);
             } else {
+
                 match ev {
-                    Event::EvMatcherDone => {
-                        redraw = UpdateScreen::Redraw;
-                        let ctrl = matcher_control.take().unwrap().into_items();
-                        let mut lock = ctrl.lock();
-                        let matched = mem::replace(&mut *lock, OrderedSkipList::new());
-                        self.selection.replace_items(matched);
-
-                        // if there are new items, restart the matcher
-                        if !reader_control.is_empty() {
-                            // take out new items and put them into items
-                            let mut new_items = reader_control.take();
-                            let mut item_pool = items.lock();
-                            item_pool.append(&mut new_items);
-
-                            let tx_cmd = self.tx.clone();
-                            let tx_clone = self.tx.clone();
-                            matcher_control.replace(self.matcher.run(&query, items.clone(), None, move |_| {
-                                let _ = tx_clone.send((Event::EvMatcherDone, Box::new(true)));
-                            }));
+                    Event::EvHeartBeat => {
+                        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+                        // run matcher if matcher had been stopped and reader had new items.
+                        if !processed && self.matcher_control.is_none() {
+                            let _ = self.tx.send((Event::EvMatcherDone, Box::new(false)));
                         }
+                    }
+
+                    Event::EvMatcherRestart => {
+                        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+                        // if there are new items, move them to item pool
+                        let items_to_match = if !processed {
+                            // take out new items and put them into items
+                            let mut new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
+                            let mut item_pool = self.items.lock();
+                            for item in new_items.iter() {
+                                item_pool.push(item.clone());
+                            }
+
+                            Arc::new(SpinLock::new(new_items))
+                        } else {
+                            self.items.clone()
+                        };
+
+                        let tx_clone = self.tx.clone();
+                        self.matcher_control.replace(self.matcher.run(&query, items_to_match, None, move |_| {
+                            let _ = tx_clone.send((Event::EvMatcherDone, Box::new(true)));
+                        }));
+                    }
+
+                    Event::EvMatcherDone => {
+                        // save the processed items
+                        self.matcher_control.take().map(|ctrl| {
+                            let lock = ctrl.into_items();
+                            let mut items = lock.lock();
+                            let matched = mem::replace(&mut *items, Vec::new());
+                            self.selection.add_items(matched);
+                            redraw = UpdateScreen::Redraw;
+                        });
+
+                        if !self.reader_control.as_ref().map(|c|c.is_processed()).unwrap_or(true) {
+                            let _ = self.tx.send((Event::EvMatcherRestart, Box::new(true)));
+                        }
+                    }
+
+                    Event::EvActAccept => {
+                        self.reader_control.take().map(|ctrl| ctrl.kill());
+                        self.matcher_control.take().map(|ctrl| ctrl.kill());
+                        return Some(SkimOutput {
+                            accept_key: None,
+                            query: self.query.get_query(),
+                            cmd: self.query.get_cmd_query(),
+                            selected_items: self.selection.get_selected_items(),
+                        });
                     }
 
                     _ => {}
@@ -218,7 +260,9 @@ impl Model {
 
             if redraw == UpdateScreen::Redraw {
                 self.term.draw(self);
+                self.term.present();
             }
+            debug!("event done");
         }
 
         None
@@ -782,6 +826,96 @@ impl Model {
 impl Draw for Model {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
+
+        let total = self.items.lock().len();
+        let status = Status {
+            total,
+            matched: self.selection.num_options(),
+            processed: self.matcher_control.as_ref().map(|c|c.get_num_processed()).unwrap_or(total),
+            multi_selection: self.selection.is_multi_selection(),
+            selected: self.selection.get_num_selected(),
+            current_item_idx: self.selection.get_current_item_idx(),
+            reading: !self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true),
+            time: self.timer.elapsed(),
+            matcher_mode: "".to_string(),
+            theme: self.theme.clone(),
+        };
+
+        let win_selection = Win::new(&self.selection);
+        let win_query = Win::new(&self.query)
+            .basis(1.into())
+            .grow(0)
+            .shrink(0);
+        let win_status = Win::new(&status)
+            .basis(1.into())
+            .grow(0)
+            .shrink(0);
+
+        let screen = if self.reverse {
+            VSplit::default()
+                .split(&win_query)
+                .split(&win_status)
+                .split(&win_selection)
+        } else {
+            VSplit::default()
+                .split(&win_selection)
+                .split(&win_status)
+                .split(&win_query)
+        };
+
+        screen.draw(canvas)
+    }
+}
+
+struct Status {
+    total: usize,
+    matched: usize,
+    processed: usize,
+    multi_selection: bool,
+    selected: usize,
+    current_item_idx: usize,
+    reading: bool,
+    time: Duration,
+    matcher_mode: String,
+    theme: Arc<ColorTheme>,
+}
+
+impl Draw for Status {
+    fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+        canvas.clear()?;
+        let (screen_width, _) = canvas.size()?;
+        if self.reading {
+            let mills = (self.time.as_secs() * 1000) as u32 + self.time.subsec_millis();
+            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
+            canvas.put_cell(0, 0, Cell{ch: SPINNERS[index as usize], attr: self.theme.spinner()});
+        }
+
+        let info_attr = self.theme.info();
+        let info_attr_bold = Attr{effect: Effect::BOLD, ..self.theme.info()};
+
+        // display matched/total number
+        let mut col = 1;
+        col += canvas.print_with_attr(0, col, format!(" {}/{}", self.matched, self.total).as_ref(), info_attr)?;
+
+        // display the matcher mode
+        if !self.matcher_mode.is_empty() {
+            col += canvas.print_with_attr(0, col, format!("/{}", &self.matcher_mode).as_ref(), info_attr)?;
+        }
+
+        // display the percentage of the number of processed items
+        if self.processed < self.total{
+            col += canvas.print_with_attr(0, col, format!(" ({}%) ", self.processed * 100 / self.total).as_ref(), info_attr)?;
+        }
+
+        // selected number
+        if self.multi_selection && self.selected > 0 {
+            col += canvas.print_with_attr(0, col, format!(" [{}]", self.selected).as_ref(), info_attr_bold)?;
+        }
+
+        // item cursor
+        let line_num_str = format!(" {} ", self.current_item_idx);
+        canvas.print_with_attr(0, screen_width - line_num_str.len(), &line_num_str, info_attr_bold)?;
+
         Ok(())
     }
 }

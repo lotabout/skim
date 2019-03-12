@@ -5,7 +5,7 @@ use std::mem;
 use tuikit::prelude::*;
 use std::sync::Arc;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum QueryMode {
     CMD,
     QUERY,
@@ -50,8 +50,10 @@ impl Query {
         query
     }
 
-    pub fn base_cmd(mut self, base_cmd: &str) -> Self {
-        self.base_cmd = base_cmd.to_owned();
+    pub fn replace_base_cmd_if_not_set(mut self, base_cmd: &str) -> Self {
+        if self.base_cmd == "" {
+            self.base_cmd = base_cmd.to_owned();
+        }
         self
     }
 
@@ -338,12 +340,14 @@ impl Query {
 
     fn query_changed(
         &self,
+        mode: QueryMode,
         query_before_len: usize,
         query_after_len: usize,
         cmd_before_len: usize,
         cmd_after_len: usize,
     ) -> bool {
-        self.query_before.len() != query_before_len
+        self.mode != mode
+            || self.query_before.len() != query_before_len
             || self.query_after.len() != query_after_len
             || self.cmd_before.len() != cmd_before_len
             || self.cmd_after.len() != cmd_after_len
@@ -382,6 +386,7 @@ impl EventHandler for Query {
     fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen {
         use crate::event::Event::*;
 
+        let mode = self.mode;
         let query_before_len = self.query_before.len();
         let query_after_len = self.query_after.len();
         let cmd_before_len = self.cmd_before.len();
@@ -464,7 +469,7 @@ impl EventHandler for Query {
             _ => {}
         }
 
-        if self.query_changed(query_before_len, query_after_len, cmd_before_len, cmd_after_len) {
+        if self.query_changed(mode, query_before_len, query_after_len, cmd_before_len, cmd_after_len) {
             UpdateScreen::Redraw
         } else {
             UpdateScreen::DontRedraw

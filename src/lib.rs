@@ -19,6 +19,8 @@ mod selection;
 mod spinlock;
 mod theme;
 mod util;
+mod coordinator;
+
 
 use crate::spinlock::SpinLock;
 use event::Event::*;
@@ -94,8 +96,8 @@ impl Skim {
         // start a timer for notifying refresh
         let tx_clone = tx.clone();
         thread::spawn(move || loop {
-            thread::sleep(Duration::from_millis(REFRESH_DURATION));
             let _ = tx_clone.send((EvHeartBeat, Box::new(true)));
+            thread::sleep(Duration::from_millis(REFRESH_DURATION));
         });
 
         //------------------------------------------------------------------------------

@@ -11,6 +11,7 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use skiplist::OrderedSkipList;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct Selection {
     items: OrderedSkipList<Arc<MatchedItem>>, // all items
@@ -30,7 +31,7 @@ pub struct Selection {
     item_cursor: usize, // the index of matched item currently highlighted.
     line_cursor: usize, // line No.
     hscroll_offset: usize,
-    height: usize,
+    height: AtomicUsize,
 
     pub tabstop: usize,
 
@@ -49,7 +50,7 @@ impl Selection {
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
-            height: 0,
+            height: AtomicUsize::new(0),
             tabstop: 0,
             multi_selection: false,
             reverse: false,
@@ -88,19 +89,24 @@ impl Selection {
         self
     }
 
-    pub fn replace_items(&mut self, items: OrderedSkipList<Arc<MatchedItem>>) {
-        self.items = items;
-        self.item_cursor = min(self.item_cursor, self.items.len());
-        self.line_cursor = min(self.line_cursor,self.items.len());
+    pub fn add_items(&mut self, items: Vec<Arc<MatchedItem>>) {
+        for item in items.into_iter() {
+            self.items.insert(item)
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.items.clear();
     }
 
     pub fn act_move_line_cursor(&mut self, diff: i32) {
         let diff = if self.reverse { -diff } else { diff };
+
         let mut line_cursor = self.line_cursor as i32;
         let mut item_cursor = self.item_cursor as i32;
         let item_len = self.items.len() as i32;
 
-        let height = self.height as i32;
+        let height = self.height.load(Ordering::Relaxed) as i32;
 
         line_cursor += diff;
         if line_cursor >= height {
@@ -159,7 +165,14 @@ impl Selection {
         self.selected.clear();
     }
 
-    pub fn act_output(&mut self) {
+    pub fn act_scroll(&mut self, offset: i32) {
+        let mut hscroll_offset = self.hscroll_offset as i32;
+        hscroll_offset += offset;
+        hscroll_offset = max(0, hscroll_offset);
+        self.hscroll_offset = hscroll_offset as usize;
+    }
+
+    pub fn get_selected_items(&mut self) -> Vec<Arc<Item>> {
         // select the current one
         if !self.items.is_empty() {
             let cursor = self.item_cursor + self.line_cursor;
@@ -170,14 +183,32 @@ impl Selection {
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
         }
+
+        let mut selected: Vec<Arc<Item>> = self.selected
+            .values()
+            .map(|item| item.item.clone())
+            .collect();
+
+        selected.sort_by_key(|item| item.get_full_index());
+        selected
     }
 
-    pub fn act_scroll(&mut self, offset: i32) {
-        let mut hscroll_offset = self.hscroll_offset as i32;
-        hscroll_offset += offset;
-        hscroll_offset = max(0, hscroll_offset);
-        self.hscroll_offset = hscroll_offset as usize;
+    pub fn get_current_item_idx(&self) -> usize {
+        self.item_cursor + self.line_cursor
     }
+
+    pub fn get_num_selected(&self) -> usize {
+        self.selected.len()
+    }
+
+    pub fn is_multi_selection(&self) -> bool {
+        self.multi_selection
+    }
+
+    pub fn num_options(&self) -> usize {
+        self.items.len()
+    }
+
 }
 
 impl EventHandler for Selection {
@@ -220,11 +251,11 @@ impl EventHandler for Selection {
                 self.act_deselect_all();
             }
             EvActPageDown => {
-                let height = 1 - (self.height as i32);
+                let height = 1 - (self.height.load(Ordering::Relaxed) as i32);
                 self.act_move_line_cursor(height);
             }
             EvActPageUp => {
-                let height = (self.height as i32) - 1;
+                let height = (self.height.load(Ordering::Relaxed) as i32) - 1;
                 self.act_move_line_cursor(height);
             }
             EvActScrollLeft => {
@@ -241,7 +272,11 @@ impl EventHandler for Selection {
 
 impl Selection {
     fn draw_item(&self, canvas: &mut Canvas, row: usize, matched_item: &MatchedItem, is_current: bool) -> Result<()> {
-        let (screen_width, _) = canvas.size()?;
+        let (screen_width, screen_height) = canvas.size()?;
+
+        // update item heights
+        self.height.store(screen_height, Ordering::Relaxed);
+
         if screen_width < 3 {
             return Err("screen width is too small".into());
         }
@@ -256,9 +291,9 @@ impl Selection {
 
         // print selection cursor
         if self.selected.contains_key(&index) {
-            canvas.print_with_attr(row, 0, ">", default_attr.extend(self.theme.selected()));
+            canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
         } else {
-            canvas.print_with_attr(row, 0, " ", default_attr);
+            canvas.print_with_attr(row, 1, " ", default_attr);
         }
 
         let item = &matched_item.item;
@@ -344,7 +379,6 @@ impl Selection {
 impl Draw for Selection {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
-
         canvas.clear()?;
 
         let item_idx_lower = self.item_cursor;
@@ -352,24 +386,25 @@ impl Draw for Selection {
         let item_idx_upper = min(max_upper, self.items.len());
 
         for item_idx in item_idx_lower..item_idx_upper {
+            let line_cursor = item_idx - item_idx_lower;
             let line_no = if self.reverse {
                 // top down
-                item_idx - item_idx_lower
+                line_cursor
             } else {
                 // bottom up
-                screen_height + item_idx_lower - item_idx
+                screen_height - 1 - line_cursor
             };
 
             // print the cursor label
-            let label = if line_no == self.line_cursor { ">" } else { " " };
-            let next_col = canvas.print_with_attr(line_no, 0, label, self.theme.cursor())?;
+            let label = if line_cursor == self.line_cursor { ">" } else { " " };
+            let next_col = canvas.print_with_attr(line_no, 0, label, self.theme.cursor()).unwrap();
 
             let item = self
                 .items
                 .get(&item_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
-            self.draw_item(canvas, line_no, &item, line_no == self.line_cursor);
+            self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
         }
 
         Ok(())

@@ -10,7 +10,6 @@ use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
-use skiplist::OrderedSkipList;
 
 lazy_static! {
     static ref RANK_CRITERION: RwLock<Vec<RankCriteria>> = RwLock::new(vec![
@@ -42,7 +41,7 @@ pub enum MatcherMode {
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
     processed: Arc<AtomicUsize>,
-    items: Arc<SpinLock<OrderedSkipList<Arc<MatchedItem>>>>,
+    items: Arc<SpinLock<Vec<Arc<MatchedItem>>>>,
     thread_matcher: JoinHandle<()>,
 }
 
@@ -56,7 +55,7 @@ impl MatcherControl {
         self.thread_matcher.join();
     }
 
-    pub fn into_items(self) -> Arc<SpinLock<OrderedSkipList<Arc<MatchedItem>>>> {
+    pub fn into_items(self) -> Arc<SpinLock<Vec<Arc<MatchedItem>>>> {
         while !self.stopped.load(Ordering::Relaxed) {}
         self.items.clone()
     }
@@ -122,14 +121,14 @@ impl Matcher {
         callback: C,
     ) -> MatcherControl
     where
-        C: FnOnce(Arc<SpinLock<OrderedSkipList<Arc<MatchedItem>>>>) + 'static + Send,
+        C: FnOnce(Arc<SpinLock<Vec<Arc<MatchedItem>>>>) + 'static + Send,
     {
         let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         let processed = Arc::new(AtomicUsize::new(0));
         let processed_clone = processed.clone();
-        let matched_items = Arc::new(SpinLock::new(OrderedSkipList::new()));
+        let matched_items = Arc::new(SpinLock::new(Vec::new()));
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
@@ -142,7 +141,7 @@ impl Matcher {
                 processed.fetch_add(1, Ordering::Relaxed);
                 if let Some(matched_item) = matcher_engine.match_item(item.clone()) {
                     let mut pool = matched_items.lock();
-                    pool.insert(Arc::new(matched_item));
+                    pool.push(Arc::new(matched_item));
                 }
             }
             stopped.store(true, Ordering::Relaxed);

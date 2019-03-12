@@ -14,6 +14,7 @@ pub enum Event {
 
     EvModelNewPreview,
 
+    EvMatcherRestart,
     EvMatcherDone,
 
     EvReaderNewItem,

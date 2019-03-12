@@ -43,13 +43,9 @@ impl ReaderControl {
         ret
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_processed(&self) -> bool {
         let items = self.items.lock();
-        items.is_empty()
-    }
-
-    pub fn is_done(&self) -> bool {
-        self.stopped.load(Ordering::Relaxed)
+        self.stopped.load(Ordering::Relaxed) && items.is_empty()
     }
 }
 
@@ -231,7 +227,6 @@ fn reader(
                 if n == 0 {
                     break;
                 }
-                debug!("reader:reader: read a new line. index = {}", index);
 
                 if buffer.ends_with(&[b'\r', b'\n']) {
                     buffer.pop();
@@ -240,7 +235,7 @@ fn reader(
                     buffer.pop();
                 }
 
-                debug!("reader:reader: create new item. index = {}", index);
+//                debug!("reader:reader: create new item. index = {}", index);
                 let item = Item::new(
                     String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,
