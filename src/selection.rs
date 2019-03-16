@@ -1,9 +1,9 @@
+///! Handle the selections of items
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::item::{Item, MatchedItem, MatchedRange};
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
-/// Handle the selections of items
-use crate::util::reshape_string;
+use crate::util::{reshape_string, LinePrinter};
 use crate::SkimOptions;
 use std::cmp::max;
 use std::cmp::min;
@@ -32,8 +32,7 @@ pub struct Selection {
     line_cursor: usize, // line No.
     hscroll_offset: usize,
     height: AtomicUsize,
-
-    pub tabstop: usize,
+    tabstop: usize,
 
     // Options
     multi_selection: bool,
@@ -215,7 +214,7 @@ impl EventHandler for Selection {
         }
     }
 
-    fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen {
+    fn handle(&mut self, event: Event, arg: &EventArg) -> UpdateScreen {
         use crate::event::Event::*;
         match event {
             EvActUp => {
@@ -253,10 +252,10 @@ impl EventHandler for Selection {
                 self.act_move_line_cursor(height);
             }
             EvActScrollLeft => {
-                self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(-1)));
+                self.act_scroll(*arg.downcast_ref::<i32>().unwrap_or(&-1));
             }
             EvActScrollRight => {
-                self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(1)));
+                self.act_scroll(*arg.downcast_ref::<i32>().unwrap_or(&1));
             }
             _ => {}
         }
@@ -402,154 +401,5 @@ impl Draw for Selection {
         }
 
         Ok(())
-    }
-}
-
-// use to print a single line, properly handle the tabsteop and shift of a string
-// e.g. a long line will be printed as `..some content` or `some content..` or `..some content..`
-// depends on the container's width and the size of the content.
-//
-// let's say we have a very long line with lots of useless information
-//                                |.. with lots of use..|             // only to show this
-//                                |<- container width ->|
-//             |<-    shift    -> |
-// |< hscroll >|
-
-struct LinePrinter {
-    start: usize,
-    end: usize,
-    current_pos: i32,
-    screen_col: usize,
-
-    // start position
-    row: usize,
-    col: usize,
-
-    tabstop: usize,
-    shift: usize,
-    text_width: usize,
-    container_width: usize,
-    hscroll_offset: usize,
-}
-
-impl LinePrinter {
-    pub fn builder() -> Self {
-        LinePrinter {
-            start: 0,
-            end: 0,
-            current_pos: -1,
-            screen_col: 0,
-
-            row: 0,
-            col: 0,
-
-            tabstop: 8,
-            shift: 0,
-            text_width: 0,
-            container_width: 0,
-            hscroll_offset: 0,
-        }
-    }
-
-    pub fn row(mut self, row: usize) -> Self {
-        self.row = row;
-        self
-    }
-
-    pub fn col(mut self, col: usize) -> Self {
-        self.col = col;
-        self
-    }
-
-    pub fn tabstop(mut self, tabstop: usize) -> Self {
-        self.tabstop = tabstop;
-        self
-    }
-
-    pub fn hscroll_offset(mut self, offset: usize) -> Self {
-        self.hscroll_offset = offset;
-        self
-    }
-
-    pub fn text_width(mut self, width: usize) -> Self {
-        self.text_width = width;
-        self
-    }
-
-    pub fn container_width(mut self, width: usize) -> Self {
-        self.container_width = width;
-        self
-    }
-
-    pub fn shift(mut self, shift: usize) -> Self {
-        self.shift = shift;
-        self
-    }
-
-    pub fn build(mut self) -> Self {
-        self.reset();
-        self
-    }
-
-    pub fn reset(&mut self) {
-        self.current_pos = 0;
-        self.screen_col = self.col;
-
-        self.start = self.shift + self.hscroll_offset;
-        self.end = self.start + self.container_width;
-    }
-
-    fn print_ch_to_canvas(&mut self, canvas: &mut Canvas, ch: char, attr: Attr, skip: bool) {
-        let w = ch.width().unwrap_or(2);
-
-        if !skip {
-            let _ = canvas.put_cell(self.row, self.screen_col, Cell::default().ch(ch).attribute(attr));
-        }
-
-        self.screen_col += w;
-    }
-
-    fn print_char_raw(&mut self, canvas: &mut Canvas, ch: char, attr: Attr, skip: bool) {
-        // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
-        // the hidden character
-
-        let w = ch.width().unwrap_or(2);
-
-        assert!(self.current_pos >= 0);
-        let current = self.current_pos as usize;
-
-        if current < self.start || current >= self.end {
-            // pass if it is hidden
-        } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
-            // print left ".."
-            for _ in 0..min(w, current - self.start + 1) {
-                self.print_ch_to_canvas(canvas, '.', attr, skip);
-            }
-        } else if self.end - current <= 2 && (self.text_width > self.end) {
-            // print right ".."
-            for _ in 0..min(w, self.end - current) {
-                self.print_ch_to_canvas(canvas, '.', attr, skip);
-            }
-        } else {
-            self.print_ch_to_canvas(canvas, ch, attr, skip);
-        }
-
-        self.current_pos += w as i32;
-    }
-
-    pub fn print_char(&mut self, canvas: &mut Canvas, ch: char, attr: Attr, skip: bool) {
-        if ch != '\t' {
-            self.print_char_raw(canvas, ch, attr, skip);
-        } else {
-            // handle tabstop
-            let rest = if self.current_pos < 0 {
-                self.tabstop
-            } else {
-                self.tabstop - (self.current_pos as usize) % self.tabstop
-            };
-            for _ in 0..rest {
-                self.print_char_raw(canvas, ' ', attr, skip);
-            }
-        }
     }
 }

@@ -383,7 +383,7 @@ impl EventHandler for Query {
         }
     }
 
-    fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen {
+    fn handle(&mut self, event: Event, arg: &EventArg) -> UpdateScreen {
         use crate::event::Event::*;
 
         let mode = self.mode;
@@ -394,7 +394,7 @@ impl EventHandler for Query {
 
         match event {
             EvActAddChar => {
-                let ch: char = *arg.downcast().expect("EvActAddChar: failed to get argument");
+                let ch: char = *arg.downcast_ref().expect("EvActAddChar: failed to get argument");
                 self.act_add_char(ch);
             }
 

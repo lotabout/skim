@@ -1,6 +1,7 @@
 use crate::ansi::AnsiString;
 use crate::event::{Event, EventHandler, EventReceiver, EventSender, UpdateScreen};
 use crate::field::get_string_by_range;
+use crate::header::Header;
 use crate::item::{Item, ItemPool};
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
@@ -51,9 +52,9 @@ pub struct Model {
     matcher_control: Option<MatcherControl>,
 
     preview_hidden: bool,
-    headers: Vec<AnsiString>,
 
     tx_preview: Option<Sender<(Event, PreviewInput)>>,
+    header: Header,
 
     // Options
     reverse: bool,
@@ -99,9 +100,9 @@ impl Model {
             matcher_mode: "".to_string(),
 
             preview_hidden: true,
-            headers: Vec::new(),
 
             tx_preview: None,
+            header: Header::empty(),
 
             reverse: false,
             preview_cmd: None,
@@ -150,13 +151,7 @@ impl Model {
             self.inline_info = true;
         }
 
-        match options.header {
-            None => {}
-            Some("") => {}
-            Some(header) => {
-                self.headers.push(AnsiString::from_str(header));
-            }
-        }
+        self.header = Header::with_options(options);
     }
 
     pub fn start(&mut self) -> Option<SkimOutput> {
@@ -169,8 +164,12 @@ impl Model {
         while let Ok((ev, arg)) = self.rx.recv() {
             debug!("model: ev: {:?}, arg: {:?}", ev, arg);
 
+            if self.header.accept_event(ev) {
+                self.header.handle(ev, &arg);
+            }
+
             if self.query.accept_event(ev) {
-                self.query.handle(ev, arg);
+                self.query.handle(ev, &arg);
                 let new_query = self.query.get_query();
                 let new_cmd = self.query.get_cmd();
 
@@ -196,61 +195,61 @@ impl Model {
                     self.item_pool.reset();
                     self.restart_matcher();
                 }
-            } else if self.selection.accept_event(ev) {
-                self.selection.handle(ev, arg);
-            } else {
-                match ev {
-                    Event::EvHeartBeat => {
-                        // save the processed items
-                        if self
-                            .matcher_control
-                            .as_ref()
-                            .map(|ctrl| ctrl.stopped())
-                            .unwrap_or(false)
-                        {
-                            self.matcher_control.take().map(|ctrl| {
-                                let lock = ctrl.into_items();
-                                let mut items = lock.lock();
-                                let matched = mem::replace(&mut *items, Vec::new());
+            }
 
-                                if to_clear_selection {
-                                    to_clear_selection = false;
-                                    self.selection.clear();
-                                }
+            if self.selection.accept_event(ev) {
+                self.selection.handle(ev, &arg);
+            }
 
-                                self.selection.append_sorted_items(matched);
-                            });
-                        }
+            match ev {
+                Event::EvHeartBeat => {
+                    // save the processed items
+                    if self
+                        .matcher_control
+                        .as_ref()
+                        .map(|ctrl| ctrl.stopped())
+                        .unwrap_or(false)
+                    {
+                        self.matcher_control.take().map(|ctrl| {
+                            let lock = ctrl.into_items();
+                            let mut items = lock.lock();
+                            let matched = mem::replace(&mut *items, Vec::new());
 
-                        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
-                        // run matcher if matcher had been stopped and reader had new items.
-                        if !processed && self.matcher_control.is_none() {
-                            self.restart_matcher();
-                        }
-                    }
+                            if to_clear_selection {
+                                to_clear_selection = false;
+                                self.selection.clear();
+                            }
 
-                    Event::EvActAccept => {
-                        debug!("accept");
-                        self.reader_control.take().map(|ctrl| ctrl.kill());
-                        self.matcher_control.take().map(|ctrl| ctrl.kill());
-                        debug!("threads killed");
-
-                        return Some(SkimOutput {
-                            accept_key: None,
-                            query: self.query.get_query(),
-                            cmd: self.query.get_cmd_query(),
-                            selected_items: self.selection.get_selected_items(),
+                            self.selection.append_sorted_items(matched);
                         });
                     }
 
-                    _ => {}
+                    let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+                    // run matcher if matcher had been stopped and reader had new items.
+                    if !processed && self.matcher_control.is_none() {
+                        self.restart_matcher();
+                    }
                 }
+
+                Event::EvActAccept => {
+                    debug!("accept");
+                    self.reader_control.take().map(|ctrl| ctrl.kill());
+                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    debug!("threads killed");
+
+                    return Some(SkimOutput {
+                        accept_key: None,
+                        query: self.query.get_query(),
+                        cmd: self.query.get_cmd_query(),
+                        selected_items: self.selection.get_selected_items(),
+                    });
+                }
+
+                _ => {}
             }
 
-            debug!("draw start");
             self.term.draw(self);
             self.term.present();
-            debug!("event done");
         }
 
         None
@@ -592,36 +591,6 @@ impl Model {
     //        }
     //    }
     //
-    //    fn draw_headers(&self, curses: &mut Window) {
-    //        // cursor should be placed on query, so store cursor before printing
-    //        let (y, x) = curses.getyx();
-    //        let (maxy, _) = curses.get_maxyx();
-    //        let (has_headers, yh) = (!self.headers.is_empty(), self.get_header_height(y, maxy));
-    //        if !has_headers || yh.is_none() {
-    //            return;
-    //        }
-    //        let yh = yh.unwrap();
-    //        let direction = if self.reverse { 1 as i64 } else { -1 };
-    //
-    //        let mut printer = LinePrinter::builder()
-    //            .container_width(self.width as usize)
-    //            .shift(0)
-    //            .hscroll_offset(self.hscroll_offset)
-    //            .build();
-    //
-    //        for (i, header) in self.headers.iter().enumerate() {
-    //            let nyh = ((yh as i64) + direction * (i as i64)) as usize;
-    //            curses.mv(nyh, 0);
-    //            curses.clrtoeol();
-    //            curses.mv(nyh, 2);
-    //            for (ch, attr) in header.iter() {
-    //                printer.print_char(curses, ch, self.theme.normal().extend(attr), false);
-    //            }
-    //        }
-    //        // restore cursor
-    //        curses.mv(y, x);
-    //    }
-    //
     //    pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>) {
     //        self.tx_preview = Some(tx_preview);
     //    }
@@ -702,131 +671,9 @@ impl Model {
     //        })
     //    }
     //
-    //    fn print_char(&self, curses: &mut Window, ch: char, attr: Attr) {
-    //        if ch != '\t' {
-    //            curses.add_char_with_attr(ch, attr);
-    //        } else {
-    //            // handle tabstop
-    //            let (_, x) = curses.getyx();
-    //            let rest = self.tabstop - (x as usize - 2) % self.tabstop;
-    //            for _ in 0..rest {
-    //                curses.add_char_with_attr(' ', attr);
-    //            }
-    //        }
-    //    }
-    //
-    //    //--------------------------------------------------------------------------
-    //    // Actions
-    //
-    //    pub fn act_move_line_cursor(&mut self, diff: i32) {
-    //        let diff = if self.reverse { -diff } else { diff };
-    //        let mut line_cursor = self.line_cursor as i32;
-    //        let mut item_cursor = self.item_cursor as i32;
-    //        let item_len = self.items.len() as i32;
-    //
-    //        let height = self.height as i32;
-    //
-    //        line_cursor += diff;
-    //        if line_cursor >= height {
-    //            item_cursor += line_cursor - height + 1;
-    //            item_cursor = max(0, min(item_cursor, item_len - height));
-    //            line_cursor = min(height - 1, item_len - item_cursor);
-    //        } else if line_cursor < 0 {
-    //            item_cursor += line_cursor;
-    //            item_cursor = max(item_cursor, 0);
-    //            line_cursor = 0;
-    //        } else {
-    //            line_cursor = max(0, min(line_cursor, item_len - 1 - item_cursor));
-    //        }
-    //
-    //        self.item_cursor = item_cursor as usize;
-    //        self.line_cursor = line_cursor as usize;
-    //    }
-    //
-    //    pub fn act_toggle(&mut self) {
-    //        if !self.multi_selection || self.items.is_empty() {
-    //            return;
-    //        }
-    //
-    //        let cursor = self.item_cursor + self.line_cursor;
-    //        let current_item = self
-    //            .items
-    //            .get(cursor)
-    //            .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
-    //        let index = current_item.item.get_full_index();
-    //        if !self.selected.contains_key(&index) {
-    //            self.selected.insert(index, Arc::clone(current_item));
-    //        } else {
-    //            self.selected.remove(&index);
-    //        }
-    //    }
-    //
-    //    pub fn act_toggle_all(&mut self) {
-    //        for current_item in self.items.iter() {
-    //            let index = current_item.item.get_full_index();
-    //            if !self.selected.contains_key(&index) {
-    //                self.selected.insert(index, Arc::clone(current_item));
-    //            } else {
-    //                self.selected.remove(&index);
-    //            }
-    //        }
-    //    }
-    //
-    //    pub fn act_select_all(&mut self) {
-    //        for current_item in self.items.iter() {
-    //            let index = current_item.item.get_full_index();
-    //            self.selected.insert(index, Arc::clone(current_item));
-    //        }
-    //    }
-    //
-    //    pub fn act_deselect_all(&mut self) {
-    //        self.selected.clear();
-    //    }
-    //
-    //    pub fn act_output(&mut self) {
-    //        // select the current one
-    //        if !self.items.is_empty() {
-    //            let cursor = self.item_cursor + self.line_cursor;
-    //            let current_item = self
-    //                .items
-    //                .get(cursor)
-    //                .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
-    //            let index = current_item.item.get_full_index();
-    //            self.selected.insert(index, Arc::clone(current_item));
-    //        }
-    //    }
-    //
     //    pub fn act_toggle_preview(&mut self, curses: &mut Curses) {
     //        self.preview_hidden = !self.preview_hidden;
     //        curses.toggle_preview_window();
-    //    }
-    //
-    //    pub fn act_scroll(&mut self, offset: i32) {
-    //        let mut hscroll_offset = self.hscroll_offset as i32;
-    //        hscroll_offset += offset;
-    //        hscroll_offset = max(0, hscroll_offset);
-    //        self.hscroll_offset = hscroll_offset as usize;
-    //    }
-    //
-    //    pub fn act_redraw(&mut self, curses: &mut Curses, print_query_func: QueryPrintClosure) {
-    //        curses.resize();
-    //        self.update_size(&mut curses.win_main);
-    //        self.draw_preview(&mut curses.win_preview);
-    //        self.draw_items(&mut curses.win_main);
-    //        self.draw_query(&mut curses.win_main, &print_query_func);
-    //        self.draw_status(&mut curses.win_main);
-    //        self.draw_headers(&mut curses.win_main);
-    //        curses.refresh();
-    //    }
-    //
-    //    fn act_redraw_items_and_status(&mut self, curses: &mut Curses) {
-    //        curses.win_main.hide_cursor();
-    //        self.update_size(&mut curses.win_main);
-    //        self.draw_preview(&mut curses.win_preview);
-    //        self.draw_items(&mut curses.win_main);
-    //        self.draw_status(&mut curses.win_main);
-    //        curses.win_main.show_cursor();
-    //        curses.refresh();
     //    }
 }
 
@@ -859,15 +706,21 @@ impl Draw for Model {
         let win_selection = Win::new(&self.selection);
         let win_query = Win::new(&self.query).basis(1.into()).grow(0).shrink(0);
         let win_status = Win::new(&status).basis(1.into()).grow(0).shrink(0);
+        let win_header = Win::new(&self.header)
+            .basis(if self.header.is_empty() { 0 } else { 1 }.into())
+            .grow(0)
+            .shrink(0);
 
         let screen = if self.reverse {
             VSplit::default()
                 .split(&win_query)
                 .split(&win_status)
+                .split(&win_header)
                 .split(&win_selection)
         } else {
             VSplit::default()
                 .split(&win_selection)
+                .split(&win_header)
                 .split(&win_status)
                 .split(&win_query)
         };

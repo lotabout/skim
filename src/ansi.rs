@@ -203,6 +203,10 @@ impl AnsiString {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.fragments.is_empty()
+    }
+
     pub fn into_inner(self) -> String {
         self.stripped.into()
     }

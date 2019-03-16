@@ -80,7 +80,7 @@ pub trait EventHandler {
     fn accept_event(&self, event: Event) -> bool;
 
     /// handle event, return whether
-    fn handle(&mut self, event: Event, arg: EventArg) -> UpdateScreen;
+    fn handle(&mut self, event: Event, arg: &EventArg) -> UpdateScreen;
 }
 
 #[rustfmt::skip]

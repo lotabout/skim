@@ -5,6 +5,7 @@ extern crate lazy_static;
 mod ansi;
 mod event;
 mod field;
+mod header;
 mod input;
 mod item;
 mod matcher;
