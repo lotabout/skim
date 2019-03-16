@@ -24,12 +24,8 @@ impl Input {
         match self.term.poll_event() {
             // search event from keymap
             Ok(TuiEvent::Key(key)) => match self.keymap.get(&key) {
-                Some(&(ev, Some(ref args))) => {
-                    (ev, Box::new(Some(args.clone())))
-                }
-                Some(&(ev, None)) => {
-                    (ev, Box::new(None as Option<String>))
-                }
+                Some(&(ev, Some(ref args))) => (ev, Box::new(Some(args.clone()))),
+                Some(&(ev, None)) => (ev, Box::new(None as Option<String>)),
                 None => {
                     if let Key::Char(ch) = key {
                         (Event::EvActAddChar, Box::new(ch))
@@ -39,13 +35,9 @@ impl Input {
                 }
             },
 
-            Ok(TuiEvent::Resize { .. }) => {
-                (Event::EvActRedraw, Box::new(true))
-            }
+            Ok(TuiEvent::Resize { .. }) => (Event::EvActRedraw, Box::new(true)),
 
-            _ => {
-                (Event::EvInputInvalid, Box::new(true))
-            }
+            _ => (Event::EvInputInvalid, Box::new(true)),
         }
     }
 

@@ -1,13 +1,13 @@
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
-
 use crate::event::{Event, EventArg, EventReceiver, EventSender};
 use crate::field::FieldRange;
 use crate::item::Item;
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
 use regex::Regex;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -20,7 +20,6 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use std::borrow::Cow;
 
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
@@ -235,7 +234,7 @@ fn reader(
                     buffer.pop();
                 }
 
-//                debug!("reader:reader: create new item. index = {}", index);
+                //                debug!("reader:reader: create new item. index = {}", index);
                 let item = Item::new(
                     String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,

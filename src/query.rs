@@ -2,8 +2,8 @@ use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use std::mem;
-use tuikit::prelude::*;
 use std::sync::Arc;
+use tuikit::prelude::*;
 
 #[derive(Clone, Copy, PartialEq)]
 enum QueryMode {
