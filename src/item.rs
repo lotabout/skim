@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::spinlock::{SpinLock, SpinLockGuard};
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::iter::Iterator;
+use std::ops::Deref;
 
 /// An item will store everything that one line input will need to be operated and displayed.
 ///
@@ -248,14 +249,25 @@ impl ItemPool {
         pool.append(items);
     }
 
-    pub fn take(&self) -> Vec<Arc<Item>> {
-        let pool = self.pool.lock();
-        let len = pool.len();
-        let taken = self.taken.swap(len, AtomicOrdering::SeqCst);
-        let mut ret = Vec::with_capacity(len-taken);
-        for item in &pool[taken..len] {
-            ret.push(item.clone())
+    pub fn take(&self) -> ItemPoolGuard<Arc<Item>> {
+        let guard = self.pool.lock();
+        let taken = self.taken.swap(guard.len(), AtomicOrdering::SeqCst);
+        ItemPoolGuard {
+            guard,
+            start: taken,
         }
-        ret
+    }
+}
+
+pub struct ItemPoolGuard<'a, T: Sized + 'a> {
+    guard: SpinLockGuard<'a, Vec<T>>,
+    start: usize,
+}
+
+impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        &self.guard[self.start..]
     }
 }
