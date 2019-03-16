@@ -7,6 +7,9 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::default::Default;
 use std::sync::Arc;
+use crate::spinlock::{SpinLock, SpinLockGuard};
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::iter::Iterator;
 
 /// An item will store everything that one line input will need to be operated and displayed.
 ///
@@ -146,10 +149,6 @@ impl Clone for Item {
     }
 }
 
-// A bunch of items
-pub type ItemGroup = Vec<Arc<Item>>;
-pub type MatchedItemGroup = Vec<MatchedItem>;
-
 pub type Rank = [i64; 4]; // score, index, start, end
 
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -210,3 +209,53 @@ impl PartialEq for MatchedItem {
 }
 
 impl Eq for MatchedItem {}
+
+const ITEM_POOL_CAPACITY : usize = 1024;
+
+pub struct ItemPool {
+    pool: SpinLock<Vec<Arc<Item>>>,
+    /// number of items that was `take`n
+    taken: AtomicUsize,
+}
+
+impl ItemPool {
+    pub fn new() -> Self {
+        Self {
+            pool: SpinLock::new(Vec::with_capacity(ITEM_POOL_CAPACITY)),
+            taken: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        let items = self.pool.lock();
+        items.len()
+    }
+
+    pub fn clear(&self) {
+        let mut items = self.pool.lock();
+        items.clear();
+        self.taken.store(0, AtomicOrdering::SeqCst);
+    }
+
+    pub fn reset(&self) {
+        // lock to ensure consistency
+        let items = self.pool.lock();
+        self.taken.store(0, AtomicOrdering::SeqCst);
+    }
+
+    pub fn append(&self, items: &mut Vec<Arc<Item>>) {
+        let mut pool = self.pool.lock();
+        pool.append(items);
+    }
+
+    pub fn take(&self) -> Vec<Arc<Item>> {
+        let pool = self.pool.lock();
+        let len = pool.len();
+        let taken = self.taken.swap(len, AtomicOrdering::SeqCst);
+        let mut ret = Vec::with_capacity(len-taken);
+        for item in &pool[taken..len] {
+            ret.push(item.clone())
+        }
+        ret
+    }
+}

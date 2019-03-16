@@ -1,5 +1,5 @@
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
-use crate::item::{Item, MatchedItem, MatchedItemGroup, MatchedRange};
+use crate::item::{Item, MatchedItem, MatchedRange};
 /// Handle the selections of items
 use crate::util::reshape_string;
 use crate::SkimOptions;

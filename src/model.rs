@@ -22,7 +22,7 @@ use unicode_width::UnicodeWidthChar;
 use std::env;
 use crate::output::SkimOutput;
 use std::mem;
-use crate::item::Item;
+use crate::item::{Item, ItemPool};
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -40,7 +40,7 @@ pub struct Model {
     matcher: Matcher,
     term: Arc<Term>,
 
-    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+    item_pool: Arc<ItemPool>,
 
     rx: EventReceiver,
     tx: EventSender,
@@ -89,7 +89,7 @@ impl Model {
             selection,
             matcher,
             term,
-            items: Arc::new(SpinLock::new(Vec::new())),
+            item_pool: Arc::new(ItemPool::new()),
 
             rx,
             tx,
@@ -178,19 +178,22 @@ impl Model {
                 if new_cmd != cmd {
                     debug!("cmd: {:?}, new: {:?}", cmd, new_cmd);
                     cmd = new_cmd;
-                    self.reader_control.take().map(ReaderControl::kill);
-                    self.reader_control.replace(self.reader.run(&cmd));
-                    self.selection.clear();
-                    self.items.lock().clear();
 
-                    // restart matcher
+                    // stop matcher
+                    self.reader_control.take().map(ReaderControl::kill);
                     self.matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
+                    self.selection.clear();
+                    self.item_pool.clear();
+
+                    // restart reader
+                    self.reader_control.replace(self.reader.run(&cmd));
                 } else if query != new_query {
                     query = new_query;
 
                     // restart matcher
-                    self.selection.clear();
                     self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    self.item_pool.reset();
+                    self.selection.clear();
                     self.tx.send((Event::EvMatcherRestart, Box::new(true)));
                 }
             } else if self.selection.accept_event(ev) {
@@ -202,28 +205,21 @@ impl Model {
                         let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
                         // run matcher if matcher had been stopped and reader had new items.
                         if !processed && self.matcher_control.is_none() {
-                            let _ = self.tx.send((Event::EvMatcherDone, Box::new(false)));
+                            let _ = self.tx.send((Event::EvMatcherRestart, Box::new(true)));
                         }
                     }
 
                     Event::EvMatcherRestart => {
-                        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
                         // if there are new items, move them to item pool
-                        let items_to_match = if !processed {
+                        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+                        if !processed {
                             // take out new items and put them into items
                             let mut new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
-                            let mut item_pool = self.items.lock();
-                            for item in new_items.iter() {
-                                item_pool.push(item.clone());
-                            }
-
-                            Arc::new(SpinLock::new(new_items))
-                        } else {
-                            self.items.clone()
+                            self.item_pool.append(&mut new_items);
                         };
 
                         let tx_clone = self.tx.clone();
-                        self.matcher_control.replace(self.matcher.run(&query, items_to_match, None, move |_| {
+                        self.matcher_control.replace(self.matcher.run(&query, self.item_pool.clone(), None, move |_| {
                             let _ = tx_clone.send((Event::EvMatcherDone, Box::new(true)));
                         }));
                     }
@@ -827,7 +823,7 @@ impl Draw for Model {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
 
-        let total = self.items.lock().len();
+        let total = self.item_pool.len();
         let status = Status {
             total,
             matched: self.selection.num_options(),

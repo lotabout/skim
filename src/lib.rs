@@ -19,8 +19,6 @@ mod selection;
 mod spinlock;
 mod theme;
 mod util;
-mod coordinator;
-
 
 use crate::spinlock::SpinLock;
 use event::Event::*;

@@ -1,5 +1,5 @@
 use crate::event::{Event, EventReceiver, EventSender};
-use crate::item::{Item, MatchedItem, MatchedRange};
+use crate::item::{Item, ItemPool, MatchedItem, MatchedRange};
 use crate::options::SkimOptions;
 use crate::score;
 use crate::spinlock::SpinLock;
@@ -116,7 +116,7 @@ impl Matcher {
     pub fn run<C>(
         &self,
         query: &str,
-        items: Arc<SpinLock<Vec<Arc<Item>>>>,
+        item_pool: Arc<ItemPool>,
         mode: Option<MatcherMode>,
         callback: C,
     ) -> MatcherControl
@@ -132,7 +132,7 @@ impl Matcher {
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
-            let items = items.lock();
+            let items = item_pool.take();
             for item in items.iter() {
                 if stopped.load(Ordering::Relaxed) {
                     break;
