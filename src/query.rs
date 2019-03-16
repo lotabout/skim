@@ -4,6 +4,7 @@ use crate::theme::{ColorTheme, DEFAULT_THEME};
 use std::mem;
 use std::sync::Arc;
 use tuikit::prelude::*;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq)]
 enum QueryMode {
@@ -491,6 +492,13 @@ impl Draw for Query {
         canvas.set_cursor(0, col)?;
         canvas.show_cursor(true)?;
         Ok(())
+    }
+
+    fn content_size(&self) -> (usize, usize) {
+        let before = self.get_before();
+        let after = self.get_after();
+        let prompt = self.get_prompt();
+        (prompt.width() + before.width() + after.width() + 1, 0)
     }
 }
 

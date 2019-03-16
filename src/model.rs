@@ -285,19 +285,6 @@ impl Model {
     //            if let Ok((ev, arg)) = self.rx_cmd.recv() {
     //                debug!("model: got {:?}", ev);
     //                match ev {
-    //                    Event::EvModelDrawQuery => {
-    //                        //debug!("model:EvModelDrawQuery:query");
-    //                        let print_query_func = *arg
-    //                            .downcast::<QueryPrintClosure>()
-    //                            .expect("model:EvModelDrawQuery: failed to get argument");
-    //                        self.draw_query(&mut curses.win_main, &print_query_func);
-    //                        curses.refresh();
-    //                    }
-    //                    Event::EvModelDrawInfo => {
-    //                        //debug!("model:EvModelDrawInfo:status");
-    //                        self.draw_status(&mut curses.win_main);
-    //                        curses.refresh();
-    //                    }
     //                    Event::EvModelNewPreview => {
     //                        //debug!("model:EvModelNewPreview:handle_preview_output");
     //                        let preview_output = *arg
@@ -305,75 +292,7 @@ impl Model {
     //                            .expect("model:EvModelNewPreview: failed to get argument");
     //                        self.handle_preview_output(&mut curses.win_preview, preview_output);
     //                    }
-    //
-    //                    Event::EvModelNotifyProcessed => {
-    //                        //debug!("model:EvModelNotifyProcessed:items_and_status");
-    //                        let num_processed = *arg
-    //                            .downcast::<usize>()
-    //                            .expect("model:EvModelNotifyProcessed: failed to get argument");
-    //                        self.num_processed = num_processed;
-    //
-    //                        if !self.reader_stopped {
-    //                            // if the reader is still running, the number of processed items equals
-    //                            // to the number of read items
-    //                            self.num_read = num_processed;
-    //
-    //                            let now = Instant::now();
-    //                            let diff = now.duration_since(last_refresh);
-    //
-    //                            // update the screen
-    //                            // num_processed % 4096 == 0
-    //                            if num_processed.trailing_zeros() >= 12 && diff > *REFRESH_DURATION {
-    //                                self.act_redraw_items_and_status(&mut curses);
-    //                                last_refresh = now;
-    //                            }
-    //                        }
-    //                    }
-    //
-    //                    Event::EvModelNotifyMatcherMode => {
-    //                        self.matcher_mode = *arg
-    //                            .downcast()
-    //                            .expect("model:EvModelNotifyMatcherMode: failed to get argument");
-    //                    }
-    //
-    //                    Event::EvMatcherStopped => {
-    //                        //debug!("model:EvMatcherStopped:items_and_status");
-    //                        self.matcher_stopped = true;
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //
-    //                    Event::EvReaderStopped => {
-    //                        // if reader stopped, the num_read is freezed.
-    //                        self.reader_stopped = true;
-    //                        self.num_read = *arg.downcast().expect("model:EvReaderStopped: failed to get argument");
-    //                    }
-    //
-    //                    Event::EvReaderStarted => {
-    //                        self.reader_stopped = false;
-    //                        self.num_read = 0;
-    //                    }
-    //
-    //                    //---------------------------------------------------------
-    //                    // Actions
-    //                    Event::EvActAccept => {
-    //                        curses.close();
-    //
-    //                        // output the expect key
-    //                        let tx_ack: Sender<Vec<Arc<Item>>> =
-    //                            *arg.downcast().expect("model:EvActAccept: failed to get argument");
-    //
-    //                        // do the final dirty work
-    //                        self.act_output();
-    //
-    //                        let mut selected: Vec<Arc<Item>> =
-    //                            self.selected.values().map(|item| item.item.clone()).collect();
-    //
-    //                        selected.sort_by_key(|item| item.get_full_index());
-    //
-    //                        // return the selected items
-    //                        let _ = tx_ack.send(selected);
-    //                        break;
-    //                    }
+
     //                    Event::EvActAbort => {
     //                        if let Some(tx_preview) = &self.tx_preview {
     //                            tx_preview
@@ -392,70 +311,6 @@ impl Model {
     //                        let _ = tx_ack.send(true);
     //                        break;
     //                    }
-    //                    Event::EvActUp => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_move_line_cursor(1);
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActDown => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_move_line_cursor(-1);
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActToggle => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_toggle();
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActToggleDown => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_toggle();
-    //                        self.act_move_line_cursor(-1);
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActToggleUp => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_toggle();
-    //                        self.act_move_line_cursor(1);
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActToggleAll => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_toggle_all();
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActSelectAll => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_select_all();
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActDeselectAll => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_deselect_all();
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActPageDown => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        let height = 1 - (self.height as i32);
-    //                        self.act_move_line_cursor(height);
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActPageUp => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        let height = (self.height as i32) - 1;
-    //                        self.act_move_line_cursor(height);
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActScrollLeft => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(-1)));
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
-    //                    Event::EvActScrollRight => {
-    //                        //debug!("model:redraw_items_and_status");
-    //                        self.act_scroll(*arg.downcast::<i32>().unwrap_or_else(|_| Box::new(1)));
-    //                        self.act_redraw_items_and_status(&mut curses);
-    //                    }
     //
     //                    Event::EvActTogglePreview => {
     //                        self.act_toggle_preview(&mut curses);
@@ -463,131 +318,9 @@ impl Model {
     //                        // so no need to call redraw here (besides, print_query_func is unknown)
     //                    }
     //
-    //                    Event::EvActRedraw => {
-    //                        //debug!("model:EvActRedraw:act_redraw");
-    //                        let print_query_func = *arg
-    //                            .downcast::<QueryPrintClosure>()
-    //                            .expect("model:EvActRedraw: failed to get argument");
-    //                        self.act_redraw(&mut curses, print_query_func);
-    //                    }
     //                    _ => {}
     //                }
     //            }
-    //        }
-    //    }
-    //
-    //    fn clean_model(&mut self) {
-    //        self.items.clear();
-    //        self.item_cursor = 0;
-    //        self.line_cursor = 0;
-    //        self.hscroll_offset = 0;
-    //        self.matcher_stopped = false;
-    //        if !self.reader_stopped {
-    //            self.num_processed = 0;
-    //        }
-    //    }
-    //
-    //    fn update_size(&mut self, curses: &mut Window) {
-    //        // update the (height, width)
-    //        let (h, w) = curses.get_maxyx();
-    //        self.height = h - self.reserved_height;
-    //        self.width = w - 2;
-    //    }
-    //
-    //    fn insert_new_items(&mut self, items: MatchedItemGroup) {
-    //        for item in items {
-    //            self.items.push(Arc::new(item));
-    //        }
-    //    }
-    //
-    //    fn get_status_position(&self, cursor_y: usize) -> (usize, usize) {
-    //        match (self.inline_info, self.reverse) {
-    //            (false, true) => (1, 0),
-    //            (false, false) => ({ self.height + self.reserved_height - 2 }, 0),
-    //            (true, _) => (cursor_y, self.query_end_x),
-    //        }
-    //    }
-    //
-    //    fn draw_status(&self, curses: &mut Window) {
-    //        // cursor should be placed on query, so store cursor before printing
-    //        let (y, x) = curses.getyx();
-    //
-    //        let (status_y, status_x) = self.get_status_position(y);
-    //
-    //        curses.mv(status_y, status_x);
-    //        curses.clrtoeol();
-    //
-    //        if self.inline_info {
-    //            curses.print_with_attr("  <", self.theme.prompt());
-    //        };
-    //
-    //        // display spinner
-    //        if self.reader_stopped {
-    //            self.print_char(curses, ' ', self.theme.normal());
-    //        } else {
-    //            let time = self.timer.elapsed();
-    //            let mills = (time.as_secs() * 1000) as u32 + time.subsec_millis();
-    //            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-    //            self.print_char(curses, SPINNERS[index as usize], self.theme.spinner());
-    //        }
-    //
-    //        // display matched/total number
-    //        curses.print_with_attr(
-    //            format!(" {}/{}", self.items.len(), self.num_read).as_ref(),
-    //            self.theme.info(),
-    //        );
-    //
-    //        // display the matcher mode
-    //        if !self.matcher_mode.is_empty() {
-    //            curses.print_with_attr(format!("/{}", &self.matcher_mode).as_ref(), self.theme.info());
-    //        }
-    //
-    //        // display the percentage of the number of processed items
-    //        if self.num_processed < self.num_read {
-    //            curses.print_with_attr(
-    //                format!(" ({}%) ", self.num_processed * 100 / self.num_read).as_ref(),
-    //                self.theme.info(),
-    //            )
-    //        }
-    //
-    //        // selected number
-    //        if self.multi_selection && !self.selected.is_empty() {
-    //            curses.print_with_attr(
-    //                format!(" [{}]", self.selected.len()).as_ref(),
-    //                Attr {
-    //                    effect: Effect::BOLD,
-    //                    ..self.theme.info()
-    //                },
-    //            );
-    //        }
-    //
-    //        // item cursor
-    //        let line_num_str = format!(" {} ", self.item_cursor + self.line_cursor);
-    //        curses.mv(status_y, self.width - line_num_str.len());
-    //        curses.print_with_attr(
-    //            &line_num_str,
-    //            Attr {
-    //                effect: Effect::BOLD,
-    //                ..self.theme.info()
-    //            },
-    //        );
-    //
-    //        // restore cursor
-    //        curses.mv(y, x);
-    //    }
-    //
-    //    fn get_header_height(&self, query_y: usize, maxy: usize) -> Option<usize> {
-    //        let (status_height, _) = self.get_status_position(query_y);
-    //        let res = if self.reverse {
-    //            status_height + 1
-    //        } else {
-    //            status_height - 1
-    //        };
-    //
-    //        if self.reserved_height + 1 < maxy && maxy > 3 {
-    //            Some(res)
-    //        } else {
-    //            None
     //        }
     //    }
     //
@@ -700,19 +433,33 @@ impl Draw for Model {
             time: self.timer.elapsed(),
             matcher_mode: "".to_string(),
             theme: self.theme.clone(),
+            inline_info: self.inline_info,
         };
         debug!("prepare done");
 
         let win_selection = Win::new(&self.selection);
-        let win_query = Win::new(&self.query).basis(1.into()).grow(0).shrink(0);
-        let win_status = Win::new(&status).basis(1.into()).grow(0).shrink(0);
+        let win_query = Win::new(&self.query)
+            .basis(if self.inline_info { 0 } else { 1 }.into())
+            .grow(0)
+            .shrink(0);
+        let win_status = Win::new(&status)
+            .basis(if self.inline_info { 0 } else { 1 }.into())
+            .grow(0)
+            .shrink(0);
         let win_header = Win::new(&self.header)
             .basis(if self.header.is_empty() { 0 } else { 1 }.into())
             .grow(0)
             .shrink(0);
+        let win_query_status = HSplit::default()
+            .basis(if self.inline_info { 1 } else { 0 }.into())
+            .grow(0)
+            .shrink(0)
+            .split(Win::new(&self.query).grow(0).shrink(0))
+            .split(Win::new(&status).grow(1).shrink(0));
 
         let screen = if self.reverse {
             VSplit::default()
+                .split(&win_query_status)
                 .split(&win_query)
                 .split(&win_status)
                 .split(&win_header)
@@ -723,6 +470,7 @@ impl Draw for Model {
                 .split(&win_header)
                 .split(&win_status)
                 .split(&win_query)
+                .split(&win_query_status)
         };
 
         screen.draw(canvas)
@@ -741,23 +489,25 @@ struct Status {
     time: Duration,
     matcher_mode: String,
     theme: Arc<ColorTheme>,
+    inline_info: bool,
 }
 
 impl Draw for Status {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
         canvas.clear()?;
         let (screen_width, _) = canvas.size()?;
+
+        let mut col = 0;
+
+        if self.inline_info {
+            col += canvas.print_with_attr(0, col, " <", self.theme.prompt())?;
+        }
+
         if self.reading {
             let mills = (self.time.as_secs() * 1000) as u32 + self.time.subsec_millis();
             let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-            canvas.put_cell(
-                0,
-                0,
-                Cell {
-                    ch: SPINNERS[index as usize],
-                    attr: self.theme.spinner(),
-                },
-            );
+            let ch = SPINNERS[index as usize];
+            col += canvas.print_with_attr(0, col, &ch.to_string(), self.theme.spinner())?;
         }
 
         let info_attr = self.theme.info();
@@ -767,7 +517,6 @@ impl Draw for Status {
         };
 
         // display matched/total number
-        let mut col = 1;
         col += canvas.print_with_attr(0, col, format!(" {}/{}", self.matched, self.total).as_ref(), info_attr)?;
 
         // display the matcher mode
