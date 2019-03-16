@@ -232,10 +232,8 @@ impl Model {
                 }
 
                 Event::EvActAccept => {
-                    debug!("accept");
                     self.reader_control.take().map(|ctrl| ctrl.kill());
                     self.matcher_control.take().map(|ctrl| ctrl.kill());
-                    debug!("threads killed");
 
                     return Some(SkimOutput {
                         accept_key: None,
@@ -243,6 +241,12 @@ impl Model {
                         cmd: self.query.get_cmd_query(),
                         selected_items: self.selection.get_selected_items(),
                     });
+                }
+
+                Event::EvActAbort => {
+                    self.reader_control.take().map(|ctrl| ctrl.kill());
+                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    return None;
                 }
 
                 _ => {}
