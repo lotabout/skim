@@ -1,17 +1,17 @@
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::item::{Item, MatchedItem, MatchedRange};
+use crate::orderedvec::OrderedVec;
+use crate::theme::{ColorTheme, DEFAULT_THEME};
 /// Handle the selections of items
 use crate::util::reshape_string;
 use crate::SkimOptions;
 use std::cmp::max;
 use std::cmp::min;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
-use crate::theme::{ColorTheme, DEFAULT_THEME};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::orderedvec::OrderedVec;
 
 pub struct Selection {
     items: OrderedVec<Arc<MatchedItem>>, // all items
@@ -135,7 +135,7 @@ impl Selection {
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
-            self.selected.insert(index, Arc::clone(current_item));
+            self.selected.insert(index, current_item.clone());
         } else {
             self.selected.remove(&index);
         }
@@ -145,7 +145,7 @@ impl Selection {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
             if !self.selected.contains_key(&index) {
-                self.selected.insert(index, Arc::clone(current_item));
+                self.selected.insert(index, current_item.clone());
             } else {
                 self.selected.remove(&index);
             }
@@ -155,7 +155,7 @@ impl Selection {
     pub fn act_select_all(&mut self) {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
-            self.selected.insert(index, Arc::clone(current_item));
+            self.selected.insert(index, current_item.clone());
         }
     }
 
@@ -179,13 +179,10 @@ impl Selection {
                 .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let index = current_item.item.get_full_index();
-            self.selected.insert(index, Arc::clone(current_item));
+            self.selected.insert(index, current_item.clone());
         }
 
-        let mut selected: Vec<Arc<Item>> = self.selected
-            .values()
-            .map(|item| item.item.clone())
-            .collect();
+        let mut selected: Vec<Arc<Item>> = self.selected.values().map(|item| item.item.clone()).collect();
 
         selected.sort_by_key(|item| item.get_full_index());
         selected
@@ -206,7 +203,6 @@ impl Selection {
     pub fn num_options(&self) -> usize {
         self.items.len()
     }
-
 }
 
 impl EventHandler for Selection {

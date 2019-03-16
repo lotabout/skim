@@ -41,6 +41,7 @@ pub enum MatcherMode {
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
     processed: Arc<AtomicUsize>,
+    matched: Arc<AtomicUsize>,
     items: Arc<SpinLock<Vec<Arc<MatchedItem>>>>,
     thread_matcher: JoinHandle<()>,
 }
@@ -50,8 +51,18 @@ impl MatcherControl {
         self.processed.load(Ordering::Relaxed)
     }
 
+    pub fn get_num_matched(&self) -> usize {
+        let ret = self.matched.load(Ordering::Relaxed);
+        ret
+    }
+
     pub fn kill(self) {
         self.stopped.store(true, Ordering::Relaxed);
+        self.thread_matcher.join();
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.stopped.load(Ordering::Relaxed)
     }
 
     pub fn into_items(self) -> Arc<SpinLock<Vec<Arc<MatchedItem>>>> {
@@ -112,43 +123,52 @@ impl Matcher {
         }
     }
 
-    pub fn run<C>(
-        &self,
-        query: &str,
-        item_pool: Arc<ItemPool>,
-        mode: Option<MatcherMode>,
-        callback: C,
-    ) -> MatcherControl
-    where
-        C: FnOnce(Arc<SpinLock<Vec<Arc<MatchedItem>>>>) + 'static + Send,
-    {
+    pub fn run(&self, query: &str, item_pool: Arc<ItemPool>, mode: Option<MatcherMode>) -> MatcherControl {
         let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         let processed = Arc::new(AtomicUsize::new(0));
         let processed_clone = processed.clone();
+        let matched = Arc::new(AtomicUsize::new(0));
+        let matched_clone = matched.clone();
         let matched_items = Arc::new(SpinLock::new(Vec::new()));
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
             let items = item_pool.take();
-            for item in items.iter() {
-                if stopped.load(Ordering::Relaxed) {
-                    break;
-                }
 
-                processed.fetch_add(1, Ordering::Relaxed);
-                if let Some(matched_item) = matcher_engine.match_item(item.clone()) {
-                    let mut pool = matched_items.lock();
-                    pool.push(Arc::new(matched_item));
-                }
+            // 1. use rayon for parallel
+            // 2. return Err to skip iteration
+            //    check https://doc.rust-lang.org/std/result/enum.Result.html#method.from_iter
+
+            let result: Result<Vec<_>, _> = items
+                .par_iter()
+                .filter_map(|item| {
+                    processed.fetch_add(1, Ordering::Relaxed);
+                    return matcher_engine.match_item(item.clone());
+                })
+                .map(|item| {
+                    matched.fetch_add(1, Ordering::Relaxed);
+                    if stopped.load(Ordering::Relaxed) {
+                        Err("matcher killed")
+                    } else {
+                        Ok(Arc::new(item))
+                    }
+                })
+                .collect();
+
+            if let Ok(mut items) = result {
+                items.par_sort_unstable();
+
+                let mut pool = matched_items.lock();
+                *pool = items;
+                stopped.store(true, Ordering::Relaxed);
             }
-            stopped.store(true, Ordering::Relaxed);
-            callback(matched_items);
         });
 
         MatcherControl {
             stopped: stopped_clone,
+            matched: matched_clone,
             processed: processed_clone,
             items: matched_items_clone,
             thread_matcher,

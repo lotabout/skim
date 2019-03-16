@@ -10,8 +10,8 @@ pub struct OrderedVec<T: Ord> {
 }
 
 impl<T> OrderedVec<T>
-    where
-        T: Ord,
+where
+    T: Ord,
 {
     pub fn new() -> Self {
         OrderedVec {
@@ -24,7 +24,7 @@ impl<T> OrderedVec<T>
             self.vec = items;
         } else {
             self.vec.append(&mut items);
-//            self.vec.sort_unstable();
+            self.vec.sort_unstable();
         }
     }
 
@@ -37,7 +37,7 @@ impl<T> OrderedVec<T>
     }
 
     pub fn clear(&mut self) {
-        self.vec.clear()
+        self.vec.clear();
     }
 
     pub fn is_empty(&self) -> bool {

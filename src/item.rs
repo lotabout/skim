@@ -2,15 +2,15 @@
 ///! the internal states, such as selected or not
 use crate::ansi::{ANSIParser, AnsiString};
 use crate::field::*;
+use crate::spinlock::{SpinLock, SpinLockGuard};
 use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::default::Default;
-use std::sync::Arc;
-use crate::spinlock::{SpinLock, SpinLockGuard};
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::iter::Iterator;
 use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::Arc;
 
 /// An item will store everything that one line input will need to be operated and displayed.
 ///
@@ -211,9 +211,10 @@ impl PartialEq for MatchedItem {
 
 impl Eq for MatchedItem {}
 
-const ITEM_POOL_CAPACITY : usize = 1024;
+const ITEM_POOL_CAPACITY: usize = 1024;
 
 pub struct ItemPool {
+    length: AtomicUsize,
     pool: SpinLock<Vec<Arc<Item>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
@@ -222,20 +223,21 @@ pub struct ItemPool {
 impl ItemPool {
     pub fn new() -> Self {
         Self {
+            length: AtomicUsize::new(0),
             pool: SpinLock::new(Vec::with_capacity(ITEM_POOL_CAPACITY)),
             taken: AtomicUsize::new(0),
         }
     }
 
     pub fn len(&self) -> usize {
-        let items = self.pool.lock();
-        items.len()
+        self.length.load(AtomicOrdering::SeqCst)
     }
 
     pub fn clear(&self) {
         let mut items = self.pool.lock();
         items.clear();
         self.taken.store(0, AtomicOrdering::SeqCst);
+        self.length.store(0, AtomicOrdering::SeqCst);
     }
 
     pub fn reset(&self) {
@@ -247,15 +249,13 @@ impl ItemPool {
     pub fn append(&self, items: &mut Vec<Arc<Item>>) {
         let mut pool = self.pool.lock();
         pool.append(items);
+        self.length.store(pool.len(), AtomicOrdering::SeqCst);
     }
 
     pub fn take(&self) -> ItemPoolGuard<Arc<Item>> {
         let guard = self.pool.lock();
         let taken = self.taken.swap(guard.len(), AtomicOrdering::SeqCst);
-        ItemPoolGuard {
-            guard,
-            start: taken,
-        }
+        ItemPoolGuard { guard, start: taken }
     }
 }
 

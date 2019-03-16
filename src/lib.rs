@@ -10,6 +10,7 @@ mod item;
 mod matcher;
 mod model;
 mod options;
+mod orderedvec;
 mod output;
 mod previewer;
 mod query;
@@ -19,8 +20,10 @@ mod selection;
 mod spinlock;
 mod theme;
 mod util;
-mod orderedvec;
 
+use crate::event::Event::*;
+use crate::model::Model;
+use crate::reader::Reader;
 use crate::spinlock::SpinLock;
 use event::Event::*;
 use event::{EventReceiver, EventSender};
@@ -37,12 +40,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tuikit::term::{Term, TermHeight, TermOptions};
-use crate::reader::Reader;
-use crate::event::Event::*;
-use crate::model::Model;
 
-
-const REFRESH_DURATION: u64 = 200;
+const REFRESH_DURATION: u64 = 50;
 
 pub struct Skim {}
 
@@ -66,13 +65,11 @@ impl Skim {
         input.parse_keymaps(&options.bind);
         input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
         let tx_clone = tx.clone();
-        thread::spawn(move || {
-            loop {
-                let (ev, arg) = input.pool_event();
-                let _ = tx_clone.send((ev, arg));
-                if ev == EvActAccept || ev == EvActAbort {
-                    break;
-                }
+        thread::spawn(move || loop {
+            let (ev, arg) = input.pool_event();
+            let _ = tx_clone.send((ev, arg));
+            if ev == EvActAccept || ev == EvActAbort {
+                break;
             }
         });
 
