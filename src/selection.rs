@@ -10,11 +10,11 @@ use std::sync::Arc;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
-use skiplist::OrderedSkipList;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::orderedvec::OrderedVec;
 
 pub struct Selection {
-    items: OrderedSkipList<Arc<MatchedItem>>, // all items
+    items: OrderedVec<Arc<MatchedItem>>, // all items
     selected: HashMap<(usize, usize), Arc<MatchedItem>>,
 
     //
@@ -45,7 +45,7 @@ pub struct Selection {
 impl Selection {
     pub fn new() -> Self {
         Selection {
-            items: OrderedSkipList::new(),
+            items: OrderedVec::new(),
             selected: HashMap::new(),
             item_cursor: 0,
             line_cursor: 0,
@@ -89,10 +89,8 @@ impl Selection {
         self
     }
 
-    pub fn add_items(&mut self, items: Vec<Arc<MatchedItem>>) {
-        for item in items.into_iter() {
-            self.items.insert(item)
-        }
+    pub fn append_sorted_items(&mut self, items: Vec<Arc<MatchedItem>>) {
+        self.items.append_ordered(items);
     }
 
     pub fn clear(&mut self) {
@@ -133,7 +131,7 @@ impl Selection {
         let cursor = self.item_cursor + self.line_cursor;
         let current_item = self
             .items
-            .get(&cursor)
+            .get(cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
@@ -178,7 +176,7 @@ impl Selection {
             let cursor = self.item_cursor + self.line_cursor;
             let current_item = self
                 .items
-                .get(&cursor)
+                .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let index = current_item.item.get_full_index();
             self.selected.insert(index, Arc::clone(current_item));
@@ -401,7 +399,7 @@ impl Draw for Selection {
 
             let item = self
                 .items
-                .get(&item_idx)
+                .get(item_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
             self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);

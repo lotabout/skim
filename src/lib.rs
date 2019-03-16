@@ -19,6 +19,7 @@ mod selection;
 mod spinlock;
 mod theme;
 mod util;
+mod orderedvec;
 
 use crate::spinlock::SpinLock;
 use event::Event::*;

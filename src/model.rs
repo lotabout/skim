@@ -191,10 +191,13 @@ impl Model {
                     query = new_query;
 
                     // restart matcher
+                    debug!("new query: clear state");
                     self.matcher_control.take().map(|ctrl| ctrl.kill());
                     self.item_pool.reset();
                     self.selection.clear();
-                    self.tx.send((Event::EvMatcherRestart, Box::new(true)));
+                    debug!("new query: clear state done");
+                    let _ = self.tx.send((Event::EvMatcherRestart, Box::new(true)));
+                    debug!("new query: restart done");
                 }
             } else if self.selection.accept_event(ev) {
                 redraw = self.selection.handle(ev, arg);
@@ -230,7 +233,7 @@ impl Model {
                             let lock = ctrl.into_items();
                             let mut items = lock.lock();
                             let matched = mem::replace(&mut *items, Vec::new());
-                            self.selection.add_items(matched);
+                            self.selection.append_sorted_items(matched);
                             redraw = UpdateScreen::Redraw;
                         });
 

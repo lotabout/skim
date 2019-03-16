@@ -52,7 +52,6 @@ impl MatcherControl {
 
     pub fn kill(self) {
         self.stopped.store(true, Ordering::Relaxed);
-        self.thread_matcher.join();
     }
 
     pub fn into_items(self) -> Arc<SpinLock<Vec<Arc<MatchedItem>>>> {
