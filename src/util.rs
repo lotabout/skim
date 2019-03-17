@@ -221,6 +221,17 @@ pub fn reshape_string(
     }
 }
 
+/// margin option string -> Size
+/// 10 -> Size::Fixed(10)
+/// 10% -> Size::Percent(10)
+pub fn margin_string_to_size(margin: &str) -> Size {
+    if margin.ends_with('%') {
+        Size::Percent(min(100, margin[0..margin.len() - 1].parse::<usize>().unwrap_or(100)))
+    } else {
+        Size::Fixed(margin.parse::<usize>().unwrap_or(0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{accumulate_text_width, reshape_string};

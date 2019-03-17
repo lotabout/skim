@@ -6,13 +6,13 @@ use crate::item::{Item, ItemPool};
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
-use crate::previewer::PreviewInput;
+use crate::previewer::Previewer;
 use crate::query::Query;
 use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
-use crate::util::escape_single_quote;
+use crate::util::{escape_single_quote, margin_string_to_size};
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::{max, min};
@@ -51,14 +51,15 @@ pub struct Model {
     reader_control: Option<ReaderControl>,
     matcher_control: Option<MatcherControl>,
 
-    preview_hidden: bool,
-
-    tx_preview: Option<Sender<(Event, PreviewInput)>>,
     header: Header,
+
+    preview_hidden: bool,
+    previewer: Option<Previewer>,
+    preview_direction: Direction,
+    preview_size: Size,
 
     // Options
     reverse: bool,
-    preview_cmd: Option<String>,
     delimiter: Regex,
     output_ending: &'static str,
     print_query: bool,
@@ -99,13 +100,13 @@ impl Model {
             matcher_control: None,
             matcher_mode: "".to_string(),
 
-            preview_hidden: true,
-
-            tx_preview: None,
             header: Header::empty(),
+            preview_hidden: true,
+            previewer: None,
+            preview_direction: Direction::Right,
+            preview_size: Size::Default,
 
             reverse: false,
-            preview_cmd: None,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             output_ending: "\n",
             print_query: false,
@@ -119,14 +120,6 @@ impl Model {
     }
 
     fn parse_options(&mut self, options: &SkimOptions) {
-        if let Some(preview_cmd) = options.preview {
-            self.preview_cmd = Some(preview_cmd.to_string());
-        }
-
-        if let Some(preview_window) = options.preview_window {
-            self.preview_hidden = preview_window.find("hidden").is_some();
-        }
-
         if let Some(delimiter) = options.delimiter {
             self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
@@ -152,6 +145,61 @@ impl Model {
         }
 
         self.header = Header::with_options(options);
+
+        // preview related
+        let (preview_direction, preview_size, preview_wrap, preview_shown) = options
+            .preview_window
+            .map(Self::parse_preview)
+            .expect("option 'preview-window' should be set (by default)");
+        self.preview_direction = preview_direction;
+        self.preview_size = preview_size;
+        self.preview_hidden = !preview_shown;
+
+        debug!("option: {:?}, {:?}, {:?}, {:?}", preview_direction, preview_size, preview_wrap, preview_shown);
+
+        if let Some(preview_cmd) = options.preview {
+            self.previewer = Some(
+                Previewer::new(Some(preview_cmd.to_string()))
+                    .wrap(preview_wrap)
+                    .delimiter(self.delimiter.clone()),
+            );
+        }
+    }
+
+    // -> (direction, size, wrap, shown)
+    fn parse_preview(preview_option: &str) -> (Direction, Size, bool, bool) {
+        let options = preview_option.split(':').collect::<Vec<&str>>();
+
+        let mut direction = Direction::Right;
+        let mut shown = true;
+        let mut wrap = false;
+        let mut size = Size::Percent(50);
+
+        for option in options {
+            // mistake
+            if option.is_empty() {
+                continue;
+            }
+
+            let first_char = option.chars().next().unwrap_or('A');
+
+            // raw string
+            if first_char.is_digit(10) {
+                size = margin_string_to_size(option);
+            } else {
+                match option.to_uppercase().as_str() {
+                    "UP" => direction = Direction::Up,
+                    "DOWN" => direction = Direction::Down,
+                    "LEFT" => direction = Direction::Left,
+                    "RIGHT" => direction = Direction::Right,
+                    "HIDDEN" => shown = false,
+                    "WRAP" => wrap = true,
+                    _ => {}
+                }
+            }
+        }
+
+        (direction, size, wrap, shown)
     }
 
     pub fn start(&mut self) -> Option<SkimOutput> {
@@ -249,7 +297,19 @@ impl Model {
                     return None;
                 }
 
+                Event::EvActTogglePreview => {
+                    self.preview_hidden = !self.preview_hidden;
+                }
+
                 _ => {}
+            }
+
+            if !self.preview_hidden {
+                let item = self.selection.get_current_item();
+                if item.is_some() {
+                    let item = item.unwrap();
+                    self.previewer.as_mut().map(|p| p.on_item_change(item));
+                }
             }
 
             self.term.draw(self);
@@ -288,14 +348,6 @@ impl Model {
     //            // check for new item
     //            if let Ok((ev, arg)) = self.rx_cmd.recv() {
     //                debug!("model: got {:?}", ev);
-    //                match ev {
-    //                    Event::EvModelNewPreview => {
-    //                        //debug!("model:EvModelNewPreview:handle_preview_output");
-    //                        let preview_output = *arg
-    //                            .downcast::<AnsiString>()
-    //                            .expect("model:EvModelNewPreview: failed to get argument");
-    //                        self.handle_preview_output(&mut curses.win_preview, preview_output);
-    //                    }
 
     //                    Event::EvActAbort => {
     //                        if let Some(tx_preview) = &self.tx_preview {
@@ -315,102 +367,10 @@ impl Model {
     //                        let _ = tx_ack.send(true);
     //                        break;
     //                    }
-    //
-    //                    Event::EvActTogglePreview => {
-    //                        self.act_toggle_preview(&mut curses);
-    //                        // main loop will send EvActRedraw afterwards
-    //                        // so no need to call redraw here (besides, print_query_func is unknown)
-    //                    }
-    //
     //                    _ => {}
     //                }
     //            }
     //        }
-    //    }
-    //
-    //    pub fn set_previewer(&mut self, tx_preview: Sender<(Event, PreviewInput)>) {
-    //        self.tx_preview = Some(tx_preview);
-    //    }
-    //
-    //    fn draw_preview(&mut self, curses: &mut Window) {
-    //        if self.preview_hidden {
-    //            return;
-    //        }
-    //
-    //        if self.preview_cmd.is_none() {
-    //            return;
-    //        }
-    //
-    //        // cursor should be placed on query, so store cursor before printing
-    //        let (lines, cols) = curses.get_maxyx();
-    //
-    //        let current_idx = self.item_cursor + self.line_cursor;
-    //        if current_idx >= self.items.len() {
-    //            curses.clrtoend();
-    //            return;
-    //        }
-    //
-    //        let item = Arc::clone(
-    //            self.items
-    //                .get(current_idx)
-    //                .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", current_idx)),
-    //        );
-    //
-    //        let current_line = item.item.get_output_text();
-    //        let cmd = self.inject_preview_command(&current_line);
-    //
-    //        if let Some(tx_preview) = &self.tx_preview {
-    //            tx_preview
-    //                .send((
-    //                    Event::EvModelNewPreview,
-    //                    PreviewInput {
-    //                        cmd: cmd.to_string(),
-    //                        lines,
-    //                        columns: cols,
-    //                    },
-    //                ))
-    //                .expect("failed to send to previewer");
-    //        }
-    //    }
-    //
-    //    fn handle_preview_output(&mut self, curses: &mut Window, aoutput: AnsiString) {
-    //        debug!("model:draw_preview: output = {:?}", &aoutput);
-    //
-    //        curses.mv(0, 0);
-    //        for (ch, attr) in aoutput.iter() {
-    //            curses.add_char_with_attr(ch, attr);
-    //        }
-    //        curses.clrtoend();
-    //    }
-    //
-    //    fn inject_preview_command(&self, text: &str) -> Cow<str> {
-    //        let cmd = self
-    //            .preview_cmd
-    //            .as_ref()
-    //            .expect("model:inject_preview_command: invalid preview command");
-    //        debug!("replace: {:?}, text: {:?}", cmd, text);
-    //        RE_FIELDS.replace_all(cmd, |caps: &Captures| {
-    //            // \{...
-    //            if &caps[0][0..1] == "\\" {
-    //                return caps[0].to_string();
-    //            }
-    //
-    //            // {1..} and other variant
-    //            assert!(caps[1].len() >= 2);
-    //            let range = &caps[1][1..caps[1].len() - 1];
-    //            let replacement = if range == "" {
-    //                text
-    //            } else {
-    //                get_string_by_range(&self.delimiter, text, range).unwrap_or("")
-    //            };
-    //
-    //            format!("'{}'", escape_single_quote(replacement))
-    //        })
-    //    }
-    //
-    //    pub fn act_toggle_preview(&mut self, curses: &mut Curses) {
-    //        self.preview_hidden = !self.preview_hidden;
-    //        curses.toggle_preview_window();
     //    }
 }
 
@@ -461,7 +421,7 @@ impl Draw for Model {
             .split(Win::new(&self.query).grow(0).shrink(0))
             .split(Win::new(&status).grow(1).shrink(0));
 
-        let screen = if self.reverse {
+        let win_main = if self.reverse {
             VSplit::default()
                 .split(&win_query_status)
                 .split(&win_query)
@@ -475,6 +435,31 @@ impl Draw for Model {
                 .split(&win_status)
                 .split(&win_query)
                 .split(&win_query_status)
+        };
+
+        let screen: Box<dyn Draw> = if !self.preview_hidden && self.previewer.is_some() {
+            let previewer = self.previewer.as_ref().unwrap();
+            let win = Win::new(previewer)
+                .basis(self.preview_size)
+                .grow(0)
+                .shrink(0)
+                .border_attr(self.theme.border());
+
+            let win_preview = match self.preview_direction {
+                Direction::Up => win.border_bottom(true),
+                Direction::Right => win.border_left(true),
+                Direction::Down => win.border_top(true),
+                Direction::Left => win.border_right(true),
+            };
+
+            match self.preview_direction {
+                Direction::Up => Box::new(VSplit::default().split(win_preview).split(win_main)),
+                Direction::Right => Box::new(HSplit::default().split(win_main).split(win_preview)),
+                Direction::Down => Box::new(VSplit::default().split(win_main).split(win_preview)),
+                Direction::Left => Box::new(HSplit::default().split(win_preview).split(win_main)),
+            }
+        } else {
+            Box::new(win_main)
         };
 
         screen.draw(canvas)
@@ -511,7 +496,7 @@ impl Draw for Status {
             let mills = (self.time.as_secs() * 1000) as u32 + self.time.subsec_millis();
             let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
             let ch = SPINNERS[index as usize];
-            col += canvas.print_with_attr(0, col, &ch.to_string(), self.theme.spinner())?;
+            col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
         }
 
         let info_attr = self.theme.info();
@@ -549,4 +534,12 @@ impl Draw for Status {
 
         Ok(())
     }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Copy)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
 }

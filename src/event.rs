@@ -23,6 +23,9 @@ pub enum Event {
     EvReaderRestart,
     EvHeartBeat,
 
+    EvPreviewRequest,
+    EvPreviewResult,
+
     // user bind actions
     EvActAbort,
     EvActAccept,
