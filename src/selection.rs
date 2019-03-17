@@ -13,8 +13,8 @@ use std::sync::Arc;
 use tuikit::prelude::*;
 
 pub struct Selection {
-    items: OrderedVec<Arc<MatchedItem>>, // all items
-    selected: HashMap<(usize, usize), Arc<MatchedItem>>,
+    items: OrderedVec<MatchedItem>, // all items
+    selected: HashMap<(usize, usize), MatchedItem>,
 
     //
     // |>------ items[items.len()-1]
@@ -87,7 +87,7 @@ impl Selection {
         self
     }
 
-    pub fn append_sorted_items(&mut self, items: Vec<Arc<MatchedItem>>) {
+    pub fn append_sorted_items(&mut self, items: Vec<MatchedItem>) {
         self.items.append_ordered(items);
     }
 

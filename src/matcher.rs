@@ -40,7 +40,7 @@ pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
     processed: Arc<AtomicUsize>,
     matched: Arc<AtomicUsize>,
-    items: Arc<SpinLock<Vec<Arc<MatchedItem>>>>,
+    items: Arc<SpinLock<Vec<MatchedItem>>>,
     thread_matcher: JoinHandle<()>,
 }
 
@@ -62,7 +62,7 @@ impl MatcherControl {
         self.stopped.load(Ordering::Relaxed)
     }
 
-    pub fn into_items(self) -> Arc<SpinLock<Vec<Arc<MatchedItem>>>> {
+    pub fn into_items(self) -> Arc<SpinLock<Vec<MatchedItem>>> {
         while !self.stopped.load(Ordering::Relaxed) {}
         self.items.clone()
     }
@@ -149,7 +149,7 @@ impl Matcher {
                     if stopped.load(Ordering::Relaxed) {
                         Err("matcher killed")
                     } else {
-                        Ok(Arc::new(item))
+                        Ok(item)
                     }
                 })
                 .collect();
