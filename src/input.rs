@@ -146,5 +146,6 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::Ctrl('k'), (Event::EvActUp, None));
     ret.insert(Key::Up, (Event::EvActUp, None));
     ret.insert(Key::Ctrl('y'), (Event::EvActYank, None));
+    ret.insert(Key::Null, (Event::EvActAbort, None));
     ret
 }

@@ -15,7 +15,7 @@ use std::env;
 use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tuikit::prelude::*;
+use tuikit::prelude::{Event as TermEvent, *};
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -181,44 +181,6 @@ impl Model {
 
         while let Ok((ev, arg)) = self.rx.recv() {
             debug!("model: ev: {:?}, arg: {:?}", ev, arg);
-
-            if self.header.accept_event(ev) {
-                self.header.handle(ev, &arg);
-            }
-
-            if self.query.accept_event(ev) {
-                self.query.handle(ev, &arg);
-                let new_query = self.query.get_query();
-                let new_cmd = self.query.get_cmd();
-
-                // re-run reader & matcher if needed;
-                if new_cmd != cmd {
-                    cmd = new_cmd;
-
-                    // stop matcher
-                    self.reader_control.take().map(ReaderControl::kill);
-                    self.matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
-                    self.item_pool.clear();
-                    to_clear_selection = true;
-
-                    // restart reader
-                    self.reader_control.replace(self.reader.run(&cmd));
-                    self.restart_matcher();
-                } else if query != new_query {
-                    query = new_query;
-
-                    // restart matcher
-                    self.matcher_control.take().map(|ctrl| ctrl.kill());
-                    to_clear_selection = true;
-                    self.item_pool.reset();
-                    self.restart_matcher();
-                }
-            }
-
-            if self.selection.accept_event(ev) {
-                self.selection.handle(ev, &arg);
-            }
-
             match ev {
                 Event::EvHeartBeat => {
                     // save the processed items
@@ -271,6 +233,15 @@ impl Model {
                     return None;
                 }
 
+                Event::EvActDeleteCharEOF => {
+                    if query.is_empty() {
+                        let _ = self.term.send_event(TermEvent::Key(Key::Null));
+                        self.reader_control.take().map(|ctrl| ctrl.kill());
+                        self.matcher_control.take().map(|ctrl| ctrl.kill());
+                        return None;
+                    }
+                }
+
                 Event::EvActTogglePreview => {
                     self.preview_hidden = !self.preview_hidden;
                 }
@@ -292,6 +263,46 @@ impl Model {
                 _ => {}
             }
 
+            // dispatch events to sub-components
+
+            if self.header.accept_event(ev) {
+                self.header.handle(ev, &arg);
+            }
+
+            if self.query.accept_event(ev) {
+                self.query.handle(ev, &arg);
+                let new_query = self.query.get_query();
+                let new_cmd = self.query.get_cmd();
+
+                // re-run reader & matcher if needed;
+                if new_cmd != cmd {
+                    cmd = new_cmd;
+
+                    // stop matcher
+                    self.reader_control.take().map(ReaderControl::kill);
+                    self.matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
+                    self.item_pool.clear();
+                    to_clear_selection = true;
+
+                    // restart reader
+                    self.reader_control.replace(self.reader.run(&cmd));
+                    self.restart_matcher();
+                } else if query != new_query {
+                    query = new_query;
+
+                    // restart matcher
+                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    to_clear_selection = true;
+                    self.item_pool.reset();
+                    self.restart_matcher();
+                }
+            }
+
+            if self.selection.accept_event(ev) {
+                self.selection.handle(ev, &arg);
+            }
+
+            // re-draw
             if !self.preview_hidden {
                 let item = self.selection.get_current_item();
                 if item.is_some() {
