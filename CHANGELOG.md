@@ -1,5 +1,23 @@
 # Change Log
 
+## 0.6.0: 2019-03-17
+
+Performance improvement.
+
+This is a large rewrite of skim, previously there are 4 major components of
+skim:
+
+- reader: for reading from command or piped input
+- sender: will cache the lines from reader and re-send all lines to matcher on restart
+- matcher: match against the lines and send the matched items to model
+- model: handle the selection of items and draw on screen.
+
+They are communicated using rust's `channel` which turned out to be too slow
+in skim's use case. Now we use `SpinLock` for sharing data. The performance on
+large collections are greatly improved.
+
+Besides, use `tuikit` for buferred rendering.
+
 ## 0.5.5: 2019-02-23
 
 Bug fixes:
