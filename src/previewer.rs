@@ -8,6 +8,7 @@ use crate::spinlock::SpinLock;
 use crate::util::escape_single_quote;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
+use std::cmp::{max, min};
 use std::env;
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -15,9 +16,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
-use tuikit::prelude::*;
 use std::thread::JoinHandle;
-use std::cmp::{min, max};
+use tuikit::prelude::*;
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -139,8 +139,7 @@ impl Draw for Previewer {
 
         let content = self.content.lock();
 
-        let mut printer = Printer::new(screen_width, screen_height)
-            .wrap(self.wrap);
+        let mut printer = Printer::new(screen_width, screen_height).wrap(self.wrap);
         for (ch, attr) in content.iter() {
             let _ = printer.print_char_with_attr(canvas, ch, attr);
         }
@@ -306,7 +305,6 @@ impl Printer {
                 for _ in 0..rest {
                     self.print_char_raw(canvas, ' ', attr)?;
                 }
-
             }
 
             ch => {

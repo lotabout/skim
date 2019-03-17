@@ -46,7 +46,7 @@ pub struct Model {
     rx: EventReceiver,
     tx: EventSender,
 
-    matcher_mode: String,
+    matcher_mode: Option<MatcherMode>,
     timer: Instant,
     reader_control: Option<ReaderControl>,
     matcher_control: Option<MatcherControl>,
@@ -61,9 +61,6 @@ pub struct Model {
     // Options
     reverse: bool,
     delimiter: Regex,
-    output_ending: &'static str,
-    print_query: bool,
-    print_cmd: bool,
     no_hscroll: bool,
     inline_info: bool,
     theme: Arc<ColorTheme>,
@@ -98,7 +95,7 @@ impl Model {
             timer: Instant::now(),
             reader_control: None,
             matcher_control: None,
-            matcher_mode: "".to_string(),
+            matcher_mode: None,
 
             header: Header::empty(),
             preview_hidden: true,
@@ -108,9 +105,6 @@ impl Model {
 
             reverse: false,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            output_ending: "\n",
-            print_query: false,
-            print_cmd: false,
             no_hscroll: false,
             inline_info: false,
             theme,
@@ -124,20 +118,8 @@ impl Model {
             self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
-        if options.print0 {
-            self.output_ending = "\0";
-        }
-
-        if options.print_query {
-            self.print_query = true;
-        }
-
         if options.reverse {
             self.reverse = true;
-        }
-
-        if options.print_cmd {
-            self.print_cmd = true;
         }
 
         if options.inline_info {
@@ -278,7 +260,8 @@ impl Model {
                 }
 
                 Event::EvActAccept => {
-                    let accept_key = arg.downcast_ref::<Option<String>>()
+                    let accept_key = arg
+                        .downcast_ref::<Option<String>>()
                         .and_then(|os| os.as_ref().map(|s| s.clone()));
 
                     self.reader_control.take().map(|ctrl| ctrl.kill());
@@ -300,6 +283,20 @@ impl Model {
 
                 Event::EvActTogglePreview => {
                     self.preview_hidden = !self.preview_hidden;
+                }
+
+                Event::EvActRotateMode => {
+                    if self.matcher_mode.is_none() {
+                        self.matcher_mode = Some(MatcherMode::Regex);
+                    } else {
+                        self.matcher_mode = None;
+                    }
+
+                    // restart matcher
+                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    to_clear_selection = true;
+                    self.item_pool.reset();
+                    self.restart_matcher();
                 }
 
                 _ => {}
@@ -336,43 +333,8 @@ impl Model {
 
         let tx_clone = self.tx.clone();
         self.matcher_control
-            .replace(self.matcher.run(&query, self.item_pool.clone(), None));
+            .replace(self.matcher.run(&query, self.item_pool.clone(), self.matcher_mode));
     }
-
-    //    pub fn run(&mut self, mut curses: Curses) {
-    //        // generate a new instance of curses for printing
-    //        //
-    //        let mut last_refresh = Instant::now();
-    //
-    //        // main loop
-    //        loop {
-    //            // check for new item
-    //            if let Ok((ev, arg)) = self.rx_cmd.recv() {
-    //                debug!("model: got {:?}", ev);
-
-    //                    Event::EvActAbort => {
-    //                        if let Some(tx_preview) = &self.tx_preview {
-    //                            tx_preview
-    //                                .send((
-    //                                    Event::EvActAbort,
-    //                                    PreviewInput {
-    //                                        cmd: "".into(),
-    //                                        lines: 0,
-    //                                        columns: 0,
-    //                                    },
-    //                                ))
-    //                                .expect("Failed to send to tx_preview");
-    //                        }
-    //                        let tx_ack: Sender<bool> = *arg.downcast().expect("model:EvActAbort: failed to get argument");
-    //                        curses.close();
-    //                        let _ = tx_ack.send(true);
-    //                        break;
-    //                    }
-    //                    _ => {}
-    //                }
-    //            }
-    //        }
-    //    }
 }
 
 impl Draw for Model {
@@ -380,22 +342,31 @@ impl Draw for Model {
         let (screen_width, screen_height) = canvas.size()?;
 
         let total = self.item_pool.len();
+        let matcher_mode = if self.matcher_mode.is_none() {
+            "".to_string()
+        } else {
+            "RE".to_string()
+        };
+
+        let matched =
+            self.selection.num_options() + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
+        let processed = self
+            .matcher_control
+            .as_ref()
+            .map(|c| c.get_num_processed())
+            .unwrap_or(total);
+
         let status = Status {
             total,
-            matched: self.selection.num_options()
-                + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0),
-            processed: self
-                .matcher_control
-                .as_ref()
-                .map(|c| c.get_num_processed())
-                .unwrap_or(total),
+            matched,
+            processed,
             matcher_running: self.matcher_control.is_some(),
             multi_selection: self.selection.is_multi_selection(),
             selected: self.selection.get_num_selected(),
             current_item_idx: self.selection.get_current_item_idx(),
             reading: !self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true),
             time: self.timer.elapsed(),
-            matcher_mode: "".to_string(),
+            matcher_mode,
             theme: self.theme.clone(),
             inline_info: self.inline_info,
         };
