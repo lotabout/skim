@@ -278,11 +278,14 @@ impl Model {
                 }
 
                 Event::EvActAccept => {
+                    let accept_key = arg.downcast_ref::<Option<String>>()
+                        .and_then(|os| os.as_ref().map(|s| s.clone()));
+
                     self.reader_control.take().map(|ctrl| ctrl.kill());
                     self.matcher_control.take().map(|ctrl| ctrl.kill());
 
                     return Some(SkimOutput {
-                        accept_key: None,
+                        accept_key,
                         query: self.query.get_query(),
                         cmd: self.query.get_cmd_query(),
                         selected_items: self.selection.get_selected_items(),
