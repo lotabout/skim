@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.6.1: 2019-03-17
+
+Fix:
+- compile fail with rust 2018 (1.31.0)
+- reduce the time on exit. It took time to free memories on large
+    collections.
+
 ## 0.6.0: 2019-03-17
 
 Performance improvement.
