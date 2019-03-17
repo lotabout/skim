@@ -7,7 +7,6 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::default::Default;
-use std::iter::Iterator;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Arc;
@@ -242,7 +241,7 @@ impl ItemPool {
 
     pub fn reset(&self) {
         // lock to ensure consistency
-        let items = self.pool.lock();
+        let _items = self.pool.lock();
         self.taken.store(0, AtomicOrdering::SeqCst);
     }
 

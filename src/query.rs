@@ -28,6 +28,7 @@ pub struct Query {
     theme: Arc<ColorTheme>,
 }
 
+#[allow(dead_code)]
 impl Query {
     pub fn builder() -> Self {
         Query {
@@ -361,8 +362,6 @@ impl EventHandler for Query {
         match event {
             EvActDeleteCharEOF => !self.get_query().is_empty(),
             EvActAddChar
-            | EvActBackwardDeleteChar
-            | EvActDeleteChar
             | EvActBackwardChar
             | EvActBackwardDeleteChar
             | EvActBackwardKillWord
@@ -397,10 +396,6 @@ impl EventHandler for Query {
             EvActAddChar => {
                 let ch: char = *arg.downcast_ref().expect("EvActAddChar: failed to get argument");
                 self.act_add_char(ch);
-            }
-
-            EvActBackwardDeleteChar => {
-                self.act_backward_delete_char();
             }
 
             EvActDeleteChar | EvActDeleteCharEOF => {

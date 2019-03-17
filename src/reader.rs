@@ -1,21 +1,17 @@
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
-use crate::event::{Event, EventArg, EventReceiver, EventSender};
 use crate::field::FieldRange;
 use crate::item::Item;
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
 use regex::Regex;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
-use std::mem;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender, SyncSender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
@@ -32,7 +28,7 @@ pub struct ReaderControl {
 impl ReaderControl {
     pub fn kill(self) {
         self.stopped.store(true, Ordering::SeqCst);
-        self.thread_reader.join();
+        let _ = self.thread_reader.join();
     }
 
     pub fn take(&self) -> Vec<Arc<Item>> {

@@ -1,4 +1,3 @@
-use crate::event::{Event, EventReceiver, EventSender};
 use crate::item::{Item, ItemPool, MatchedItem, MatchedRange};
 use crate::options::SkimOptions;
 use crate::score;
@@ -6,7 +5,6 @@ use crate::spinlock::SpinLock;
 use rayon::prelude::*;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::channel;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
@@ -58,7 +56,7 @@ impl MatcherControl {
 
     pub fn kill(self) {
         self.stopped.store(true, Ordering::Relaxed);
-        self.thread_matcher.join();
+        let _ = self.thread_matcher.join();
     }
 
     pub fn stopped(&self) -> bool {

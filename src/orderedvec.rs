@@ -3,7 +3,6 @@
 // in order. Other items are kept unordered and are sorted on demand.
 
 const ORDERED_SIZE: usize = 300;
-use rayon::prelude::*;
 
 pub struct OrderedVec<T: Ord> {
     vec: Vec<T>,
@@ -46,30 +45,5 @@ where
 
     pub fn iter<'a>(&'a self) -> Box<Iterator<Item = &T> + 'a> {
         Box::new(self.vec.iter())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_push_get() {
-        let mut ordered = OrderedVec::new();
-        let data = [1, 3, -2, -1, 0, 4, 5];
-        for i in data.iter() {
-            ordered.push(*i);
-        }
-
-        println!("{}", ordered.get(0).unwrap());
-
-        //assert_eq!(*ordered.get(0).unwrap(), -2);
-        assert_eq!(*(ordered.get(0).unwrap()), -2);
-        assert_eq!(*(ordered.get(1).unwrap()), -1);
-        assert_eq!(*(ordered.get(2).unwrap()), 0);
-        assert_eq!(*(ordered.get(3).unwrap()), 1);
-        assert_eq!(*(ordered.get(4).unwrap()), 3);
-        assert_eq!(*(ordered.get(5).unwrap()), 4);
-        assert_eq!(*(ordered.get(6).unwrap()), 5);
     }
 }

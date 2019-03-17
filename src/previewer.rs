@@ -1,5 +1,5 @@
 use crate::ansi::AnsiString;
-use crate::event::{Event, EventSender};
+use crate::event::Event;
 use nix::libc;
 
 use crate::field::get_string_by_range;

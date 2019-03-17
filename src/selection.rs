@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tuikit::prelude::*;
-use unicode_width::UnicodeWidthChar;
 
 pub struct Selection {
     items: OrderedVec<Arc<MatchedItem>>, // all items
@@ -289,9 +288,9 @@ impl Selection {
 
         // print selection cursor
         if self.selected.contains_key(&index) {
-            canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
+            let _ = canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
         } else {
-            canvas.print_with_attr(row, 1, " ", default_attr);
+            let _ = canvas.print_with_attr(row, 1, " ", default_attr);
         }
 
         let item = &matched_item.item;
@@ -376,7 +375,7 @@ impl Selection {
 
 impl Draw for Selection {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
-        let (screen_width, screen_height) = canvas.size()?;
+        let (_screen_width, screen_height) = canvas.size()?;
         canvas.clear()?;
 
         let item_idx_lower = self.item_cursor;
@@ -395,14 +394,14 @@ impl Draw for Selection {
 
             // print the cursor label
             let label = if line_cursor == self.line_cursor { ">" } else { " " };
-            let next_col = canvas.print_with_attr(line_no, 0, label, self.theme.cursor()).unwrap();
+            let _next_col = canvas.print_with_attr(line_no, 0, label, self.theme.cursor()).unwrap();
 
             let item = self
                 .items
                 .get(item_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
-            self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
+            let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
         }
 
         Ok(())

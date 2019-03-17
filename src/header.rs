@@ -17,6 +17,7 @@ pub struct Header {
     theme: Arc<ColorTheme>,
 }
 
+#[allow(dead_code)]
 impl Header {
     pub fn new(header: AnsiString) -> Self {
         Self {
@@ -80,12 +81,12 @@ impl Draw for Header {
             return Ok(());
         }
 
-        let (screen_width, screen_height) = canvas.size()?;
+        let (screen_width, _screen_height) = canvas.size()?;
         if screen_width < 3 {
             return Err("screen width is too small".into());
         }
 
-        canvas.clear();
+        canvas.clear()?;
 
         let mut printer = LinePrinter::builder()
             .col(2)

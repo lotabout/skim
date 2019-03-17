@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::cmp::min;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 

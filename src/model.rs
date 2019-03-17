@@ -1,8 +1,6 @@
-use crate::ansi::AnsiString;
-use crate::event::{Event, EventHandler, EventReceiver, EventSender, UpdateScreen};
-use crate::field::get_string_by_range;
+use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
-use crate::item::{Item, ItemPool};
+use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -10,20 +8,14 @@ use crate::previewer::Previewer;
 use crate::query::Query;
 use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
-use crate::spinlock::SpinLock;
-use crate::theme::{ColorTheme, DEFAULT_THEME};
-use crate::util::{escape_single_quote, margin_string_to_size};
-use regex::{Captures, Regex};
-use std::borrow::Cow;
-use std::cmp::{max, min};
-use std::collections::HashMap;
+use crate::theme::ColorTheme;
+use crate::util::margin_string_to_size;
+use regex::Regex;
 use std::env;
 use std::mem;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuikit::prelude::*;
-use unicode_width::UnicodeWidthChar;
 
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
@@ -61,7 +53,6 @@ pub struct Model {
     // Options
     reverse: bool,
     delimiter: Regex,
-    no_hscroll: bool,
     inline_info: bool,
     theme: Arc<ColorTheme>,
 }
@@ -105,7 +96,6 @@ impl Model {
 
             reverse: false,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            no_hscroll: false,
             inline_info: false,
             theme,
         };
@@ -310,8 +300,8 @@ impl Model {
                 }
             }
 
-            self.term.draw(self);
-            self.term.present();
+            let _ = self.term.draw(self);
+            let _ = self.term.present();
         }
 
         None
@@ -331,7 +321,7 @@ impl Model {
             self.item_pool.append(&mut new_items);
         };
 
-        let tx_clone = self.tx.clone();
+        let _tx_clone = self.tx.clone();
         self.matcher_control
             .replace(self.matcher.run(&query, self.item_pool.clone(), self.matcher_mode));
     }
@@ -339,7 +329,7 @@ impl Model {
 
 impl Draw for Model {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
-        let (screen_width, screen_height) = canvas.size()?;
+        let (_screen_width, _screen_height) = canvas.size()?;
 
         let total = self.item_pool.len();
         let matcher_mode = if self.matcher_mode.is_none() {
@@ -451,13 +441,19 @@ struct Status {
     inline_info: bool,
 }
 
+#[allow(unused_assignments)]
 impl Draw for Status {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
         canvas.clear()?;
         let (screen_width, _) = canvas.size()?;
 
-        let mut col = 0;
+        let info_attr = self.theme.info();
+        let info_attr_bold = Attr {
+            effect: Effect::BOLD,
+            ..self.theme.info()
+        };
 
+        let mut col = 0;
         if self.inline_info {
             col += canvas.print_with_attr(0, col, " <", self.theme.prompt())?;
         }
@@ -467,13 +463,9 @@ impl Draw for Status {
             let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
             let ch = SPINNERS[index as usize];
             col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
+        } else {
+            col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
         }
-
-        let info_attr = self.theme.info();
-        let info_attr_bold = Attr {
-            effect: Effect::BOLD,
-            ..self.theme.info()
-        };
 
         // display matched/total number
         col += canvas.print_with_attr(0, col, format!(" {}/{}", self.matched, self.total).as_ref(), info_attr)?;
