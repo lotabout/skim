@@ -10,11 +10,13 @@ pub fn escape_single_quote(text: &str) -> String {
 /// e.g. a long line will be printed as `..some content` or `some content..` or `..some content..`
 /// depends on the container's width and the size of the content.
 ///
+/// ```text
 /// let's say we have a very long line with lots of useless information
 ///                                |.. with lots of use..|             // only to show this
 ///                                |<- container width ->|
 ///             |<-    shift    -> |
 /// |< hscroll >|
+/// ```
 
 pub struct LinePrinter {
     start: usize,
@@ -172,7 +174,7 @@ pub fn accumulate_text_width(text: &str, tabstop: usize) -> Vec<usize> {
 
 /// "smartly" calculate the "start" position of the string in order to show the matched contents
 /// for example, if the match appear in the end of a long string, we need to show the right part.
-/// ```no_run
+/// ```text
 /// xxxxxxxxxxxxxxxxxxxxxxxxxxMMxxxxxMxxxxx
 ///               shift ->|               |
 /// ```
