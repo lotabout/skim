@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::thread;
 use tuikit::prelude::*;
 use std::thread::JoinHandle;
+use std::cmp::{min, max};
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -138,27 +139,10 @@ impl Draw for Previewer {
 
         let content = self.content.lock();
 
-        let mut row = 0;
-        let mut col = 0;
+        let mut printer = Printer::new(screen_width, screen_height)
+            .wrap(self.wrap);
         for (ch, attr) in content.iter() {
-            match ch {
-                '\r' | '\0' => {}
-                '\n' => {
-                    row += 1;
-                    col = 0;
-                }
-                '\t' => {
-                    // handle tabstop
-                    let rest = TAB_STOP - col % TAB_STOP;
-                    for _ in 0..rest {
-                        col += canvas.put_char_with_attr(row, col, ' ', attr)?;
-                    }
-                }
-
-                ch => {
-                    col += canvas.put_char_with_attr(row, col, ch, attr)?;
-                }
-            }
+            let _ = printer.print_char_with_attr(canvas, ch, attr);
         }
 
         Ok(())
@@ -260,4 +244,75 @@ fn wait_and_update(mut spawned: std::process::Child, content: Arc<SpinLock<AnsiS
     let stdout = String::from_utf8_lossy(&res).to_string();
     let astdout = AnsiString::from_str(&stdout);
     *content.lock() = astdout;
+}
+
+struct Printer {
+    row: usize,
+    col: usize,
+    wrap: bool,
+    width: usize,
+    height: usize,
+}
+
+impl Printer {
+    pub fn new(width: usize, height: usize) -> Self {
+        Self {
+            row: 0,
+            col: 0,
+            width,
+            height,
+            wrap: false,
+        }
+    }
+
+    pub fn wrap(mut self, wrap: bool) -> Self {
+        self.wrap = wrap;
+        self
+    }
+
+    fn print_char_raw(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
+        if self.row >= self.height {
+            return Ok(());
+        }
+
+        self.col += canvas.put_char_with_attr(self.row, self.col, ch, attr)?;
+        if self.wrap {
+            if self.col == self.width {
+                // move to next
+                self.row += 1;
+                self.col = 0
+            } else if self.col > self.width {
+                // re-print the wide character
+                self.row += 1;
+                self.col = 0;
+                self.col += canvas.put_char_with_attr(self.row, self.col, ch, attr)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn print_char_with_attr(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
+        match ch {
+            '\r' | '\0' => {}
+            '\n' => {
+                self.row += 1;
+                self.col = 0;
+            }
+            '\t' => {
+                // handle tabstop
+                let rest = TAB_STOP - self.col % TAB_STOP;
+                let rest = min(rest, max(self.col, self.width) - self.col);
+                for _ in 0..rest {
+                    self.print_char_raw(canvas, ' ', attr)?;
+                }
+
+            }
+
+            ch => {
+                self.print_char_raw(canvas, ch, attr)?;
+            }
+        }
+        Ok(())
+    }
 }

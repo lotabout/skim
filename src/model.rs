@@ -155,8 +155,6 @@ impl Model {
         self.preview_size = preview_size;
         self.preview_hidden = !preview_shown;
 
-        debug!("option: {:?}, {:?}, {:?}, {:?}", preview_direction, preview_size, preview_wrap, preview_shown);
-
         if let Some(preview_cmd) = options.preview {
             self.previewer = Some(
                 Previewer::new(Some(preview_cmd.to_string()))
@@ -378,7 +376,6 @@ impl Draw for Model {
     fn draw(&self, canvas: &mut Canvas) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
 
-        debug!("prepare status, {}", self.matcher_control.is_some());
         let total = self.item_pool.len();
         let status = Status {
             total,
@@ -399,7 +396,6 @@ impl Draw for Model {
             theme: self.theme.clone(),
             inline_info: self.inline_info,
         };
-        debug!("prepare done");
 
         let win_selection = Win::new(&self.selection);
         let win_query = Win::new(&self.query)
