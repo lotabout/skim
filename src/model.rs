@@ -39,7 +39,8 @@ pub struct Model {
     tx: EventSender,
 
     matcher_mode: Option<MatcherMode>,
-    timer: Instant,
+    reader_timer: Instant,
+    matcher_timer: Instant,
     reader_control: Option<ReaderControl>,
     matcher_control: Option<MatcherControl>,
 
@@ -83,7 +84,8 @@ impl Model {
 
             rx,
             tx,
-            timer: Instant::now(),
+            reader_timer: Instant::now(),
+            matcher_timer: Instant::now(),
             reader_control: None,
             matcher_control: None,
             matcher_mode: None,
@@ -295,6 +297,7 @@ impl Model {
                     // restart reader
                     self.reader_control.replace(self.reader.run(&cmd));
                     self.restart_matcher();
+                    self.reader_timer = Instant::now();
                 } else if query != new_query {
                     query = new_query;
 
@@ -327,6 +330,7 @@ impl Model {
     }
 
     fn restart_matcher(&mut self) {
+        self.matcher_timer = Instant::now();
         let query = self.query.get_query();
 
         // kill existing matcher if exits
@@ -374,7 +378,8 @@ impl Draw for Model {
             selected: self.selection.get_num_selected(),
             current_item_idx: self.selection.get_current_item_idx(),
             reading: !self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true),
-            time: self.timer.elapsed(),
+            time_since_read: self.reader_timer.elapsed(),
+            time_since_match: self.matcher_timer.elapsed(),
             matcher_mode,
             theme: self.theme.clone(),
             inline_info: self.inline_info,
@@ -454,7 +459,8 @@ struct Status {
     selected: usize,
     current_item_idx: usize,
     reading: bool,
-    time: Duration,
+    time_since_read: Duration,
+    time_since_match: Duration,
     matcher_mode: String,
     theme: Arc<ColorTheme>,
     inline_info: bool,
@@ -472,18 +478,22 @@ impl Draw for Status {
             ..self.theme.info()
         };
 
+        let a_while_since_read = self.time_since_read > Duration::from_millis(200);
+        let a_while_since_match = self.time_since_match > Duration::from_millis(200);
+
         let mut col = 0;
         if self.inline_info {
             col += canvas.print_with_attr(0, col, " <", self.theme.prompt())?;
-        }
-
-        if self.reading {
-            let mills = (self.time.as_secs() * 1000) as u32 + self.time.subsec_millis();
-            let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-            let ch = SPINNERS[index as usize];
-            col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
         } else {
-            col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
+            // draw the spinner
+            if self.reading && a_while_since_read {
+                let mills = (self.time_since_read.as_secs() * 1000) as u32 + self.time_since_read.subsec_millis();
+                let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
+                let ch = SPINNERS[index as usize];
+                col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
+            } else {
+                col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
+            }
         }
 
         // display matched/total number
@@ -495,7 +505,7 @@ impl Draw for Status {
         }
 
         // display the percentage of the number of processed items
-        if self.matcher_running && self.processed * 20 > self.total {
+        if self.matcher_running && a_while_since_match {
             col += canvas.print_with_attr(
                 0,
                 col,
