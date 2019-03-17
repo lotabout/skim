@@ -143,7 +143,8 @@ impl ReaderOption {
     }
 }
 
-fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
+type CommandOutput = (Option<Child>, Box<BufRead + Send>);
+fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<Error>> {
     let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let mut command = Command::new(shell)
         .arg("-c")

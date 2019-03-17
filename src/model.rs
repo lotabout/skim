@@ -174,60 +174,121 @@ impl Model {
         (direction, size, wrap, shown)
     }
 
-    pub fn start(&mut self) -> Option<SkimOutput> {
-        let mut cmd = self.query.get_cmd();
-        let mut query = self.query.get_query();
-        let mut clear_selection = ClearStrategy::DontClear;
+    fn act_heart_beat(&mut self, env: &mut ModelEnv) {
+        // save the processed items
+        let matcher_stopped = self
+            .matcher_control
+            .as_ref()
+            .map(|ctrl| ctrl.stopped())
+            .unwrap_or(false);
 
-        self.reader_control = Some(self.reader.run(&cmd));
+        if matcher_stopped {
+            let ctrl = self.matcher_control.take().unwrap();
+            let lock = ctrl.into_items();
+            let mut items = lock.lock();
+            let matched = mem::replace(&mut *items, Vec::new());
+
+            match env.clear_selection {
+                ClearStrategy::DontClear => {}
+                ClearStrategy::Clear => {
+                    self.selection.clear();
+                    env.clear_selection = ClearStrategy::DontClear;
+                }
+                ClearStrategy::ClearIfNotNull => {
+                    if !matched.is_empty() {
+                        self.selection.clear();
+                        env.clear_selection = ClearStrategy::DontClear;
+                    }
+                }
+            };
+            self.selection.append_sorted_items(matched);
+        }
+
+        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+        // run matcher if matcher had been stopped and reader had new items.
+        if !processed && self.matcher_control.is_none() {
+            self.restart_matcher();
+        }
+    }
+
+    fn act_rotate_mode(&mut self, env: &mut ModelEnv) {
+        if self.matcher_mode.is_none() {
+            self.matcher_mode = Some(MatcherMode::Regex);
+        } else {
+            self.matcher_mode = None;
+        }
+
+        // restart matcher
+        if let Some(ctrl) = self.matcher_control.take() {
+            ctrl.kill();
+        }
+
+        env.clear_selection = ClearStrategy::Clear;
+        self.item_pool.reset();
+        self.restart_matcher();
+    }
+
+    fn on_cmd_query_change(&mut self, env: &mut ModelEnv) {
+        // stop matcher
+        if let Some(ctrl) = self.reader_control.take() {
+            ctrl.kill();
+        }
+        if let Some(ctrl) = self.matcher_control.take() {
+            ctrl.kill();
+        }
+
+        self.item_pool.clear();
+        env.clear_selection = ClearStrategy::ClearIfNotNull;
+
+        // restart reader
+        self.reader_control.replace(self.reader.run(&env.cmd));
+        self.restart_matcher();
+        self.reader_timer = Instant::now();
+    }
+
+    fn on_query_change(&mut self, env: &mut ModelEnv) {
+        // restart matcher
+        if let Some(ctrl) = self.matcher_control.take() {
+            ctrl.kill();
+        }
+        env.clear_selection = ClearStrategy::Clear;
+        self.item_pool.reset();
+        self.restart_matcher();
+    }
+
+    pub fn start(&mut self) -> Option<SkimOutput> {
+        let mut env = ModelEnv {
+            cmd: self.query.get_cmd(),
+            query: self.query.get_query(),
+            clear_selection: ClearStrategy::DontClear,
+        };
+
+        self.reader_control = Some(self.reader.run(&env.cmd));
 
         while let Ok((ev, arg)) = self.rx.recv() {
             debug!("model: ev: {:?}, arg: {:?}", ev, arg);
             match ev {
                 Event::EvHeartBeat => {
-                    // save the processed items
-                    let matcher_stopped = self
-                        .matcher_control
-                        .as_ref()
-                        .map(|ctrl| ctrl.stopped())
-                        .unwrap_or(false);
+                    self.act_heart_beat(&mut env);
+                }
 
-                    if matcher_stopped {
-                        let ctrl = self.matcher_control.take().unwrap();
-                        let lock = ctrl.into_items();
-                        let mut items = lock.lock();
-                        let matched = mem::replace(&mut *items, Vec::new());
+                Event::EvActTogglePreview => {
+                    self.preview_hidden = !self.preview_hidden;
+                }
 
-                        match clear_selection {
-                            ClearStrategy::DontClear => {}
-                            ClearStrategy::Clear => {
-                                self.selection.clear();
-                                clear_selection = ClearStrategy::DontClear;
-                            }
-                            ClearStrategy::ClearIfNotNull => {
-                                if matched.len() > 0 {
-                                    self.selection.clear();
-                                    clear_selection = ClearStrategy::DontClear;
-                                }
-                            }
-                        };
-                        self.selection.append_sorted_items(matched);
-                    }
-
-                    let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
-                    // run matcher if matcher had been stopped and reader had new items.
-                    if !processed && self.matcher_control.is_none() {
-                        self.restart_matcher();
-                    }
+                Event::EvActRotateMode => {
+                    self.act_rotate_mode(&mut env);
                 }
 
                 Event::EvActAccept => {
-                    let accept_key = arg
-                        .downcast_ref::<Option<String>>()
-                        .and_then(|os| os.as_ref().map(|s| s.clone()));
+                    let accept_key = arg.downcast_ref::<Option<String>>().and_then(|os| os.as_ref().cloned());
 
-                    self.reader_control.take().map(|ctrl| ctrl.kill());
-                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    if let Some(ctrl) = self.reader_control.take() {
+                        ctrl.kill();
+                    }
+                    if let Some(ctrl) = self.matcher_control.take() {
+                        ctrl.kill();
+                    }
 
                     return Some(SkimOutput {
                         accept_key,
@@ -238,36 +299,26 @@ impl Model {
                 }
 
                 Event::EvActAbort => {
-                    self.reader_control.take().map(|ctrl| ctrl.kill());
-                    self.matcher_control.take().map(|ctrl| ctrl.kill());
+                    if let Some(ctrl) = self.reader_control.take() {
+                        ctrl.kill();
+                    }
+                    if let Some(ctrl) = self.matcher_control.take() {
+                        ctrl.kill();
+                    }
                     return None;
                 }
 
                 Event::EvActDeleteCharEOF => {
-                    if query.is_empty() {
+                    if env.query.is_empty() {
                         let _ = self.term.send_event(TermEvent::Key(Key::Null));
-                        self.reader_control.take().map(|ctrl| ctrl.kill());
-                        self.matcher_control.take().map(|ctrl| ctrl.kill());
+                        if let Some(ctrl) = self.reader_control.take() {
+                            ctrl.kill();
+                        }
+                        if let Some(ctrl) = self.matcher_control.take() {
+                            ctrl.kill();
+                        }
                         return None;
                     }
-                }
-
-                Event::EvActTogglePreview => {
-                    self.preview_hidden = !self.preview_hidden;
-                }
-
-                Event::EvActRotateMode => {
-                    if self.matcher_mode.is_none() {
-                        self.matcher_mode = Some(MatcherMode::Regex);
-                    } else {
-                        self.matcher_mode = None;
-                    }
-
-                    // restart matcher
-                    self.matcher_control.take().map(|ctrl| ctrl.kill());
-                    clear_selection = ClearStrategy::Clear;
-                    self.item_pool.reset();
-                    self.restart_matcher();
                 }
 
                 _ => {}
@@ -285,27 +336,12 @@ impl Model {
                 let new_cmd = self.query.get_cmd();
 
                 // re-run reader & matcher if needed;
-                if new_cmd != cmd {
-                    cmd = new_cmd;
-
-                    // stop matcher
-                    self.reader_control.take().map(ReaderControl::kill);
-                    self.matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
-                    self.item_pool.clear();
-                    clear_selection = ClearStrategy::ClearIfNotNull;
-
-                    // restart reader
-                    self.reader_control.replace(self.reader.run(&cmd));
-                    self.restart_matcher();
-                    self.reader_timer = Instant::now();
-                } else if query != new_query {
-                    query = new_query;
-
-                    // restart matcher
-                    self.matcher_control.take().map(|ctrl| ctrl.kill());
-                    clear_selection = ClearStrategy::Clear;
-                    self.item_pool.reset();
-                    self.restart_matcher();
+                if new_cmd != env.cmd {
+                    env.cmd = new_cmd;
+                    self.on_cmd_query_change(&mut env);
+                } else if new_query != env.query {
+                    env.query = new_query;
+                    self.on_query_change(&mut env);
                 }
             }
 
@@ -318,7 +354,9 @@ impl Model {
                 let item = self.selection.get_current_item();
                 if item.is_some() {
                     let item = item.unwrap();
-                    self.previewer.as_mut().map(|p| p.on_item_change(item));
+                    if let Some(previewer) = self.previewer.as_mut() {
+                        previewer.on_item_change(item);
+                    }
                 }
             }
 
@@ -334,7 +372,9 @@ impl Model {
         let query = self.query.get_query();
 
         // kill existing matcher if exits
-        self.matcher_control.take().map(|ctrl| ctrl.kill());
+        if let Some(ctrl) = self.matcher_control.take() {
+            ctrl.kill();
+        }
 
         // if there are new items, move them to item pool
         let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
@@ -348,6 +388,12 @@ impl Model {
         self.matcher_control
             .replace(self.matcher.run(&query, self.item_pool.clone(), self.matcher_mode));
     }
+}
+
+struct ModelEnv {
+    pub cmd: String,
+    pub query: String,
+    pub clear_selection: ClearStrategy,
 }
 
 impl Draw for Model {

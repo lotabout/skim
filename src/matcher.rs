@@ -50,8 +50,7 @@ impl MatcherControl {
     }
 
     pub fn get_num_matched(&self) -> usize {
-        let ret = self.matched.load(Ordering::Relaxed);
-        ret
+        self.matched.load(Ordering::Relaxed)
     }
 
     pub fn kill(self) {
@@ -143,7 +142,7 @@ impl Matcher {
                 .par_iter()
                 .filter_map(|item| {
                     processed.fetch_add(1, Ordering::Relaxed);
-                    return matcher_engine.match_item(item.clone());
+                    matcher_engine.match_item(item.clone())
                 })
                 .map(|item| {
                     matched.fetch_add(1, Ordering::Relaxed);

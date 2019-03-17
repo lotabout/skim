@@ -230,14 +230,14 @@ impl AnsiString {
 
 /// An iterator over all the (char, attr) characters.
 pub struct AnsiStringIterator<'a> {
-    fragments: &'a Vec<(Attr, Cow<'a, str>)>,
+    fragments: &'a [(Attr, Cow<'a, str>)],
     fragment_idx: usize,
     attr: Attr,
     chars_iter: Option<std::str::Chars<'a>>,
 }
 
 impl<'a> AnsiStringIterator<'a> {
-    pub fn new(fragments: &'a Vec<(Attr, Cow<'a, str>)>) -> Self {
+    pub fn new(fragments: &'a [(Attr, Cow<'a, str>)]) -> Self {
         Self {
             fragments,
             fragment_idx: 0,
