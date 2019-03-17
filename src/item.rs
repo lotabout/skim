@@ -1,25 +1,26 @@
-// An item is line of text that read from `find` command or stdin together with
-// the internal states, such as selected or not
-
+///! An item is line of text that read from `find` command or stdin together with
+///! the internal states, such as selected or not
 use crate::ansi::{ANSIParser, AnsiString};
 use crate::field::*;
+use crate::spinlock::{SpinLock, SpinLockGuard};
 use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::default::Default;
+use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
-// An item will store everything that one line input will need to be operated and displayed.
-//
-// What's special about an item?
-// The simplest version of an item is a line of string, but things are getting more complex:
-// - The conversion of lower/upper case is slow in rust, because it involds unicode.
-// - We may need to interpret the ANSI codes in the text.
-// - The text can be transformed and limited while searching.
-
-// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
-// more than one line.
-
+/// An item will store everything that one line input will need to be operated and displayed.
+///
+/// What's special about an item?
+/// The simplest version of an item is a line of string, but things are getting more complex:
+/// - The conversion of lower/upper case is slow in rust, because it involds unicode.
+/// - We may need to interpret the ANSI codes in the text.
+/// - The text can be transformed and limited while searching.
+///
+/// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
+/// more than one line.
 #[derive(Debug)]
 pub struct Item {
     // (num of run, number of index)
@@ -148,17 +149,13 @@ impl Clone for Item {
     }
 }
 
-// A bunch of items
-pub type ItemGroup = Vec<Arc<Item>>;
-pub type MatchedItemGroup = Vec<MatchedItem>;
-
 pub type Rank = [i64; 4]; // score, index, start, end
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
 pub enum MatchedRange {
     ByteRange(usize, usize), // range of bytes
-    Chars(Vec<usize>), // individual characters matched
+    Chars(Vec<usize>),       // individual characters matched
 }
 
 #[derive(Clone, Debug)]
@@ -212,3 +209,64 @@ impl PartialEq for MatchedItem {
 }
 
 impl Eq for MatchedItem {}
+
+const ITEM_POOL_CAPACITY: usize = 1024;
+
+pub struct ItemPool {
+    length: AtomicUsize,
+    pool: SpinLock<Vec<Arc<Item>>>,
+    /// number of items that was `take`n
+    taken: AtomicUsize,
+}
+
+impl ItemPool {
+    pub fn new() -> Self {
+        Self {
+            length: AtomicUsize::new(0),
+            pool: SpinLock::new(Vec::with_capacity(ITEM_POOL_CAPACITY)),
+            taken: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.length.load(AtomicOrdering::SeqCst)
+    }
+
+    pub fn clear(&self) {
+        let mut items = self.pool.lock();
+        items.clear();
+        self.taken.store(0, AtomicOrdering::SeqCst);
+        self.length.store(0, AtomicOrdering::SeqCst);
+    }
+
+    pub fn reset(&self) {
+        // lock to ensure consistency
+        let _items = self.pool.lock();
+        self.taken.store(0, AtomicOrdering::SeqCst);
+    }
+
+    pub fn append(&self, items: &mut Vec<Arc<Item>>) {
+        let mut pool = self.pool.lock();
+        pool.append(items);
+        self.length.store(pool.len(), AtomicOrdering::SeqCst);
+    }
+
+    pub fn take(&self) -> ItemPoolGuard<Arc<Item>> {
+        let guard = self.pool.lock();
+        let taken = self.taken.swap(guard.len(), AtomicOrdering::SeqCst);
+        ItemPoolGuard { guard, start: taken }
+    }
+}
+
+pub struct ItemPoolGuard<'a, T: Sized + 'a> {
+    guard: SpinLockGuard<'a, Vec<T>>,
+    start: usize,
+}
+
+impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
+    type Target = [T];
+
+    fn deref(&self) -> &[T] {
+        &self.guard[self.start..]
+    }
+}

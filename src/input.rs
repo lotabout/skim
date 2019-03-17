@@ -1,6 +1,6 @@
-use crate::event::{parse_action, Event, EventSender};
-/// Input will listens to user input, modify the query string, send special
-/// keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
+///! Input will listens to user input, modify the query string, send special
+///! keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
+use crate::event::{parse_action, Event, EventArg};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tuikit::event::Event as TuiEvent;
@@ -8,52 +8,36 @@ use tuikit::key::{from_keyname, Key};
 use tuikit::term::Term;
 
 pub struct Input {
-    tx_input: EventSender,
     term: Arc<Term>,
     keymap: HashMap<Key, (Event, Option<String>)>,
 }
 
 impl Input {
-    pub fn new(term: Arc<Term>, tx_input: EventSender) -> Self {
+    pub fn new(term: Arc<Term>) -> Self {
         Input {
-            tx_input,
             term,
             keymap: get_default_key_map(),
         }
     }
 
-    pub fn run(&mut self) {
-        loop {
-            match self.term.poll_event() {
-                // search event from keymap
-                Ok(TuiEvent::Key(key)) => match self.keymap.get(&key) {
-                    Some(&(ev @ Event::EvActAccept, None)) | Some(&(ev @ Event::EvActAbort, None)) => {
-                        let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
-                        break;
+    pub fn pool_event(&self) -> (Event, EventArg) {
+        match self.term.poll_event() {
+            // search event from keymap
+            Ok(TuiEvent::Key(key)) => match self.keymap.get(&key) {
+                Some(&(ev, Some(ref args))) => (ev, Box::new(Some(args.clone()))),
+                Some(&(ev, None)) => (ev, Box::new(None as Option<String>)),
+                None => {
+                    if let Key::Char(ch) = key {
+                        (Event::EvActAddChar, Box::new(ch))
+                    } else {
+                        (Event::EvInputKey, Box::new(key))
                     }
-                    Some(&(ev, Some(ref args))) => {
-                        let _ = self.tx_input.send((ev, Box::new(Some(args.clone()))));
-                    }
-                    Some(&(ev, None)) => {
-                        let _ = self.tx_input.send((ev, Box::new(None as Option<String>)));
-                    }
-                    None => {
-                        if let Key::Char(ch) = key {
-                            let _ = self.tx_input.send((Event::EvActAddChar, Box::new(ch)));
-                        } else {
-                            let _ = self.tx_input.send((Event::EvInputKey, Box::new(key)));
-                        }
-                    }
-                },
-
-                Ok(TuiEvent::Resize { .. }) => {
-                    let _ = self.tx_input.send((Event::EvActRedraw, Box::new(true)));
                 }
+            },
 
-                _ => {
-                    let _ = self.tx_input.send((Event::EvInputInvalid, Box::new(true)));
-                }
-            }
+            Ok(TuiEvent::Resize { .. }) => (Event::EvActRedraw, Box::new(true)),
+
+            _ => (Event::EvInputInvalid, Box::new(true)),
         }
     }
 
@@ -162,5 +146,6 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::Ctrl('k'), (Event::EvActUp, None));
     ret.insert(Key::Up, (Event::EvActUp, None));
     ret.insert(Key::Ctrl('y'), (Event::EvActYank, None));
+    ret.insert(Key::Null, (Event::EvActAbort, None));
     ret
 }

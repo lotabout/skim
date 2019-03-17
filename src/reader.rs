@@ -1,24 +1,89 @@
-use crate::event::{Event, EventArg, EventReceiver, EventSender};
+///! Reader is used for reading items from datasource (e.g. stdin or command output)
+///!
+///! After reading in a line, reader will save an item into the pool(items)
+use crate::field::FieldRange;
 use crate::item::Item;
+use crate::options::SkimOptions;
+use crate::spinlock::SpinLock;
+use regex::Regex;
 use std::collections::HashMap;
+use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
-use std::mem;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender, SyncSender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::field::FieldRange;
-use crate::options::SkimOptions;
-use crate::sender::CachedSender;
-use regex::Regex;
-use std::env;
-
 const DELIMITER_STR: &str = r"[\t\n ]+";
+
+pub struct ReaderControl {
+    stopped: Arc<AtomicBool>,
+    thread_reader: JoinHandle<()>,
+    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+}
+
+impl ReaderControl {
+    pub fn kill(self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        let _ = self.thread_reader.join();
+    }
+
+    pub fn take(&self) -> Vec<Arc<Item>> {
+        let mut items = self.items.lock();
+        let mut ret = Vec::with_capacity(items.len());
+        ret.append(&mut items);
+        ret
+    }
+
+    pub fn is_processed(&self) -> bool {
+        let items = self.items.lock();
+        self.stopped.load(Ordering::Relaxed) && items.is_empty()
+    }
+}
+
+pub struct Reader {
+    option: Arc<ReaderOption>,
+    source_file: Option<Box<BufRead + Send>>,
+}
+
+impl Reader {
+    pub fn with_options(options: &SkimOptions) -> Self {
+        Self {
+            option: Arc::new(ReaderOption::with_options(&options)),
+            source_file: None,
+        }
+    }
+
+    pub fn source(mut self, source_file: Option<Box<BufRead + Send>>) -> Self {
+        self.source_file = source_file;
+        self
+    }
+
+    pub fn run(&mut self, cmd: &str) -> ReaderControl {
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_clone = stopped.clone();
+        stopped.store(false, Ordering::SeqCst);
+        let items = Arc::new(SpinLock::new(Vec::new()));
+        let items_clone = items.clone();
+        let option_clone = self.option.clone();
+        let source_file = self.source_file.take();
+        let cmd = cmd.to_string();
+
+        // start the new command
+        let thread_reader = thread::spawn(move || {
+            reader(&cmd, stopped_clone, items_clone, option_clone, source_file);
+        });
+
+        ReaderControl {
+            stopped,
+            thread_reader,
+            items,
+        }
+    }
+}
 
 struct ReaderOption {
     pub use_ansi_color: bool,
@@ -43,7 +108,13 @@ impl ReaderOption {
         }
     }
 
-    pub fn parse_options(&mut self, options: &SkimOptions) {
+    pub fn with_options(options: &SkimOptions) -> Self {
+        let mut reader_option = Self::new();
+        reader_option.parse_options(&options);
+        reader_option
+    }
+
+    fn parse_options(&mut self, options: &SkimOptions) {
         if options.ansi {
             self.use_ansi_color = true;
         }
@@ -72,118 +143,8 @@ impl ReaderOption {
     }
 }
 
-pub struct Reader {
-    rx_cmd: EventReceiver,
-    tx_item: SyncSender<(Event, EventArg)>,
-    option: Arc<RwLock<ReaderOption>>,
-    data_source: Option<Box<BufRead + Send>>, // used to support piped output
-}
-
-impl Reader {
-    pub fn new(
-        rx_cmd: EventReceiver,
-        tx_item: SyncSender<(Event, EventArg)>,
-        data_source: Option<Box<BufRead + Send>>,
-    ) -> Self {
-        Reader {
-            rx_cmd,
-            tx_item,
-            option: Arc::new(RwLock::new(ReaderOption::new())),
-            data_source,
-        }
-    }
-
-    pub fn parse_options(&mut self, options: &SkimOptions) {
-        let mut option = self
-            .option
-            .write()
-            .expect("reader:parse_options: failed to lock option");
-        option.parse_options(options);
-    }
-
-    pub fn run(&mut self) {
-        // event loop
-        let mut thread_reader: Option<JoinHandle<()>> = None;
-        let reader_stopped: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
-
-        let mut last_command = "".to_string();
-        let mut last_query = "".to_string();
-
-        // start sender
-        let (tx_sender, rx_sender) = channel();
-        let tx_item = self.tx_item.clone();
-        let mut sender = CachedSender::new(rx_sender, tx_item);
-        thread::spawn(move || {
-            sender.run();
-        });
-
-        while let Ok((ev, arg)) = self.rx_cmd.recv() {
-            match ev {
-                Event::EvReaderRestart => {
-                    // close existing command or file if exists
-                    let (cmd, query, force_update) = *arg
-                        .downcast::<(String, String, bool)>()
-                        .expect("reader:EvReaderRestart: failed to get argument");
-                    if !force_update && cmd == last_command && query == last_query {
-                        continue;
-                    }
-
-                    // restart command with new `command`
-                    if cmd != last_command {
-                        // stop existing command
-                        reader_stopped.store(true, Ordering::SeqCst);
-                        thread_reader.take().map(|thrd| thrd.join());
-
-                        // create needed data for thread
-                        reader_stopped.store(false, Ordering::SeqCst);
-                        let cmd_clone = cmd.clone();
-                        let option_clone = Arc::clone(&self.option);
-                        let tx_sender_clone = tx_sender.clone();
-                        let query_clone = query.clone();
-                        let data_source = self.data_source.take();
-                        let stopped = reader_stopped.clone();
-
-                        // start the new command
-                        thread_reader = Some(thread::spawn(move || {
-                            let _ = tx_sender_clone.send((Event::EvReaderStarted, Box::new(true)));
-                            let _ = tx_sender_clone.send((Event::EvSenderRestart, Box::new(query_clone)));
-
-                            reader(&cmd_clone, stopped, &tx_sender_clone, option_clone, data_source);
-
-                            let _ = tx_sender_clone.send((Event::EvReaderStopped, Box::new(true)));
-                        }));
-                    } else {
-                        // tell sender to restart
-                        let _ = tx_sender.send((Event::EvSenderRestart, Box::new(query.clone())));
-                    }
-
-                    last_command = cmd;
-                    last_query = query;
-                }
-
-                ev @ Event::EvActAccept | ev @ Event::EvActAbort => {
-                    // stop existing command
-                    reader_stopped.store(true, Ordering::SeqCst);
-                    thread_reader.take().map(|thrd| thrd.join());
-                    let tx_ack: Sender<usize> = *arg.downcast().expect("reader:EvActAccept: failed to get argument");
-                    let _ = tx_ack.send(0);
-
-                    // pass the event to sender
-                    let _ = tx_sender.send((ev, Box::new(true)));
-
-                    // quit the loop
-                    break;
-                }
-
-                _ => {
-                    // do nothing
-                }
-            }
-        }
-    }
-}
-
-fn get_command_output(cmd: &str) -> Result<(Option<Child>, Box<BufRead + Send>), Box<Error>> {
+type CommandOutput = (Option<Child>, Box<BufRead + Send>);
+fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<Error>> {
     let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let mut command = Command::new(shell)
         .arg("-c")
@@ -213,11 +174,10 @@ lazy_static! {
 fn reader(
     cmd: &str,
     stopped: Arc<AtomicBool>,
-    tx_sender: &EventSender,
-    option: Arc<RwLock<ReaderOption>>,
+    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+    option: Arc<ReaderOption>,
     source_file: Option<Box<BufRead + Send>>,
 ) {
-    debug!("reader:reader: called");
     let (command, mut source) = source_file
         .map(|f| (None, f))
         .unwrap_or_else(|| get_command_output(cmd).expect("command not found"));
@@ -240,7 +200,7 @@ fn reader(
         command_stopped_clone.store(true, Ordering::Relaxed);
     });
 
-    let opt = option.read().expect("reader: failed to lock option");
+    let opt = option;
 
     // set the proper run number
     let run_num = { *RUN_NUM.read().expect("reader: failed to lock RUN_NUM") };
@@ -254,7 +214,6 @@ fn reader(
         });
 
     let mut index = 0;
-    let mut item_group = Vec::new();
     let mut buffer = Vec::with_capacity(100);
     loop {
         buffer.clear();
@@ -264,7 +223,6 @@ fn reader(
                 if n == 0 {
                     break;
                 }
-                debug!("reader:reader: read a new line. index = {}", index);
 
                 if buffer.ends_with(&[b'\r', b'\n']) {
                     buffer.pop();
@@ -273,7 +231,7 @@ fn reader(
                     buffer.pop();
                 }
 
-                debug!("reader:reader: create new item. index = {}", index);
+                //                debug!("reader:reader: create new item. index = {}", index);
                 let item = Item::new(
                     String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,
@@ -282,31 +240,20 @@ fn reader(
                     &opt.delimiter,
                     (run_num, index),
                 );
-                item_group.push(Arc::new(item));
-                //debug!("reader:reader: item created. index = {}", index);
-                index += 1;
 
-                // % 516 == 0
-                if index.trailing_zeros() > 10 {
-                    let _ = tx_sender.send((
-                        Event::EvReaderNewItem,
-                        Box::new(mem::replace(&mut item_group, Vec::new())),
-                    ));
+                {
+                    // save item into pool
+                    let mut vec = items.lock();
+                    vec.push(Arc::new(item));
+                    index += 1;
                 }
 
-                if index.trailing_zeros() > 5 && stopped.load(Ordering::SeqCst) {
+                if stopped.load(Ordering::SeqCst) {
                     break;
                 }
             }
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
-    }
-
-    if !item_group.is_empty() {
-        let _ = tx_sender.send((
-            Event::EvReaderNewItem,
-            Box::new(mem::replace(&mut item_group, Vec::new())),
-        ));
     }
 
     stopped.store(true, Ordering::Relaxed);
