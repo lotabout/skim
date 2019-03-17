@@ -38,7 +38,7 @@ use std::thread;
 use std::time::Duration;
 use tuikit::term::{Term, TermHeight, TermOptions};
 
-const REFRESH_DURATION: u64 = 50;
+const REFRESH_DURATION: u64 = 25;
 
 pub struct Skim {}
 

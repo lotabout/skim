@@ -175,7 +175,7 @@ impl Model {
     pub fn start(&mut self) -> Option<SkimOutput> {
         let mut cmd = self.query.get_cmd();
         let mut query = self.query.get_query();
-        let mut to_clear_selection = false;
+        let mut clear_selection = ClearStrategy::DontClear;
 
         self.reader_control = Some(self.reader.run(&cmd));
 
@@ -184,24 +184,32 @@ impl Model {
             match ev {
                 Event::EvHeartBeat => {
                     // save the processed items
-                    if self
+                    let matcher_stopped = self
                         .matcher_control
                         .as_ref()
                         .map(|ctrl| ctrl.stopped())
-                        .unwrap_or(false)
-                    {
-                        self.matcher_control.take().map(|ctrl| {
-                            let lock = ctrl.into_items();
-                            let mut items = lock.lock();
-                            let matched = mem::replace(&mut *items, Vec::new());
+                        .unwrap_or(false);
 
-                            if to_clear_selection {
-                                to_clear_selection = false;
+                    if matcher_stopped {
+                        let ctrl = self.matcher_control.take().unwrap();
+                        let lock = ctrl.into_items();
+                        let mut items = lock.lock();
+                        let matched = mem::replace(&mut *items, Vec::new());
+
+                        match clear_selection {
+                            ClearStrategy::DontClear => {}
+                            ClearStrategy::Clear => {
                                 self.selection.clear();
+                                clear_selection = ClearStrategy::DontClear;
                             }
-
-                            self.selection.append_sorted_items(matched);
-                        });
+                            ClearStrategy::ClearIfNotNull => {
+                                if matched.len() > 0 {
+                                    self.selection.clear();
+                                    clear_selection = ClearStrategy::DontClear;
+                                }
+                            }
+                        };
+                        self.selection.append_sorted_items(matched);
                     }
 
                     let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
@@ -255,7 +263,7 @@ impl Model {
 
                     // restart matcher
                     self.matcher_control.take().map(|ctrl| ctrl.kill());
-                    to_clear_selection = true;
+                    clear_selection = ClearStrategy::Clear;
                     self.item_pool.reset();
                     self.restart_matcher();
                 }
@@ -282,7 +290,7 @@ impl Model {
                     self.reader_control.take().map(ReaderControl::kill);
                     self.matcher_control.take().map(|ctrl: MatcherControl| ctrl.kill());
                     self.item_pool.clear();
-                    to_clear_selection = true;
+                    clear_selection = ClearStrategy::ClearIfNotNull;
 
                     // restart reader
                     self.reader_control.replace(self.reader.run(&cmd));
@@ -292,7 +300,7 @@ impl Model {
 
                     // restart matcher
                     self.matcher_control.take().map(|ctrl| ctrl.kill());
-                    to_clear_selection = true;
+                    clear_selection = ClearStrategy::Clear;
                     self.item_pool.reset();
                     self.restart_matcher();
                 }
@@ -515,4 +523,11 @@ enum Direction {
     Down,
     Left,
     Right,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Copy)]
+enum ClearStrategy {
+    DontClear,
+    Clear,
+    ClearIfNotNull,
 }
