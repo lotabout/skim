@@ -570,6 +570,22 @@ class TestSkim(TestBase):
         self.command_until(sk_options=['--reverse', '--header', 'hello'],
                            until_predicate=lambda lines: lines[2].find("hello") != -1)
 
+    def test_header_lines(self):
+        self.command_until(sk_options=['--header-lines', '1'],
+                           until_predicate=lambda lines: lines[-3].find("  a1") != -1)
+
+        self.command_until(sk_options=['--header-lines', '4'],
+                           until_predicate=lambda lines: lines[-5].find("  a3") != -1)
+
+        self.command_until(sk_options=['--inline-info', '--header-lines', '1'],
+                           until_predicate=lambda lines: lines[-2].find("  a1") != -1)
+
+        self.command_until(sk_options=['--reverse', '--inline-info', '--header-lines', '1'],
+                           until_predicate=lambda lines: lines[1].find("  a1") != -1)
+
+        self.command_until(sk_options=['--reverse', '--header-lines', '1'],
+                           until_predicate=lambda lines: lines[2].find("  a1") != -1)
+
     def test_reserved_options(self):
         options = [
             '--extended',
