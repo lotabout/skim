@@ -2,12 +2,11 @@ use derive_builder::Builder;
 
 #[derive(Debug, Builder)]
 #[builder(build_fn(name = "final_build"))]
+#[builder(default)]
 pub struct SkimOptions<'a> {
     pub bind: Vec<&'a str>,
     pub multi: bool,
-    #[builder(default = "Some(\"> \")")]
     pub prompt: Option<&'a str>,
-    #[builder(default = "Some(\"c> \")")]
     pub cmd_prompt: Option<&'a str>,
     pub expect: Option<String>,
     pub tac: bool,
@@ -22,17 +21,13 @@ pub struct SkimOptions<'a> {
     pub delimiter: Option<&'a str>,
     pub nth: Option<&'a str>,
     pub with_nth: Option<&'a str>,
-    #[builder(default = "Some(\"{}\")")]
     pub replstr: Option<&'a str>,
     pub color: Option<&'a str>,
-    #[builder(default = "Some(\"0,0,0,0\")")]
     pub margin: Option<&'a str>,
     pub no_height: bool,
-    #[builder(default = "Some(\"10\")")]
     pub min_height: Option<&'a str>,
     pub height: Option<&'a str>,
     pub preview: Option<&'a str>,
-    #[builder(default = "Some(\"right:50%\")")]
     pub preview_window: Option<&'a str>,
     pub reverse: bool,
     pub read0: bool,
@@ -45,6 +40,49 @@ pub struct SkimOptions<'a> {
     pub header: Option<&'a str>,
     pub header_lines: usize,
     pub layout: &'a str,
+}
+
+impl<'a> Default for SkimOptions<'a> {
+    fn default() -> Self {
+        Self {
+            bind: vec![],
+            multi: false,
+            prompt: Some("> "),
+            cmd_prompt: Some("c> "),
+            expect: None,
+            tac: false,
+            tiebreak: None,
+            ansi: false,
+            exact: false,
+            cmd: None,
+            interactive: false,
+            query: None,
+            cmd_query: None,
+            regex: false,
+            delimiter: None,
+            nth: None,
+            with_nth: None,
+            replstr: Some("{}"),
+            color: None,
+            margin: Some("0,0,0,0"),
+            no_height: false,
+            min_height: Some("10"),
+            height: Some("100%"),
+            preview: None,
+            preview_window: Some("right:50%"),
+            reverse: false,
+            read0: false,
+            print0: false,
+            tabstop: None,
+            print_query: false,
+            print_cmd: false,
+            no_hscroll: false,
+            inline_info: false,
+            header: None,
+            header_lines: 0,
+            layout: "",
+        }
+    }
 }
 
 impl<'a> SkimOptionsBuilder<'a> {
