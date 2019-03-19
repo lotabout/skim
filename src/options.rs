@@ -36,6 +36,7 @@ pub struct SkimOptions<'a> {
     pub no_hscroll: bool,
     pub inline_info: bool,
     pub header: Option<&'a str>,
+    pub header_lines: usize,
 }
 
 impl<'a> SkimOptions<'a> {
@@ -87,6 +88,11 @@ impl<'a> SkimOptions<'a> {
         let regex = options.is_present("regex");
         let inline_info = options.is_present("inline-info");
         let header = options.values_of("header").and_then(|vals| vals.last());
+        let header_lines = options
+            .values_of("header-lines")
+            .and_then(|vals| vals.last())
+            .map(|s| s.parse::<usize>().unwrap_or(0))
+            .unwrap_or(0);
 
         SkimOptions {
             color,
@@ -122,6 +128,7 @@ impl<'a> SkimOptions<'a> {
             regex,
             inline_info,
             header,
+            header_lines,
         }
     }
 
@@ -313,6 +320,7 @@ impl<'a> Default for SkimOptions<'a> {
             no_hscroll: false,
             inline_info: false,
             header: None,
+            header_lines: 0,
         }
     }
 }

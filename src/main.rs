@@ -186,7 +186,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("border").long("border").multiple(true))
         .arg(Arg::with_name("inline-info").long("inline-info").multiple(true))
         .arg(Arg::with_name("header").long("header").multiple(true).takes_value(true).default_value(""))
-        .arg(Arg::with_name("header-lines").long("header-lines").multiple(true).takes_value(true).default_value("1"))
+        .arg(Arg::with_name("header-lines").long("header-lines").multiple(true).takes_value(true).default_value("0"))
         .arg(Arg::with_name("tabstop").long("tabstop").multiple(true).takes_value(true).default_value("8"))
         .arg(Arg::with_name("no-bold").long("no-bold").multiple(true))
         .arg(Arg::with_name("history").long("history").multiple(true).takes_value(true).default_value(""))

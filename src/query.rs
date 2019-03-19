@@ -489,11 +489,11 @@ impl Draw for Query {
         Ok(())
     }
 
-    fn content_size(&self) -> (usize, usize) {
+    fn size_hint(&self) -> (Option<usize>, Option<usize>) {
         let before = self.get_before();
         let after = self.get_after();
         let prompt = self.get_prompt();
-        (prompt.width() + before.width() + after.width() + 1, 0)
+        (Some(prompt.width() + before.width() + after.width() + 1), None)
     }
 }
 
