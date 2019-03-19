@@ -460,13 +460,12 @@ impl Draw for Model {
                 .split(&win_status)
                 .split(&win_query)
                 .split(&win_query_status),
-            _ =>
-                VSplit::default()
-                    .split(&win_selection)
-                    .split(&win_header)
-                    .split(&win_status)
-                    .split(&win_query)
-                    .split(&win_query_status),
+            _ => VSplit::default()
+                .split(&win_selection)
+                .split(&win_header)
+                .split(&win_status)
+                .split(&win_query)
+                .split(&win_query_status),
         };
 
         let screen: Box<dyn Draw> = if !self.preview_hidden && self.previewer.is_some() {
