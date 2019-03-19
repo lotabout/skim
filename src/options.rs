@@ -1,5 +1,4 @@
 use derive_builder::Builder;
-use std::default::Default;
 
 #[derive(Debug, Builder)]
 #[builder(build_fn(name = "final_build"))]
@@ -56,12 +55,6 @@ impl<'a> SkimOptionsBuilder<'a> {
 
         if let Some(true) = self.reverse {
             self.layout = Some("reverse");
-        }
-
-        if let Some(layout) = self.layout {
-            if layout.starts_with("reverse") {
-                self.reverse = Some(true);
-            }
         }
 
         self.final_build()

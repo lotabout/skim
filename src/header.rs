@@ -45,7 +45,7 @@ impl Header {
             self.tabstop = max(1, tabstop);
         }
 
-        if options.reverse {
+        if options.layout.starts_with("reverse") {
             self.reverse = true;
         }
 
