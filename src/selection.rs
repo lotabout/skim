@@ -98,7 +98,7 @@ impl Selection {
 
         if self.items.len() <= self.line_cursor + self.item_cursor {
             // if not enough items, scroll the cursor a page down
-            self.item_cursor = max(height, self.item_cursor) - height;
+            self.item_cursor = max(self.items.len(), height) - height;
         }
     }
 
