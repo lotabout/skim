@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.6.2: 2019-03-19
+
+Feature:
+- Support `--header-lines`
+- Support `--layout`
+- Update the latest fzf.vim
+
 ## 0.6.1: 2019-03-17
 
 Fix:

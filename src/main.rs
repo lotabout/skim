@@ -41,7 +41,7 @@ Usage: sk [options]
     --no-hscroll         Disable horizontal scroll
 
   Layout
-    --reverse            Reverse orientation
+    --layout=LAYOUT      Choose layout: [default|reverse|reverse-list]
     --height=HEIGHT      Height of skim's window (--height 40%)
     --no-height          Disable height feature
     --min-height=HEIGHT  Minimum height when --height is given by percent
@@ -56,6 +56,7 @@ Usage: sk [options]
     --tabstop=SPACES     Number of spaces for a tab character (default: 8)
     --inline-info        Display info next to query
     --header=STR         Display STR next to info
+    --header-lines=N     The first N lines of the input are treated as header
 
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
@@ -88,7 +89,6 @@ Usage: sk [options]
     --filepath-word
     --jump-labels=CHARS
     --border
-    --header-lines=N
     --no-bold
     --history=FILE
     --history-size=N

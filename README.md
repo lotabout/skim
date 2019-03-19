@@ -397,19 +397,23 @@ First, add skim into your `Cargo.toml`:
 
 ```toml
 [dependencies]
-skim = "0.6.1"
+skim = "0.6.2"
 ```
 
 Then try to run this simple example:
 
 ```rust
 extern crate skim;
-use skim::{Skim, SkimOptions};
+use skim::{Skim, SkimOptionsBuilder};
 use std::default::Default;
 use std::io::Cursor;
 
 pub fn main() {
-    let options: SkimOptions = SkimOptions::default().height("50%").multi(true);
+    let options = SkimOptionsBuilder::default()
+        .height(Some("50%"))
+        .multi(true)
+        .build()
+        .unwrap();
 
     let input = "aaaaa\nbbbb\nccc".to_string();
 
