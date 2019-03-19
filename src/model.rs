@@ -73,6 +73,8 @@ impl Model {
 
         let selection = Selection::with_options(options).theme(theme.clone());
         let matcher = Matcher::with_options(options);
+        let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
+        let header = Header::empty().with_options(options).item_pool(item_pool.clone());
 
         let mut ret = Model {
             reader,
@@ -80,7 +82,7 @@ impl Model {
             selection,
             matcher,
             term,
-            item_pool: Arc::new(ItemPool::new()),
+            item_pool,
 
             rx,
             tx,
@@ -90,7 +92,7 @@ impl Model {
             matcher_control: None,
             matcher_mode: None,
 
-            header: Header::empty(),
+            header,
             preview_hidden: true,
             previewer: None,
             preview_direction: Direction::Right,
@@ -117,8 +119,6 @@ impl Model {
         if options.inline_info {
             self.inline_info = true;
         }
-
-        self.header = Header::with_options(options);
 
         // preview related
         let (preview_direction, preview_size, preview_wrap, preview_shown) = options
@@ -380,8 +380,8 @@ impl Model {
         let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
         if !processed {
             // take out new items and put them into items
-            let mut new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
-            self.item_pool.append(&mut new_items);
+            let new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
+            self.item_pool.append(new_items);
         };
 
         let _tx_clone = self.tx.clone();
@@ -440,10 +440,7 @@ impl Draw for Model {
             .basis(if self.inline_info { 0 } else { 1 }.into())
             .grow(0)
             .shrink(0);
-        let win_header = Win::new(&self.header)
-            .basis(if self.header.is_empty() { 0 } else { 1 }.into())
-            .grow(0)
-            .shrink(0);
+        let win_header = Win::new(&self.header).grow(0).shrink(0);
         let win_query_status = HSplit::default()
             .basis(if self.inline_info { 1 } else { 0 }.into())
             .grow(0)

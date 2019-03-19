@@ -23,12 +23,12 @@ mod theme;
 mod util;
 
 use crate::event::Event::*;
-use crate::model::Model;
-use crate::reader::Reader;
 use crate::event::{EventReceiver, EventSender};
-use nix::unistd::isatty;
+use crate::model::Model;
 pub use crate::options::SkimOptions;
 pub use crate::output::SkimOutput;
+use crate::reader::Reader;
+use nix::unistd::isatty;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::os::unix::io::AsRawFd;

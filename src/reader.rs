@@ -231,7 +231,6 @@ fn reader(
                     buffer.pop();
                 }
 
-                //                debug!("reader:reader: create new item. index = {}", index);
                 let item = Item::new(
                     String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,

@@ -5,7 +5,7 @@ use crate::field::*;
 use crate::spinlock::{SpinLock, SpinLockGuard};
 use regex::Regex;
 use std::borrow::Cow;
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::default::Default;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
@@ -217,6 +217,10 @@ pub struct ItemPool {
     pool: SpinLock<Vec<Arc<Item>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
+
+    /// reverse first N lines as header
+    reserved_items: SpinLock<Vec<Arc<Item>>>,
+    lines_to_reserve: usize,
 }
 
 impl ItemPool {
@@ -225,7 +229,14 @@ impl ItemPool {
             length: AtomicUsize::new(0),
             pool: SpinLock::new(Vec::with_capacity(ITEM_POOL_CAPACITY)),
             taken: AtomicUsize::new(0),
+            reserved_items: SpinLock::new(Vec::new()),
+            lines_to_reserve: 0,
         }
+    }
+
+    pub fn lines_to_reserve(mut self, lines_to_reserve: usize) -> Self {
+        self.lines_to_reserve = lines_to_reserve;
+        self
     }
 
     pub fn len(&self) -> usize {
@@ -235,6 +246,8 @@ impl ItemPool {
     pub fn clear(&self) {
         let mut items = self.pool.lock();
         items.clear();
+        let mut header_items = self.reserved_items.lock();
+        header_items.clear();
         self.taken.store(0, AtomicOrdering::SeqCst);
         self.length.store(0, AtomicOrdering::SeqCst);
     }
@@ -245,9 +258,18 @@ impl ItemPool {
         self.taken.store(0, AtomicOrdering::SeqCst);
     }
 
-    pub fn append(&self, items: &mut Vec<Arc<Item>>) {
+    pub fn append(&self, mut items: Vec<Arc<Item>>) {
         let mut pool = self.pool.lock();
-        pool.append(items);
+        let mut header_items = self.reserved_items.lock();
+
+        let to_reserve = self.lines_to_reserve - header_items.len();
+        if to_reserve > 0 {
+            let to_reserve = min(to_reserve, items.len());
+            header_items.extend_from_slice(&items[..to_reserve]);
+            pool.extend_from_slice(&items[to_reserve..]);
+        } else {
+            pool.append(&mut items);
+        }
         self.length.store(pool.len(), AtomicOrdering::SeqCst);
     }
 
@@ -255,6 +277,11 @@ impl ItemPool {
         let guard = self.pool.lock();
         let taken = self.taken.swap(guard.len(), AtomicOrdering::SeqCst);
         ItemPoolGuard { guard, start: taken }
+    }
+
+    pub fn reserved(&self) -> ItemPoolGuard<Arc<Item>> {
+        let guard = self.reserved_items.lock();
+        ItemPoolGuard { guard, start: 0 }
     }
 }
 
