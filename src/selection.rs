@@ -68,7 +68,7 @@ impl Selection {
             self.multi_selection = true;
         }
 
-        if options.reverse {
+        if options.layout.starts_with("reverse") {
             self.reverse = true;
         }
 

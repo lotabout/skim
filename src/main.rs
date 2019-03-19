@@ -5,8 +5,8 @@ extern crate shlex;
 extern crate skim;
 extern crate time;
 
-use clap::{App, Arg};
-use skim::{Skim, SkimOptions};
+use clap::{App, Arg, ArgMatches};
+use skim::{Skim, SkimOptions, SkimOptionsBuilder};
 use std::env;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -201,6 +201,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("select-1").long("select-1").short("1").multiple(true))
         .arg(Arg::with_name("exit-0").long("exit-0").short("0").multiple(true))
         .arg(Arg::with_name("filter").long("filter").short("f").multiple(true))
+        .arg(Arg::with_name("layout").long("layout").multiple(true).takes_value(true).default_value("default"))
         .get_matches_from(args);
 
     if opts.is_present("help") {
@@ -213,7 +214,7 @@ fn real_main() -> i32 {
         return 0;
     }
 
-    let options = SkimOptions::from_options(&opts);
+    let options = parse_options(&opts);
     let output_ending = if options.print0 {"\0"} else {"\n"};
 
     let output = Skim::run_with(&options, None);
@@ -241,4 +242,62 @@ fn real_main() -> i32 {
     }
 
     if output.selected_items.is_empty() {1} else {0}
+}
+
+fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
+    SkimOptionsBuilder::default()
+        .color(options.values_of("color").and_then(|vals| vals.last()))
+        .min_height(options.values_of("min-height").and_then(|vals| vals.last()))
+        .no_height(options.is_present("no-height"))
+        .height(options.values_of("height").and_then(|vals| vals.last()))
+        .margin(options.values_of("margin").and_then(|vals| vals.last()))
+        .preview(options.values_of("preview").and_then(|vals| vals.last()))
+        .preview_window(options.values_of("preview-window").and_then(|vals| vals.last()))
+        .cmd(options.values_of("cmd").and_then(|vals| vals.last()))
+        .query(options.values_of("query").and_then(|vals| vals.last()))
+        .cmd_query(options.values_of("cmd-query").and_then(|vals| vals.last()))
+        .replstr(options.values_of("replstr").and_then(|vals| vals.last()))
+        .interactive(options.is_present("interactive"))
+        .prompt(options.values_of("prompt").and_then(|vals| vals.last()))
+        .cmd_prompt(options.values_of("cmd-prompt").and_then(|vals| vals.last()))
+        .ansi(options.is_present("ansi"))
+        .delimiter(options.values_of("delimiter").and_then(|vals| vals.last()))
+        .with_nth(options.values_of("with-nth").and_then(|vals| vals.last()))
+        .nth(options.values_of("nth").and_then(|vals| vals.last()))
+        .read0(options.is_present("read0"))
+        .bind(
+            options
+                .values_of("bind")
+                .map(|x| x.collect::<Vec<_>>())
+                .unwrap_or_default(),
+        )
+        .expect(options.values_of("expect").map(|x| x.collect::<Vec<_>>().join(",")))
+        .multi(if options.is_present("no-multi") {
+            false
+        } else {
+            options.is_present("multi")
+        })
+        .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
+        .reverse(options.is_present("reverse"))
+        .print0(options.is_present("print0"))
+        .print_query(options.is_present("print-query"))
+        .print_cmd(options.is_present("print-cmd"))
+        .no_hscroll(options.is_present("no-hscroll"))
+        .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
+        .tiebreak(options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")))
+        .tac(options.is_present("tac"))
+        .exact(options.is_present("exact"))
+        .regex(options.is_present("regex"))
+        .inline_info(options.is_present("inline-info"))
+        .header(options.values_of("header").and_then(|vals| vals.last()))
+        .header_lines(
+            options
+                .values_of("header-lines")
+                .and_then(|vals| vals.last())
+                .map(|s| s.parse::<usize>().unwrap_or(0))
+                .unwrap_or(0),
+        )
+        .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
+        .build()
+        .unwrap()
 }

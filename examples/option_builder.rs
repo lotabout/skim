@@ -1,10 +1,14 @@
 extern crate skim;
-use skim::{Skim, SkimOptions};
+use skim::{Skim, SkimOptionsBuilder};
 use std::default::Default;
 use std::io::Cursor;
 
 pub fn main() {
-    let options: SkimOptions = SkimOptions::default().height("50%").multi(true);
+    let options = SkimOptionsBuilder::default()
+        .height(Some("50%"))
+        .multi(true)
+        .build()
+        .unwrap();
 
     //==================================================
     // first run

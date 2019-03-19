@@ -25,7 +25,7 @@ mod util;
 use crate::event::Event::*;
 use crate::event::{EventReceiver, EventSender};
 use crate::model::Model;
-pub use crate::options::SkimOptions;
+pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
 use crate::reader::Reader;
 use nix::unistd::isatty;

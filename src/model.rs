@@ -52,7 +52,7 @@ pub struct Model {
     preview_size: Size,
 
     // Options
-    reverse: bool,
+    layout: String,
     delimiter: Regex,
     inline_info: bool,
     theme: Arc<ColorTheme>,
@@ -98,7 +98,7 @@ impl Model {
             preview_direction: Direction::Right,
             preview_size: Size::Default,
 
-            reverse: false,
+            layout: "default".to_string(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             inline_info: false,
             theme,
@@ -112,9 +112,7 @@ impl Model {
             self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
-        if options.reverse {
-            self.reverse = true;
-        }
+        self.layout = options.layout.to_string();
 
         if options.inline_info {
             self.inline_info = true;
@@ -448,20 +446,26 @@ impl Draw for Model {
             .split(Win::new(&self.query).grow(0).shrink(0))
             .split(Win::new(&status).grow(1).shrink(0));
 
-        let win_main = if self.reverse {
-            VSplit::default()
+        let layout = &self.layout as &str;
+        let win_main = match layout {
+            "reverse" => VSplit::default()
                 .split(&win_query_status)
                 .split(&win_query)
                 .split(&win_status)
                 .split(&win_header)
-                .split(&win_selection)
-        } else {
-            VSplit::default()
+                .split(&win_selection),
+            "reverse-list" => VSplit::default()
                 .split(&win_selection)
                 .split(&win_header)
                 .split(&win_status)
                 .split(&win_query)
-                .split(&win_query_status)
+                .split(&win_query_status),
+            _ => VSplit::default()
+                .split(&win_selection)
+                .split(&win_header)
+                .split(&win_status)
+                .split(&win_query)
+                .split(&win_query_status),
         };
 
         let screen: Box<dyn Draw> = if !self.preview_hidden && self.previewer.is_some() {
