@@ -89,6 +89,17 @@ impl Selection {
 
     pub fn append_sorted_items(&mut self, items: Vec<MatchedItem>) {
         self.items.append_ordered(items);
+
+        let height = self.height.load(Ordering::Relaxed);
+        if self.items.len() <= self.line_cursor {
+            // if not enough items, move cursor down
+            self.line_cursor = max(min(self.items.len(), height), 1) - 1;
+        }
+
+        if self.items.len() <= self.line_cursor + self.item_cursor {
+            // if not enough items, scroll the cursor a page down
+            self.item_cursor = max(height, self.item_cursor) - height;
+        }
     }
 
     pub fn clear(&mut self) {
