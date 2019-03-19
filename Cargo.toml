@@ -34,6 +34,7 @@ tuikit = "0.2.2"
 vte = "0.3.3"
 fuzzy-matcher = "0.2.1"
 rayon = "1.0.3"
+derive_builder = "0.7.1"
 
 [features]
 default = []
