@@ -54,9 +54,9 @@ if s:is_win
   " Use utf-8 for skim.vim commands
   " Return array of shell commands for cmd.exe
   function! s:wrap_cmds(cmds)
-    return ['@echo off', 'for /f "tokens=4" %%a in (''chcp'') do set origchcp=%%a', 'chcp 65001 > nul'] +
+    return map(['@echo off', 'for /f "tokens=4" %%a in (''chcp'') do set origchcp=%%a', 'chcp 65001 > nul'] +
           \ (type(a:cmds) == type([]) ? a:cmds : [a:cmds]) +
-          \ ['chcp %origchcp% > nul']
+          \ ['chcp %origchcp% > nul'], 'v:val."\r"')
   endfunction
 else
   let s:term_marker = ";#SKIM"
@@ -119,9 +119,7 @@ function! s:skim_exec()
     elseif executable('sk')
       let s:exec = 'sk'
     elseif s:is_win && !has('win32unix')
-      call s:warn('skim not supported on windows.')
-      "call s:warn('Download skim binary for Windows from https://github.com/junegunn/skim-bin/releases/')
-      "call s:warn('and place it as '.s:base_dir.'\bin\skim.exe')
+      call s:warn('skim not supported on Windows.')
       throw 'skim executable not found'
     elseif !s:installed && executable(s:install) &&
           \ input('skim executable not found. Download binary? (y/n) ') =~? '^y'
@@ -235,6 +233,7 @@ function! s:common_sink(action, lines) abort
         doautocmd BufEnter
       endif
     endfor
+  catch /^Vim:Interrupt$/
   finally
     let &autochdir = autochdir
     silent! autocmd! skim_swap
@@ -360,7 +359,7 @@ try
     throw v:exception
   endtry
 
-  if has('nvim') && !has_key(dict, 'dir')
+  if !has_key(dict, 'dir')
     let dict.dir = s:skim_getcwd()
   endif
   if has('win32unix') && has_key(dict, 'dir')
@@ -371,10 +370,6 @@ try
     let temps.source = s:skim_tempname()
     call writefile(s:wrap_cmds(split($SKIM_DEFAULT_COMMAND, "\n")), temps.source)
     let dict.source = (empty($SHELL) ? &shell : $SHELL).' '.skim#shellescape(temps.source)
-  endif
-
-  if has_key(dict, 'source') && type(dict.source) == 1 && dict.source == "none"
-      unlet dict.source
   endif
 
   if has_key(dict, 'source')
@@ -394,10 +389,13 @@ try
   endif
 
   let prefer_tmux = get(g:, 'skim_prefer_tmux', 0)
-  let use_height = has_key(dict, 'down') &&
-        \ !(has('nvim') || s:is_win || has('win32unix') || s:present(dict, 'up', 'left', 'right')) &&
+  let use_height = has_key(dict, 'down') && !has('gui_running') &&
+        \ !(has('nvim') || s:is_win || has('win32unix') || s:present(dict, 'up', 'left', 'right', 'window')) &&
         \ executable('tput') && filereadable('/dev/tty')
-  let use_term = has('nvim-0.2.1') || (has('nvim') && !s:is_win) || (has('terminal') && has('patch-8.0.995') && (has('gui_running') || s:is_win))
+  let has_vim8_term = has('terminal') && has('patch-8.0.995')
+  let has_nvim_term = has('nvim-0.2.1') || has('nvim') && !s:is_win
+  let use_term = has_nvim_term ||
+    \ has_vim8_term && !has('win32unix') && (has('gui_running') || s:is_win || !use_height && s:present(dict, 'down', 'up', 'left', 'right', 'window'))
   let use_tmux = (!use_height && !use_term || prefer_tmux) && !has('win32unix') && s:tmux_enabled() && s:splittable(dict)
   if prefer_tmux && use_tmux
     let use_height = 0
@@ -408,9 +406,6 @@ try
     let optstr .= ' --height='.height
   elseif use_term
     let optstr .= ' --no-height'
-    if !has('nvim') && !s:is_win
-      let optstr .= ' --bind ctrl-j:accept'
-    endif
   endif
   let command = prefix.(use_tmux ? s:skim_tmux(dict) : skim_exec).' '.optstr.' > '.temps.result
 
@@ -462,15 +457,17 @@ endfunction
 function! s:pushd(dict)
   if s:present(a:dict, 'dir')
     let cwd = s:skim_getcwd()
-    if get(a:dict, 'prev_dir', '') ==# cwd
-      return 1
-    endif
-    let a:dict.prev_dir = cwd
+    let w:skim_pushd = {
+    \   'command': haslocaldir() ? 'lcd' : (exists(':tcd') && haslocaldir(-1) ? 'tcd' : 'cd'),
+    \   'origin': cwd
+    \ }
     execute 'lcd' s:escape(a:dict.dir)
-    let a:dict.dir = s:skim_getcwd()
-    return 1
+    let cwd = s:skim_getcwd()
+    let w:skim_pushd.dir = cwd
+    let a:dict.pushd = w:skim_pushd
+    return cwd
   endif
-  return 0
+  return ''
 endfunction
 
 augroup skim_popd
@@ -479,11 +476,29 @@ augroup skim_popd
 augroup END
 
 function! s:dopopd()
-  if !exists('w:skim_dir') || s:skim_getcwd() != w:skim_dir[1]
+  if !exists('w:skim_pushd')
     return
   endif
-  execute 'lcd' s:escape(w:skim_dir[0])
-  unlet w:skim_dir
+
+  " FIXME: We temporarily change the working directory to 'dir' entry
+  " of options dictionary (set to the current working directory if not given)
+  " before running skim.
+  "
+  " e.g. call skim#run({'dir': '/tmp', 'source': 'ls', 'sink': 'e'})
+  "
+  " After processing the sink function, we have to restore the current working
+  " directory. But doing so may not be desirable if the function changed the
+  " working directory on purpose.
+  "
+  " So how can we tell if we should do it or not? A simple heuristic we use
+  " here is that we change directory only if the current working directory
+  " matches 'dir' entry. However, it is possible that the sink function did
+  " change the directory to 'dir'. In that case, the user will have an
+  " unexpected result.
+  if s:skim_getcwd() ==# w:skim_pushd.dir
+    execute w:skim_pushd.command s:escape(w:skim_pushd.origin)
+  endif
+  unlet w:skim_pushd
 endfunction
 
 function! s:xterm_launcher()
@@ -541,9 +556,7 @@ function! s:execute(dict, command, use_height, temps) abort
       let skim.dict = a:dict
       let skim.temps = a:temps
       function! skim.on_exit(job_id, exit_status, event) dict
-        if s:present(self.dict, 'dir')
-          execute 'lcd' s:escape(self.dict.dir)
-        endif
+        call s:pushd(self.dict)
         let lines = s:collect(self.temps)
         call s:callback(self.dict, lines)
       endfunction
@@ -570,9 +583,10 @@ endfunction
 
 function! s:execute_tmux(dict, command, temps) abort
   let command = a:command
-  if s:pushd(a:dict)
+  let cwd = s:pushd(a:dict)
+  if len(cwd)
     " -c '#{pane_current_path}' is only available on tmux 1.9 or above
-    let command = join(['cd', skim#shellescape(a:dict.dir), '&&', command])
+    let command = join(['cd', skim#shellescape(cwd), '&&', command])
   endif
 
   call system(command)
@@ -594,7 +608,7 @@ function! s:calc_size(max, val, dict)
     let srcsz = len(a:dict.source)
   endif
 
-  let opts = get(a:dict, 'options', '').$SKIM_DEFAULT_OPTIONS
+  let opts = s:evaluate_opts(get(a:dict, 'options', '')).$SKIM_DEFAULT_OPTIONS
   let margin = stridx(opts, '--inline-info') > stridx(opts, '--no-inline-info') ? 1 : 2
   let margin += stridx(opts, '--header') > stridx(opts, '--no-header')
   return srcsz >= 0 ? min([srcsz + margin, size]) : size
@@ -693,9 +707,7 @@ function! s:execute_term(dict, command, temps) abort
   endfunction
 
   try
-    if s:present(a:dict, 'dir')
-      execute 'lcd' s:escape(a:dict.dir)
-    endif
+    call s:pushd(a:dict)
     if s:is_win
       let skim.temps.batchfile = s:skim_tempname().'.bat'
       call writefile(s:wrap_cmds(a:command), skim.temps.batchfile)
@@ -707,12 +719,13 @@ function! s:execute_term(dict, command, temps) abort
     if has('nvim')
       call termopen(command, skim)
     else
-      call term_start([&shell, &shellcmdflag, command], {'curwin': skim.buf, 'exit_cb': function(skim.on_exit)})
+      let skim.buf = term_start([&shell, &shellcmdflag, command], {'curwin': 1, 'exit_cb': function(skim.on_exit)})
+      if !has('patch-8.0.1261') && !has('nvim') && !s:is_win
+        call term_wait(skim.buf, 20)
+      endif
     endif
   finally
-    if s:present(a:dict, 'dir')
-      lcd -
-    endif
+    call s:dopopd()
   endtry
   setlocal nospell bufhidden=wipe nobuflisted nonumber
   setf skim
@@ -731,21 +744,9 @@ function! s:collect(temps) abort
 endfunction
 
 function! s:callback(dict, lines) abort
-  " Since anything can be done in the sink function, there is no telling that
-  " the change of the working directory was made by &autochdir setting.
-  "
-  " We use the following heuristic to determine whether to restore CWD:
-  " - Always restore the current directory when &autochdir is disabled.
-  "   FIXME This makes it impossible to change directory from inside the sink
-  "   function when &autochdir is not used.
-  " - In case of an error or an interrupt, a:lines will be empty.
-  "   And it will be an array of a single empty string when skim was finished
-  "   without a match. In these cases, we presume that the change of the
-  "   directory is not expected and should be undone.
-  let popd = has_key(a:dict, 'prev_dir') &&
-        \ (!&autochdir || (empty(a:lines) || len(a:lines) == 1 && empty(a:lines[0])))
+  let popd = has_key(a:dict, 'pushd')
   if popd
-    let w:skim_dir = [a:dict.prev_dir, a:dict.dir]
+    let w:skim_pushd = a:dict.pushd
   endif
 
   try
@@ -769,7 +770,7 @@ function! s:callback(dict, lines) abort
 
   " We may have opened a new window or tab
   if popd
-    let w:skim_dir = [a:dict.prev_dir, a:dict.dir]
+    let w:skim_pushd = a:dict.pushd
     call s:dopopd()
   endif
 endfunction
