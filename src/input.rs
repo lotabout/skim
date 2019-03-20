@@ -1,11 +1,14 @@
-///! Input will listens to user input, modify the query string, send special
-///! keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
-use crate::event::{parse_action, Event, EventArg};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use regex::Regex;
 use tuikit::event::Event as TuiEvent;
 use tuikit::key::{from_keyname, Key};
 use tuikit::term::Term;
+
+///! Input will listens to user input, modify the query string, send special
+///! keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
+use crate::event::{parse_action, Event, EventArg};
 
 pub struct Input {
     term: Arc<Term>,
@@ -64,12 +67,8 @@ impl Input {
 
     // key_action is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
     pub fn parse_keymap(&mut self, key_action: &str) {
-        for pair in key_action.split(',') {
-            let vec: Vec<&str> = pair.split(':').collect();
-            if vec.len() < 2 {
-                continue;
-            }
-            self.bind(vec[0], vec[1], vec.get(2).map(|&string| string.to_string()));
+        for (key, action, args) in parse_key_action(key_action).into_iter() {
+            self.bind(key, action, args);
         }
     }
 
@@ -81,6 +80,30 @@ impl Input {
             }
         }
     }
+}
+
+/// parse key action string to `(key, action, argument)` tuple
+/// key_action is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
+fn parse_key_action(key_action: &str) -> Vec<(&str, &str, Option<String>)> {
+    lazy_static! {
+        // match `key:action` or `key:action:arg` or `key:action(arg)` etc.
+        static ref RE: Regex =
+            Regex::new(r#"(?si)[^:]+?:[a-z-]+?\s*(?:"[^"]*?"|'[^']*?'|\([^\)]*?\)|\[[^\]]*?\]|:[^:]*?)?\s*(,|$)"#)
+                .unwrap();
+        // grab key, action and arg out.
+        static ref RE_BIND: Regex = Regex::new(r#"(?si)([^:]+?):([a-z-]+)(?:[:\(\["'](.+?)[\)"'\]]?)?,?$"#).unwrap();
+    }
+
+    RE.find_iter(&key_action)
+        .map(|mat| {
+            let caps = RE_BIND.captures(mat.as_str()).unwrap();
+            (
+                caps.get(1).unwrap().as_str(),
+                caps.get(2).unwrap().as_str(),
+                caps.get(3).map(|s| s.as_str().to_string()),
+            )
+        })
+        .collect()
 }
 
 fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
@@ -148,4 +171,32 @@ fn get_default_key_map() -> HashMap<Key, (Event, Option<String>)> {
     ret.insert(Key::Ctrl('y'), (Event::EvActYank, None));
     ret.insert(Key::Null, (Event::EvActAbort, None));
     ret
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn execute_should_be_parsed_correctly() {
+        // example from https://github.com/lotabout/skim/issues/73
+        let cmd = "
+        (grep -o '[a-f0-9]\\{7\\}' | head -1 |
+        xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
+        {}
+        FZF-EOF";
+
+        let key_action_str = format!("ctrl-s:toggle-sort,ctrl-m:execute:{},ctrl-t:toggle", cmd);
+
+        let key_action = parse_key_action(&key_action_str);
+        assert_eq!(("ctrl-s", "toggle-sort", None), key_action[0]);
+        assert_eq!(("ctrl-m", "execute", Some(cmd.to_string())), key_action[1]);
+        assert_eq!(("ctrl-t", "toggle", None), key_action[2]);
+
+        let key_action_str = "f1:execute(less -f {}),ctrl-y:execute-silent(echo {} | pbcopy)";
+        let key_action = parse_key_action(&key_action_str);
+        assert_eq!(("f1", "execute", Some("less -f {}".to_string())), key_action[0]);
+        assert_eq!(("ctrl-y", "execute-silent", Some("echo {} | pbcopy".to_string())), key_action[1]);
+    }
+
 }

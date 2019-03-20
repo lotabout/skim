@@ -9,10 +9,11 @@ use crate::query::Query;
 use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::theme::ColorTheme;
-use crate::util::margin_string_to_size;
+use crate::util::{inject_command, margin_string_to_size};
 use regex::Regex;
 use std::env;
 use std::mem;
+use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tuikit::prelude::{Event as TermEvent, *};
@@ -254,6 +255,22 @@ impl Model {
         self.restart_matcher();
     }
 
+    fn act_execute(&mut self, cmd: &str) {
+        let _ = self.term.pause();
+        self.act_execute_silent(cmd);
+        let _ = self.term.restart();
+    }
+
+    fn act_execute_silent(&mut self, cmd: &str) {
+        debug!("execute command before: {}", cmd);
+        let item = self.selection.get_current_item();
+        let text = item.as_ref().map(|item| item.get_output_text()).unwrap();
+        let cmd = inject_command(cmd, &self.delimiter, &text).to_string();
+        debug!("execute command after: {}", cmd);
+        let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+        let _ = Command::new(shell).arg("-c").arg(cmd).status();
+    }
+
     pub fn start(&mut self) -> Option<SkimOutput> {
         let mut env = ModelEnv {
             cmd: self.query.get_cmd(),
@@ -317,6 +334,22 @@ impl Model {
                         }
                         return None;
                     }
+                }
+
+                Event::EvActExecute => {
+                    let cmd = arg
+                        .downcast_ref::<Option<String>>()
+                        .and_then(|os| os.as_ref().cloned())
+                        .unwrap();
+                    self.act_execute(&cmd);
+                }
+
+                Event::EvActExecuteSilent => {
+                    let cmd = arg
+                        .downcast_ref::<Option<String>>()
+                        .and_then(|os| os.as_ref().cloned())
+                        .unwrap();
+                    self.act_execute_silent(&cmd);
                 }
 
                 _ => {}
