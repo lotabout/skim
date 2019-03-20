@@ -691,6 +691,13 @@ class TestSkim(TestBase):
         self.tmux.send_keys(command, Key('Enter'))
         self.tmux.until(lambda lines: lines.any_include('''X{}X'''))
 
+    def test_ansi_and_read0(self):
+        """should keep the NULL character, see #142"""
+        self.tmux.send_keys(f"echo -e 'a\\0b' | {self.sk('--ansi')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.send_keys(Key('Enter'))
+        output = ":".join("{:02x}".format(ord(c)) for c in self.readonce())
+        self.assertTrue(output.find("61:00:62:0a") >= 0)
 
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
