@@ -28,6 +28,7 @@ skim provides a single executable: `sk`, basically anywhere you would want to us
     - [Misc](#misc)
 - [Advance Topics](#advance-topics)
     - [Interactive Mode](#interactive-mode)
+    - [Executing external programs](#executing-external-programs)
     - [Preview Window](#preview-window)
     - [Fields Support](#fields-support)
     - [Use as a Library](#use-as-a-library)
@@ -234,15 +235,17 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 | select-all           | None                        |
 | toggle               | None                        |
 | toggle-all           | None                        |
-| toggle-down          | tab                         |
+| toggle+down          | tab                         |
 | toggle-interactive   | ctrl-q                      |
 | toggle-out           | None                        |
 | toggle-preview       | None                        |
 | toggle-sort          | None                        |
-| toggle-up            | shift-tab                   |
+| toggle+up            | shift-tab                   |
 | unix-line-discard    | ctrl-u                      |
 | unix-word-rubout     | ctrl-w                      |
 | up                   | ctrl-p, ctrl-k, up          |
+
+Additionaly, use `+` to concatenate actions, such as `execute-silent(echo {} | pbcopy)+abort`.
 
 ## Sort Criteria
 
@@ -308,20 +311,34 @@ While the customisable `COLOR`s are
 
 ## Interactive mode
 
-In interactive mode, `sk` will pass the query to the command you specified and
-present the output to you. You can specify the command using the `-c` option:
+With "interactive mode", you could invoke command dynamically. Try out:
 
-`sk -i -c 'ag --color "{}"'`
+```
+sk --ansi -i -c 'rg --color=always --line-number "{}"'
+```
 
-In the above example, the replace string `{}` will be replaced with the query you
-type before invoking the command. Use `-I <replstr>` to change replstr if you
-want.
+How it works?
 
-For example, with the input "hello" in interactive mode, `skim` will replace
-the above command with `ag --color "hello"` and invoke it.
+![skim's interactive mode](https://user-images.githubusercontent.com/1527040/53381293-461ce380-39ab-11e9-8e86-7c3bbfd557bc.png)
+
+- Skim could accept two kinds of source: command output or piped input
+- Skim have two kinds of prompt: query prompt to specify the query pattern,
+    command prompt to specify the "arguments" of the command
+- `-c` is used to specify the command to execute while defaults to `SKIM_DEFAULT_COMMAND`
+- `-i` is to tell skim open command prompt on startup, which will show `c>` by default.
 
 If you want to further narrow down the result returned by the command, press
 `Ctrl-Q` to toggle interactive mode.
+
+## Executing external programs
+
+You can set up key bindings for starting external processes without leaving skim (`execute`, `execute-silent`).
+
+```
+# Press F1 to open the file with less without leaving skim
+# Press CTRL-Y to copy the line to clipboard and aborts skim (requires pbcopy)
+sk --bind 'f1:execute(less -f {}),ctrl-y:execute-silent(echo {} | pbcopy)+abort'
+```
 
 ## Preview Window
 
