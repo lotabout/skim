@@ -223,8 +223,8 @@ impl EventHandler for Selection {
     fn accept_event(&self, event: Event) -> bool {
         use crate::event::Event::*;
         match event {
-            EvActUp | EvActDown | EvActToggle | EvActToggleDown | EvActToggleUp | EvActToggleAll | EvActSelectAll
-            | EvActDeselectAll | EvActPageDown | EvActPageUp | EvActScrollLeft | EvActScrollRight => true,
+            EvActUp | EvActDown | EvActToggle | EvActToggleAll | EvActSelectAll | EvActDeselectAll | EvActPageDown
+            | EvActPageUp | EvActScrollLeft | EvActScrollRight => true,
             _ => false,
         }
     }
@@ -240,14 +240,6 @@ impl EventHandler for Selection {
             }
             EvActToggle => {
                 self.act_toggle();
-            }
-            EvActToggleDown => {
-                self.act_toggle();
-                self.act_move_line_cursor(-1);
-            }
-            EvActToggleUp => {
-                self.act_toggle();
-                self.act_move_line_cursor(1);
             }
             EvActToggleAll => {
                 self.act_toggle_all();

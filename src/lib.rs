@@ -58,15 +58,19 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // input
-        let mut input = input::Input::new(term.clone());
+        let mut input = input::Input::new();
         input.parse_keymaps(&options.bind);
         input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
         let tx_clone = tx.clone();
-        thread::spawn(move || loop {
-            let (ev, arg) = input.pool_event();
-            let _ = tx_clone.send((ev, arg));
-            if ev == EvActAccept || ev == EvActAbort {
-                break;
+        let term_clone = term.clone();
+        thread::spawn(move || 'outer: loop {
+            if let Ok(key) = term_clone.poll_event() {
+                for (ev, arg) in input.translate_event(key).into_iter() {
+                    let _ = tx_clone.send((ev, arg));
+                    if ev == EvActAccept || ev == EvActAbort {
+                        break 'outer;
+                    }
+                }
             }
         });
 
