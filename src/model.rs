@@ -9,7 +9,7 @@ use crate::query::Query;
 use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::theme::ColorTheme;
-use crate::util::{inject_command, margin_string_to_size};
+use crate::util::{inject_command, margin_string_to_size, parse_margin};
 use regex::Regex;
 use std::env;
 use std::mem;
@@ -52,6 +52,11 @@ pub struct Model {
     preview_direction: Direction,
     preview_size: Size,
 
+    margin_top: Size,
+    margin_right: Size,
+    margin_bottom: Size,
+    margin_left: Size,
+
     // Options
     layout: String,
     delimiter: Regex,
@@ -77,6 +82,12 @@ impl Model {
         let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
         let header = Header::empty().with_options(options).item_pool(item_pool.clone());
 
+        let margins = options
+            .margin
+            .map(parse_margin)
+            .expect("option margin is should be specified (by default)");
+        let (margin_top, margin_right, margin_bottom, margin_left) = margins;
+
         let mut ret = Model {
             reader,
             query,
@@ -98,6 +109,11 @@ impl Model {
             previewer: None,
             preview_direction: Direction::Right,
             preview_size: Size::Default,
+
+            margin_top,
+            margin_right,
+            margin_bottom,
+            margin_left,
 
             layout: "default".to_string(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
@@ -526,7 +542,12 @@ impl Draw for Model {
             Box::new(win_main)
         };
 
-        screen.draw(canvas)
+        Win::new(screen.as_ref())
+            .margin_top(self.margin_top)
+            .margin_right(self.margin_right)
+            .margin_bottom(self.margin_bottom)
+            .margin_left(self.margin_left)
+            .draw(canvas)
     }
 }
 

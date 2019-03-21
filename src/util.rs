@@ -241,6 +241,41 @@ pub fn margin_string_to_size(margin: &str) -> Size {
     }
 }
 
+/// Parse margin configuration, e.g.
+/// - `TRBL`     Same  margin  for  top,  right, bottom, and left
+/// - `TB,RL`    Vertical, horizontal margin
+/// - `T,RL,B`   Top, horizontal, bottom margin
+/// - `T,R,B,L`  Top, right, bottom, left margin
+pub fn parse_margin(margin_option: &str) -> (Size, Size, Size, Size) {
+    let margins = margin_option.split(',').collect::<Vec<&str>>();
+
+    match margins.len() {
+        1 => {
+            let margin = margin_string_to_size(margins[0]);
+            (margin, margin, margin, margin)
+        }
+        2 => {
+            let margin_tb = margin_string_to_size(margins[0]);
+            let margin_rl = margin_string_to_size(margins[1]);
+            (margin_tb, margin_rl, margin_tb, margin_rl)
+        }
+        3 => {
+            let margin_top = margin_string_to_size(margins[0]);
+            let margin_rl = margin_string_to_size(margins[1]);
+            let margin_bottom = margin_string_to_size(margins[2]);
+            (margin_top, margin_rl, margin_bottom, margin_rl)
+        }
+        4 => {
+            let margin_top = margin_string_to_size(margins[0]);
+            let margin_right = margin_string_to_size(margins[1]);
+            let margin_bottom = margin_string_to_size(margins[2]);
+            let margin_left = margin_string_to_size(margins[3]);
+            (margin_top, margin_right, margin_bottom, margin_left)
+        }
+        _ => (Size::Fixed(0), Size::Fixed(0), Size::Fixed(0), Size::Fixed(0)),
+    }
+}
+
 /// inject the fields into commands
 /// cmd: `echo {1..}`, text: `a,b,c`, delimiter: `,`
 /// => `echo b,c`
