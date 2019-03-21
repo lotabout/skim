@@ -2,12 +2,10 @@ use crate::ansi::AnsiString;
 use crate::event::Event;
 use nix::libc;
 
-use crate::field::get_string_by_range;
 use crate::item::Item;
 use crate::spinlock::SpinLock;
-use crate::util::escape_single_quote;
-use regex::{Captures, Regex};
-use std::borrow::Cow;
+use crate::util::inject_command;
+use regex::Regex;
 use std::cmp::{max, min};
 use std::env;
 use std::io::Read;
@@ -21,10 +19,6 @@ use tuikit::prelude::*;
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
-
-lazy_static! {
-    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
-}
 
 pub struct Previewer {
     tx_preview: Sender<(Event, PreviewInput)>,
@@ -78,38 +72,16 @@ impl Previewer {
             return;
         }
 
+        let cmd = self.preview_cmd.as_ref().expect("previewer: invalid preview command");
+
         self.prev_item.replace(item);
         let text = self.prev_item.as_ref().map(|item| item.get_output_text()).unwrap();
-        let cmd = self.inject_preview_command(&text).to_string();
+        let cmd = inject_command(&cmd, &self.delimiter, &text).to_string();
         let columns = self.width.load(Ordering::Relaxed);
         let lines = self.height.load(Ordering::Relaxed);
 
         let request = PreviewInput { cmd, columns, lines };
         let _ = self.tx_preview.send((Event::EvPreviewRequest, request));
-    }
-
-    fn inject_preview_command(&self, text: &str) -> Cow<str> {
-        let cmd = self
-            .preview_cmd
-            .as_ref()
-            .expect("model:inject_preview_command: invalid preview command");
-        RE_FIELDS.replace_all(cmd, |caps: &Captures| {
-            // \{...
-            if &caps[0][0..1] == "\\" {
-                return caps[0].to_string();
-            }
-
-            // {1..} and other variant
-            assert!(caps[1].len() >= 2);
-            let range = &caps[1][1..caps[1].len() - 1];
-            let replacement = if range == "" {
-                text
-            } else {
-                get_string_by_range(&self.delimiter, text, range).unwrap_or("")
-            };
-
-            format!("'{}'", escape_single_quote(replacement))
-        })
     }
 }
 

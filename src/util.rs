@@ -1,6 +1,13 @@
+use crate::field::get_string_by_range;
+use regex::{Captures, Regex};
+use std::borrow::Cow;
 use std::cmp::min;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
+
+lazy_static! {
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+}
 
 pub fn escape_single_quote(text: &str) -> String {
     text.replace("'", "'\\''")
@@ -232,6 +239,29 @@ pub fn margin_string_to_size(margin: &str) -> Size {
     } else {
         Size::Fixed(margin.parse::<usize>().unwrap_or(0))
     }
+}
+
+/// inject the fields into commands
+/// cmd: `echo {1..}`, text: `a,b,c`, delimiter: `,`
+/// => `echo b,c`
+pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str) -> Cow<'a, str> {
+    RE_FIELDS.replace_all(cmd, |caps: &Captures| {
+        // \{...
+        if &caps[0][0..1] == "\\" {
+            return caps[0].to_string();
+        }
+
+        // {1..} and other variant
+        assert!(caps[1].len() >= 2);
+        let range = &caps[1][1..caps[1].len() - 1];
+        let replacement = if range == "" {
+            text
+        } else {
+            get_string_by_range(delimiter, text, range).unwrap_or("")
+        };
+
+        format!("'{}'", escape_single_quote(replacement))
+    })
 }
 
 #[cfg(test)]
