@@ -117,12 +117,10 @@ fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String>)>)
 
     RE.captures_iter(&key_action)
         .map(|caps| {
-            println!("first round: {:?}", caps);
             let key = caps.get(1).unwrap().as_str();
             let actions = RE_BIND
                 .captures_iter(caps.get(2).unwrap().as_str())
                 .map(|caps| {
-                    println!("second round: {:?}", caps);
                     (
                         caps.get(1).unwrap().as_str(),
                         caps.get(2).map(|s| s.as_str().to_string()),
