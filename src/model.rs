@@ -396,6 +396,12 @@ impl Model {
                 self.selection.handle(ev, &arg);
             }
 
+            self.previewer.as_mut().map(|previewer| {
+                if previewer.accept_event(ev) {
+                    previewer.handle(ev, &arg);
+                }
+            });
+
             // re-draw
             if !self.preview_hidden {
                 let item = self.selection.get_current_item();

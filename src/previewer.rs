@@ -1,7 +1,6 @@
 use crate::ansi::AnsiString;
-use crate::event::Event;
+use crate::event::{Event, EventHandler, EventArg, UpdateScreen};
 use nix::libc;
-
 use crate::item::Item;
 use crate::spinlock::SpinLock;
 use crate::util::inject_command;
@@ -94,6 +93,25 @@ impl Drop for Previewer {
         };
         let _ = self.tx_preview.send((Event::EvActAbort, request));
         self.thread_previewer.take().map(|handle| handle.join());
+    }
+}
+
+impl EventHandler for Previewer {
+    fn accept_event(&self, event: Event) -> bool {
+        use crate::event::Event::*;
+        match event {
+            EvActTogglePreviewWrap => true,
+            _ => false,
+        }
+    }
+
+    fn handle(&mut self, event: Event, _arg: &EventArg) -> UpdateScreen {
+        use crate::event::Event::*;
+        match event {
+            EvActTogglePreviewWrap => self.wrap = !self.wrap,
+            _ => {}
+        }
+        UpdateScreen::Redraw
     }
 }
 
