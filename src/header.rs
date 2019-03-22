@@ -71,10 +71,8 @@ impl Header {
     }
 
     fn lines_of_header(&self) -> usize {
-        debug!("lines_of_header: ");
         let fixed = if self.header.is_empty() { 0 } else { 1 };
         let ret = fixed + self.item_pool.reserved().len();
-        debug!("lines_of_header: {}", ret);
         ret
     }
 }
