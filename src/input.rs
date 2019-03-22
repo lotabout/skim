@@ -132,71 +132,52 @@ fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String>)>)
         .collect()
 }
 
+#[rustfmt::skip]
 fn get_default_key_map() -> HashMap<Key, ActionChain> {
     use self::ActionArg::*;
     let mut ret = HashMap::new();
-    ret.insert(Key::ESC, vec![(Event::EvActAbort, None)]);
-    ret.insert(Key::Ctrl('c'), vec![(Event::EvActAbort, None)]);
-    ret.insert(Key::Ctrl('g'), vec![(Event::EvActAbort, None)]);
-
-    ret.insert(Key::Enter, vec![(Event::EvActAccept, None)]);
-
-    ret.insert(Key::Left, vec![(Event::EvActBackwardChar, None)]);
-    ret.insert(Key::Ctrl('b'), vec![(Event::EvActBackwardChar, None)]);
-
-    ret.insert(Key::Ctrl('h'), vec![(Event::EvActBackwardDeleteChar, None)]);
-    ret.insert(Key::Backspace, vec![(Event::EvActBackwardDeleteChar, None)]);
-
-    ret.insert(Key::AltBackspace, vec![(Event::EvActBackwardKillWord, None)]);
-
-    ret.insert(Key::Alt('b'), vec![(Event::EvActBackwardWord, None)]);
-    ret.insert(Key::ShiftLeft, vec![(Event::EvActBackwardWord, None)]);
-
-    ret.insert(Key::Ctrl('a'), vec![(Event::EvActBeginningOfLine, None)]);
-    //ret.insert(Key::Alt('b'),  vec![(Event::EvActCancel, None)]);
-    ret.insert(Key::Ctrl('l'), vec![(Event::EvActClearScreen, None)]);
-    ret.insert(Key::Del, vec![(Event::EvActDeleteChar, None)]);
-    ret.insert(Key::Ctrl('d'), vec![(Event::EvActDeleteCharEOF, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActDeselectAll, None)]);
-
-    ret.insert(Key::Ctrl('j'), vec![(Event::EvActDown, None)]);
-    ret.insert(Key::Ctrl('n'), vec![(Event::EvActDown, None)]);
-    ret.insert(Key::Down, vec![(Event::EvActDown, None)]);
-
-    ret.insert(Key::Ctrl('e'), vec![(Event::EvActEndOfLine, None)]);
-    ret.insert(Key::End, vec![(Event::EvActEndOfLine, None)]);
-
-    ret.insert(Key::Ctrl('f'), vec![(Event::EvActForwardChar, None)]);
-    ret.insert(Key::Right, vec![(Event::EvActForwardChar, None)]);
-
-    ret.insert(Key::Alt('f'), vec![(Event::EvActForwardWord, None)]);
-    ret.insert(Key::ShiftRight, vec![(Event::EvActForwardWord, None)]);
-
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActIgnore, None)]);
-
-    ret.insert(Key::Alt('d'), vec![(Event::EvActKillWord, None)]);
-    //ret.insert(Key::Ctrl('n'), vec![(Event::EvActNextHistory, None)]);
-    ret.insert(Key::PageDown, vec![(Event::EvActPageDown, None)]);
-    ret.insert(Key::PageUp, vec![(Event::EvActPageUp, None)]);
-    ret.insert(Key::Ctrl('r'), vec![(Event::EvActRotateMode, None)]);
-    ret.insert(Key::Alt('h'), vec![(Event::EvActScrollLeft, None)]);
-    ret.insert(Key::Alt('l'), vec![(Event::EvActScrollRight, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActSelectAll, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActToggle, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActToggleAll, None)]);
-    ret.insert(Key::Tab, vec![(Event::EvActToggle, None), (Event::EvActDown, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActToggleIn, None)]);
-    ret.insert(Key::Ctrl('q'), vec![(Event::EvActToggleInteractive, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActToggleOut, None)]);
-    //ret.insert(Key::Alt('z'),  vec![(Event::EvActToggleSort, None)]);
-    ret.insert(Key::BackTab, vec![(Event::EvActToggle, None), (Event::EvActUp, None)]);
-    ret.insert(Key::Ctrl('u'), vec![(Event::EvActUnixLineDiscard, None)]);
-    ret.insert(Key::Ctrl('w'), vec![(Event::EvActUnixWordRubout, None)]);
-    ret.insert(Key::Ctrl('p'), vec![(Event::EvActUp, None)]);
-    ret.insert(Key::Ctrl('k'), vec![(Event::EvActUp, None)]);
-    ret.insert(Key::Up, vec![(Event::EvActUp, None)]);
-    ret.insert(Key::Ctrl('y'), vec![(Event::EvActYank, None)]);
-    ret.insert(Key::Null, vec![(Event::EvActAbort, None)]);
+    ret.insert(Key::ESC,          vec![(Event::EvActAbort,              None)]);
+    ret.insert(Key::Ctrl('c'),    vec![(Event::EvActAbort,              None)]);
+    ret.insert(Key::Ctrl('g'),    vec![(Event::EvActAbort,              None)]);
+    ret.insert(Key::Enter,        vec![(Event::EvActAccept,             None)]);
+    ret.insert(Key::Left,         vec![(Event::EvActBackwardChar,       None)]);
+    ret.insert(Key::Ctrl('b'),    vec![(Event::EvActBackwardChar,       None)]);
+    ret.insert(Key::Ctrl('h'),    vec![(Event::EvActBackwardDeleteChar, None)]);
+    ret.insert(Key::Backspace,    vec![(Event::EvActBackwardDeleteChar, None)]);
+    ret.insert(Key::AltBackspace, vec![(Event::EvActBackwardKillWord,   None)]);
+    ret.insert(Key::Alt('b'),     vec![(Event::EvActBackwardWord,       None)]);
+    ret.insert(Key::ShiftLeft,    vec![(Event::EvActBackwardWord,       None)]);
+    ret.insert(Key::Ctrl('a'),    vec![(Event::EvActBeginningOfLine,    None)]);
+    ret.insert(Key::Ctrl('l'),    vec![(Event::EvActClearScreen,        None)]);
+    ret.insert(Key::Del,          vec![(Event::EvActDeleteChar,         None)]);
+    ret.insert(Key::Ctrl('d'),    vec![(Event::EvActDeleteCharEOF,      None)]);
+    ret.insert(Key::Ctrl('j'),    vec![(Event::EvActDown,               None)]);
+    ret.insert(Key::Ctrl('n'),    vec![(Event::EvActDown,               None)]);
+    ret.insert(Key::Down,         vec![(Event::EvActDown,               None)]);
+    ret.insert(Key::Ctrl('e'),    vec![(Event::EvActEndOfLine,          None)]);
+    ret.insert(Key::End,          vec![(Event::EvActEndOfLine,          None)]);
+    ret.insert(Key::Ctrl('f'),    vec![(Event::EvActForwardChar,        None)]);
+    ret.insert(Key::Right,        vec![(Event::EvActForwardChar,        None)]);
+    ret.insert(Key::Alt('f'),     vec![(Event::EvActForwardWord,        None)]);
+    ret.insert(Key::ShiftRight,   vec![(Event::EvActForwardWord,        None)]);
+    ret.insert(Key::Alt('d'),     vec![(Event::EvActKillWord,           None)]);
+    ret.insert(Key::ShiftUp,      vec![(Event::EvActPreviewPageUp,      None)]);
+    ret.insert(Key::ShiftDown,    vec![(Event::EvActPreviewPageDown,    None)]);
+    ret.insert(Key::PageDown,     vec![(Event::EvActPageDown,           None)]);
+    ret.insert(Key::PageUp,       vec![(Event::EvActPageUp,             None)]);
+    ret.insert(Key::Ctrl('r'),    vec![(Event::EvActRotateMode,         None)]);
+    ret.insert(Key::Alt('h'),     vec![(Event::EvActScrollLeft,         None)]);
+    ret.insert(Key::Alt('l'),     vec![(Event::EvActScrollRight,        None)]);
+    ret.insert(Key::Tab,          vec![(Event::EvActToggle,             None), (Event::EvActDown, None)]);
+    ret.insert(Key::Ctrl('q'),    vec![(Event::EvActToggleInteractive,  None)]);
+    ret.insert(Key::BackTab,      vec![(Event::EvActToggle,             None), (Event::EvActUp,   None)]);
+    ret.insert(Key::Ctrl('u'),    vec![(Event::EvActUnixLineDiscard,    None)]);
+    ret.insert(Key::Ctrl('w'),    vec![(Event::EvActUnixWordRubout,     None)]);
+    ret.insert(Key::Ctrl('p'),    vec![(Event::EvActUp,                 None)]);
+    ret.insert(Key::Ctrl('k'),    vec![(Event::EvActUp,                 None)]);
+    ret.insert(Key::Up,           vec![(Event::EvActUp,                 None)]);
+    ret.insert(Key::Ctrl('y'),    vec![(Event::EvActYank,               None)]);
+    ret.insert(Key::Null,         vec![(Event::EvActAbort,              None)]);
     ret
 }
 

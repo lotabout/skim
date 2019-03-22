@@ -1,13 +1,14 @@
 use crate::ansi::AnsiString;
-use crate::event::{Event, EventHandler, EventArg, UpdateScreen};
-use nix::libc;
+use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::item::Item;
 use crate::spinlock::SpinLock;
 use crate::util::inject_command;
+use derive_builder::Builder;
+use nix::libc;
 use regex::Regex;
 use std::cmp::{max, min};
 use std::env;
-use std::io::Read;
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -21,32 +22,40 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 pub struct Previewer {
     tx_preview: Sender<(Event, PreviewInput)>,
-    content: Arc<SpinLock<AnsiString>>,
+    content_lines: Arc<SpinLock<Vec<AnsiString>>>,
+
     width: AtomicUsize,
     height: AtomicUsize,
+    hscroll_offset: usize,
+    vscroll_offset: usize,
+    wrap: bool,
+
     prev_item: Option<Arc<Item>>,
     preview_cmd: Option<String>,
     delimiter: Regex,
-    wrap: bool,
     thread_previewer: Option<JoinHandle<()>>,
 }
 
 impl Previewer {
     pub fn new(preview_cmd: Option<String>) -> Self {
-        let content = Arc::new(SpinLock::new(AnsiString::new_empty()));
+        let content_lines = Arc::new(SpinLock::new(Vec::new()));
         let (tx_preview, rx_preview) = channel();
-        let content_clone = content.clone();
+        let content_clone = content_lines.clone();
         let thread_previewer = thread::spawn(move || run(rx_preview, content_clone));
 
         Self {
             tx_preview,
-            content,
+            content_lines,
+
             width: AtomicUsize::new(80),
             height: AtomicUsize::new(60),
+            hscroll_offset: 0,
+            vscroll_offset: 0,
+            wrap: false,
+
             prev_item: None,
             preview_cmd,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            wrap: false,
             thread_previewer: Some(thread_previewer),
         }
     }
@@ -81,6 +90,31 @@ impl Previewer {
 
         let request = PreviewInput { cmd, columns, lines };
         let _ = self.tx_preview.send((Event::EvPreviewRequest, request));
+
+        self.hscroll_offset = 0;
+        self.vscroll_offset = 0;
+    }
+
+    fn act_scroll_down(&mut self, diff: i32) {
+        if diff > 0 {
+            self.vscroll_offset += diff as usize;
+        } else {
+            self.vscroll_offset -= min((-diff) as usize, self.vscroll_offset);
+        }
+
+        self.vscroll_offset = min(self.vscroll_offset, max(self.content_lines.lock().len(), 1) - 1);
+    }
+
+    fn act_scroll_right(&mut self, diff: i32) {
+        if diff > 0 {
+            self.hscroll_offset += diff as usize;
+        } else {
+            self.hscroll_offset -= min((-diff) as usize, self.hscroll_offset);
+        }
+    }
+
+    fn act_toggle_wrap(&mut self) {
+        self.wrap = !self.wrap;
     }
 }
 
@@ -100,15 +134,28 @@ impl EventHandler for Previewer {
     fn accept_event(&self, event: Event) -> bool {
         use crate::event::Event::*;
         match event {
-            EvActTogglePreviewWrap => true,
+            EvActTogglePreviewWrap
+            | EvActPreviewUp
+            | EvActPreviewDown
+            | EvActPreviewLeft
+            | EvActPreviewRight
+            | EvActPreviewPageUp
+            | EvActPreviewPageDown => true,
             _ => false,
         }
     }
 
     fn handle(&mut self, event: Event, _arg: &EventArg) -> UpdateScreen {
         use crate::event::Event::*;
+        let height = self.height.load(Ordering::Relaxed);
         match event {
-            EvActTogglePreviewWrap => self.wrap = !self.wrap,
+            EvActTogglePreviewWrap => self.act_toggle_wrap(),
+            EvActPreviewUp => self.act_scroll_down(-1),
+            EvActPreviewDown => self.act_scroll_down(1),
+            EvActPreviewLeft => self.act_scroll_right(-1),
+            EvActPreviewRight => self.act_scroll_right(1),
+            EvActPreviewPageUp => self.act_scroll_down(-(height as i32)),
+            EvActPreviewPageDown => self.act_scroll_down(height as i32),
             _ => {}
         }
         UpdateScreen::Redraw
@@ -127,12 +174,30 @@ impl Draw for Previewer {
         self.width.store(screen_width, Ordering::Relaxed);
         self.height.store(screen_height, Ordering::Relaxed);
 
-        let content = self.content.lock();
+        let content = self.content_lines.lock();
 
-        let mut printer = Printer::new(screen_width, screen_height).wrap(self.wrap);
-        for (ch, attr) in content.iter() {
-            let _ = printer.print_char_with_attr(canvas, ch, attr);
-        }
+        let mut printer = PrinterBuilder::default()
+            .width(screen_width)
+            .height(screen_height)
+            .skip_rows(self.vscroll_offset)
+            .skip_cols(self.hscroll_offset)
+            .wrap(self.wrap)
+            .build()
+            .unwrap();
+        printer.print_lines(canvas, &content);
+
+        // print the vscroll info
+        let status = format!("{}/{}", self.vscroll_offset + 1, content.len());
+        let col = max(status.len() + 1, self.width.load(Ordering::Relaxed)) - status.len() - 1;
+        canvas.print_with_attr(
+            0,
+            col,
+            &status,
+            Attr {
+                effect: Effect::REVERSE,
+                ..Attr::default()
+            },
+        )?;
 
         Ok(())
     }
@@ -160,7 +225,7 @@ impl PreviewThread {
     }
 }
 
-pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<AnsiString>>) {
+pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<Vec<AnsiString>>>) {
     let mut preview_thread: Option<PreviewThread> = None;
     while let Ok((_ev, mut new_prv)) = rx_preview.recv() {
         if preview_thread.is_some() {
@@ -198,7 +263,7 @@ pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<An
         match spawned {
             Err(err) => {
                 let astdout = AnsiString::from_str(format!("Failed to spawn: {} / {}", cmd, err).as_str());
-                *content.lock() = astdout;
+                *content.lock() = vec![astdout];
                 preview_thread = None;
             }
             Ok(spawned) => {
@@ -213,7 +278,11 @@ pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<An
     }
 }
 
-fn wait_and_update(mut spawned: std::process::Child, content: Arc<SpinLock<AnsiString>>, stopped: Arc<AtomicBool>) {
+fn wait_and_update(
+    mut spawned: std::process::Child,
+    content: Arc<SpinLock<Vec<AnsiString>>>,
+    stopped: Arc<AtomicBool>,
+) {
     let status = spawned.wait();
     stopped.store(true, Ordering::SeqCst);
 
@@ -223,71 +292,77 @@ fn wait_and_update(mut spawned: std::process::Child, content: Arc<SpinLock<AnsiS
     let status = status.unwrap();
 
     // Capture stderr in case users want to debug ...
-    let mut pipe: Box<Read> = if status.success() {
-        Box::new(spawned.stdout.unwrap())
+    let mut pipe: Box<dyn BufRead> = if status.success() {
+        Box::new(BufReader::new(spawned.stdout.unwrap()))
     } else {
-        Box::new(spawned.stderr.unwrap())
+        Box::new(BufReader::new(spawned.stderr.unwrap()))
     };
-    let mut res: Vec<u8> = Vec::new();
-    pipe.read_to_end(&mut res).expect("Failed to read from std pipe");
-    let stdout = String::from_utf8_lossy(&res).to_string();
-    let astdout = AnsiString::from_str(&stdout);
-    *content.lock() = astdout;
+
+    let mut lines = Vec::new();
+
+    let mut res = String::new();
+    while let Ok(n) = pipe.read_line(&mut res) {
+        if n == 0 {
+            break;
+        }
+
+        let astdout = AnsiString::from_str(&res);
+        lines.push(astdout);
+        res.clear();
+    }
+
+    *content.lock() = lines;
 }
 
+#[derive(Builder, Default, Debug)]
+#[builder(default)]
 struct Printer {
+    #[builder(setter(skip))]
     row: usize,
+    #[builder(setter(skip))]
     col: usize,
+    skip_rows: usize,
+    skip_cols: usize,
     wrap: bool,
     width: usize,
     height: usize,
 }
 
 impl Printer {
-    pub fn new(width: usize, height: usize) -> Self {
-        Self {
-            row: 0,
-            col: 0,
-            width,
-            height,
-            wrap: false,
-        }
-    }
-
-    pub fn wrap(mut self, wrap: bool) -> Self {
-        self.wrap = wrap;
-        self
-    }
-
-    fn print_char_raw(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
-        if self.row >= self.height {
-            return Ok(());
-        }
-
-        self.col += canvas.put_char_with_attr(self.row, self.col, ch, attr)?;
-        if self.wrap {
-            if self.col == self.width {
-                // move to next
-                self.row += 1;
-                self.col = 0
-            } else if self.col > self.width {
-                // re-print the wide character
-                self.row += 1;
-                self.col = 0;
-                self.col += canvas.put_char_with_attr(self.row, self.col, ch, attr)?;
+    pub fn print_lines(&mut self, canvas: &mut Canvas, content: &[AnsiString]) {
+        for (line_no, line) in content.iter().enumerate() {
+            if line_no < self.skip_rows {
+                self.move_to_next_line();
+                continue;
+            } else if self.row >= self.skip_rows + self.height {
+                break;
             }
-        }
 
-        Ok(())
+            for (ch, attr) in line.iter() {
+                let _ = self.print_char_with_attr(canvas, ch, attr);
+
+                // skip if the content already exceeded the canvas
+                if !self.wrap && self.col >= self.width + self.skip_cols {
+                    break;
+                }
+
+                if self.row >= self.skip_rows + self.height {
+                    break;
+                }
+            }
+
+            self.move_to_next_line();
+        }
     }
 
-    pub fn print_char_with_attr(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
+    fn move_to_next_line(&mut self) {
+        self.row += 1;
+        self.col = 0;
+    }
+
+    fn print_char_with_attr(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
         match ch {
-            '\r' | '\0' => {}
-            '\n' => {
-                self.row += 1;
-                self.col = 0;
-            }
+            '\n' | '\r' | '\0' => {}
             '\t' => {
                 // handle tabstop
                 let rest = TAB_STOP - self.col % TAB_STOP;
@@ -302,5 +377,35 @@ impl Printer {
             }
         }
         Ok(())
+    }
+
+    fn print_char_raw(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
+        if self.row < self.skip_rows || self.row >= self.height + self.skip_rows {
+            return Ok(());
+        }
+
+        if self.wrap {
+            // if wrap is enabled, hscroll is discarded
+            self.col += self.adjust_scroll_print(canvas, ch, attr)?;
+            if self.col == self.width {
+                let _ = self.move_to_next_line();
+            } else if self.col > self.width {
+                // re-print the wide character
+                let _ = self.move_to_next_line();
+                self.col += self.adjust_scroll_print(canvas, ch, attr)?;
+            }
+        } else {
+            self.col += self.adjust_scroll_print(canvas, ch, attr)?;
+        }
+
+        Ok(())
+    }
+
+    fn adjust_scroll_print(&self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<usize> {
+        if self.row < self.skip_rows || self.col < self.skip_cols {
+            canvas.put_char_with_attr(usize::max_value(), usize::max_value(), ch, attr)
+        } else {
+            canvas.put_char_with_attr(self.row - self.skip_rows, self.col - self.skip_cols, ch, attr)
+        }
     }
 }
