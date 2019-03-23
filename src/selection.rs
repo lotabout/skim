@@ -1,6 +1,8 @@
 ///! Handle the selections of items
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
+use crate::item::{parse_criteria, RankCriteria};
 use crate::item::{Item, MatchedItem, MatchedRange};
+use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{reshape_string, LinePrinter};
@@ -12,7 +14,17 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tuikit::prelude::*;
 
+lazy_static! {
+    static ref DEFAULT_CRITERION: Vec<RankCriteria> = vec![
+        RankCriteria::Score,
+        RankCriteria::Begin,
+        RankCriteria::End,
+        RankCriteria::Index,
+    ];
+}
+
 pub struct Selection {
+    criterion: Vec<RankCriteria>,
     items: OrderedVec<MatchedItem>, // all items
     selected: HashMap<(usize, usize), MatchedItem>,
 
@@ -43,7 +55,8 @@ pub struct Selection {
 impl Selection {
     pub fn new() -> Self {
         Selection {
-            items: OrderedVec::new(),
+            criterion: DEFAULT_CRITERION.clone(),
+            items: OrderedVec::new(build_compare_function(DEFAULT_CRITERION.clone())),
             selected: HashMap::new(),
             item_cursor: 0,
             line_cursor: 0,
@@ -80,6 +93,26 @@ impl Selection {
             let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
             self.tabstop = max(1, tabstop);
         }
+
+        if let Some(ref tie_breaker) = options.tiebreak {
+            let criterion = tie_breaker.split(',').filter_map(parse_criteria).collect();
+            self.criterion = criterion;
+        }
+
+        if options.tac {
+            let criterion = self
+                .criterion
+                .iter()
+                .map(|&criteria| match criteria {
+                    RankCriteria::Index => RankCriteria::NegIndex,
+                    RankCriteria::NegIndex => RankCriteria::Index,
+                    criteria => criteria,
+                })
+                .collect();
+            self.criterion = criterion;
+        }
+
+        self.items = OrderedVec::new(build_compare_function(self.criterion.clone()));
     }
 
     pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
@@ -409,4 +442,71 @@ impl Draw for Selection {
 
         Ok(())
     }
+}
+
+fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<MatchedItem> {
+    use std::cmp::Ordering as CmpOrd;
+    Box::new(move |a: &MatchedItem, b: &MatchedItem| {
+        for &criteria in criterion.iter() {
+            match criteria {
+                RankCriteria::Begin => {
+                    if a.rank.begin == b.rank.begin {
+                        continue;
+                    } else {
+                        return a.rank.begin.cmp(&b.rank.begin);
+                    }
+                }
+                RankCriteria::NegBegin => {
+                    if a.rank.begin == b.rank.begin {
+                        continue;
+                    } else {
+                        return b.rank.begin.cmp(&a.rank.begin);
+                    }
+                }
+                RankCriteria::End => {
+                    if a.rank.end == b.rank.end {
+                        continue;
+                    } else {
+                        return a.rank.end.cmp(&b.rank.end);
+                    }
+                }
+                RankCriteria::NegEnd => {
+                    if a.rank.end == b.rank.end {
+                        continue;
+                    } else {
+                        return b.rank.end.cmp(&a.rank.end);
+                    }
+                }
+                RankCriteria::Index => {
+                    if a.rank.index == b.rank.index {
+                        continue;
+                    } else {
+                        return a.rank.index.cmp(&b.rank.index);
+                    }
+                }
+                RankCriteria::NegIndex => {
+                    if a.rank.index == b.rank.index {
+                        continue;
+                    } else {
+                        return b.rank.index.cmp(&a.rank.index);
+                    }
+                }
+                RankCriteria::Score => {
+                    if a.rank.score == b.rank.score {
+                        continue;
+                    } else {
+                        return a.rank.score.cmp(&b.rank.score);
+                    }
+                }
+                RankCriteria::NegScore => {
+                    if a.rank.score == b.rank.score {
+                        continue;
+                    } else {
+                        return b.rank.score.cmp(&a.rank.score);
+                    }
+                }
+            }
+        }
+        CmpOrd::Equal
+    })
 }

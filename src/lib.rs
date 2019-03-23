@@ -3,6 +3,7 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 mod ansi;
+mod engine;
 mod event;
 mod field;
 mod header;
@@ -102,6 +103,25 @@ impl Skim {
         let mut model = Model::new(rx, tx, reader, term, &options);
         model.start()
     }
+
+    //    pub fn filter(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> Option<SkimOutput> {
+    //        //------------------------------------------------------------------------------
+    //        // reader
+    //
+    //        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
+    //        let source = source.or_else(|| {
+    //            let stdin = std::io::stdin();
+    //            if !isatty(stdin.as_raw_fd()).unwrap_or(true) {
+    //                Some(Box::new(BufReader::new(stdin)))
+    //            } else {
+    //                None
+    //            }
+    //        });
+    //
+    //        let reader = Reader::with_options(&options).source(source);
+    //
+    //
+    //    }
 
     // 10 -> TermHeight::Fixed(10)
     // 10% -> TermHeight::Percent(10)

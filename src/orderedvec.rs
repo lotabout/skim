@@ -2,29 +2,28 @@
 // Normally, user will only care about the first several options. So we only keep several of them
 // in order. Other items are kept unordered and are sorted on demand.
 
+use rayon::prelude::*;
+use std::cmp::Ordering;
+
+pub type CompareFunction<T> = Box<Fn(&T, &T) -> Ordering + Send + Sync>;
 const ORDERED_SIZE: usize = 300;
 
-pub struct OrderedVec<T: Ord> {
+pub struct OrderedVec<T: Send> {
     vec: Vec<T>,
+    compare: CompareFunction<T>,
 }
 
-impl<T> OrderedVec<T>
-where
-    T: Ord,
-{
-    pub fn new() -> Self {
+impl<T: Send> OrderedVec<T> {
+    pub fn new(compare: CompareFunction<T>) -> Self {
         OrderedVec {
             vec: Vec::with_capacity(ORDERED_SIZE),
+            compare,
         }
     }
 
     pub fn append_ordered(&mut self, mut items: Vec<T>) {
-        if self.vec.is_empty() {
-            self.vec = items;
-        } else {
-            self.vec.append(&mut items);
-            self.vec.sort_unstable();
-        }
+        self.vec.append(&mut items);
+        self.vec.par_sort_unstable_by(self.compare.as_ref());
     }
 
     pub fn get(&self, index: usize) -> Option<&T> {
