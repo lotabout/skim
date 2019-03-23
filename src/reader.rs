@@ -38,7 +38,7 @@ impl ReaderControl {
         ret
     }
 
-    pub fn is_processed(&self) -> bool {
+    pub fn is_done(&self) -> bool {
         let items = self.items.lock();
         self.stopped.load(Ordering::Relaxed) && items.is_empty()
     }
