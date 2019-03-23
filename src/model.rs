@@ -135,6 +135,10 @@ impl Model {
             self.inline_info = true;
         }
 
+        if options.regex {
+            self.matcher_mode = Some(MatcherMode::Regex);
+        }
+
         // preview related
         let (preview_direction, preview_size, preview_wrap, preview_shown) = options
             .preview_window

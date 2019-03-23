@@ -72,6 +72,7 @@ Usage: sk [options]
     --print0             Print output delimited by ASCII NUL(\\0) characters
     --print-query        Print query as the first line
     --print-cmd          Print command query as the first line (after --print-query)
+    -f, --filter=STR     Filter mode. Do not start interactive finder.
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -96,7 +97,6 @@ Usage: sk [options]
     --no-sort
     --select-1
     --exit-0
-    --filter
 ";
 
 fn main() {
@@ -200,7 +200,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("no-sort").long("no-sort").multiple(true))
         .arg(Arg::with_name("select-1").long("select-1").short("1").multiple(true))
         .arg(Arg::with_name("exit-0").long("exit-0").short("0").multiple(true))
-        .arg(Arg::with_name("filter").long("filter").short("f").multiple(true))
+        .arg(Arg::with_name("filter").long("filter").short("f").takes_value(true).multiple(true))
         .arg(Arg::with_name("layout").long("layout").multiple(true).takes_value(true).default_value("default"))
         .get_matches_from(args);
 
@@ -215,6 +215,11 @@ fn real_main() -> i32 {
     }
 
     let options = parse_options(&opts);
+
+    if opts.is_present("filter") {
+        return Skim::filter(&options, None);
+    }
+
     let output_ending = if options.print0 {"\0"} else {"\n"};
 
     let output = Skim::run_with(&options, None);
@@ -298,6 +303,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
                 .unwrap_or(0),
         )
         .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
+        .filter(options.values_of("filter").and_then(|vals| vals.last()).unwrap_or(""))
         .build()
         .unwrap()
 }

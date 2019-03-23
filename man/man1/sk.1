@@ -268,6 +268,10 @@ Specify the initial query for the command query
 .B "--print-query"
 Print query as the first line
 .TP
+.BI "-f, --filter=" "STR"
+Filter mode. Do not start interactive finder. It's like a fuzzy-version of
+grep. skim will output the score and the item to stdout.
+.TP
 .BI "--expect=" "KEY[,..]"
 Comma-separated list of keys that can be used to complete sk in addition to
 the default enter key. When this option is set, sk will print the name of the
