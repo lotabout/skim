@@ -5,10 +5,10 @@ use crate::field::*;
 use crate::spinlock::{SpinLock, SpinLockGuard};
 use regex::Regex;
 use std::borrow::Cow;
-use std::cmp::{min, Ordering};
+use std::cmp::min;
 use std::default::Default;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// An item will store everything that one line input will need to be operated and displayed.
@@ -149,7 +149,13 @@ impl Clone for Item {
     }
 }
 
-pub type Rank = [i64; 4]; // score, index, start, end
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
+pub struct Rank {
+    pub score: i64,
+    pub index: i64,
+    pub begin: i64,
+    pub end: i64,
+}
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
@@ -169,7 +175,7 @@ impl MatchedItem {
     pub fn builder(item: Arc<Item>) -> Self {
         MatchedItem {
             item,
-            rank: [0, 0, 0, 0],
+            rank: Rank::default(),
             matched_range: None,
         }
     }
@@ -188,27 +194,6 @@ impl MatchedItem {
         self
     }
 }
-
-impl Ord for MatchedItem {
-    fn cmp(&self, other: &MatchedItem) -> Ordering {
-        self.rank.cmp(&other.rank)
-    }
-}
-
-// `PartialOrd` needs to be implemented as well.
-impl PartialOrd for MatchedItem {
-    fn partial_cmp(&self, other: &MatchedItem) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for MatchedItem {
-    fn eq(&self, other: &MatchedItem) -> bool {
-        self.rank == other.rank
-    }
-}
-
-impl Eq for MatchedItem {}
 
 const ITEM_POOL_CAPACITY: usize = 1024;
 
@@ -240,7 +225,7 @@ impl ItemPool {
     }
 
     pub fn len(&self) -> usize {
-        self.length.load(AtomicOrdering::SeqCst)
+        self.length.load(Ordering::SeqCst)
     }
 
     pub fn clear(&self) {
@@ -248,14 +233,14 @@ impl ItemPool {
         items.clear();
         let mut header_items = self.reserved_items.lock();
         header_items.clear();
-        self.taken.store(0, AtomicOrdering::SeqCst);
-        self.length.store(0, AtomicOrdering::SeqCst);
+        self.taken.store(0, Ordering::SeqCst);
+        self.length.store(0, Ordering::SeqCst);
     }
 
     pub fn reset(&self) {
         // lock to ensure consistency
         let _items = self.pool.lock();
-        self.taken.store(0, AtomicOrdering::SeqCst);
+        self.taken.store(0, Ordering::SeqCst);
     }
 
     pub fn append(&self, mut items: Vec<Arc<Item>>) {
@@ -270,12 +255,12 @@ impl ItemPool {
         } else {
             pool.append(&mut items);
         }
-        self.length.store(pool.len(), AtomicOrdering::SeqCst);
+        self.length.store(pool.len(), Ordering::SeqCst);
     }
 
     pub fn take(&self) -> ItemPoolGuard<Arc<Item>> {
         let guard = self.pool.lock();
-        let taken = self.taken.swap(guard.len(), AtomicOrdering::SeqCst);
+        let taken = self.taken.swap(guard.len(), Ordering::SeqCst);
         ItemPoolGuard { guard, start: taken }
     }
 
@@ -295,5 +280,32 @@ impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
 
     fn deref(&self) -> &[T] {
         &self.guard[self.start..]
+    }
+}
+
+//------------------------------------------------------------------------------
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum RankCriteria {
+    Score,
+    Index,
+    Begin,
+    End,
+    NegScore,
+    NegIndex,
+    NegBegin,
+    NegEnd,
+}
+
+pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
+    match text.to_lowercase().as_ref() {
+        "score" => Some(RankCriteria::Score),
+        "index" => Some(RankCriteria::Index),
+        "begin" => Some(RankCriteria::Begin),
+        "end" => Some(RankCriteria::End),
+        "-score" => Some(RankCriteria::NegScore),
+        "-index" => Some(RankCriteria::NegIndex),
+        "-begin" => Some(RankCriteria::NegBegin),
+        "-end" => Some(RankCriteria::NegEnd),
+        _ => None,
     }
 }

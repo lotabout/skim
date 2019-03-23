@@ -40,6 +40,7 @@ pub struct SkimOptions<'a> {
     pub header: Option<&'a str>,
     pub header_lines: usize,
     pub layout: &'a str,
+    pub filter: &'a str,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -81,6 +82,7 @@ impl<'a> Default for SkimOptions<'a> {
             header: None,
             header_lines: 0,
             layout: "",
+            filter: "",
         }
     }
 }

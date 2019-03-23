@@ -13,7 +13,7 @@ import inspect
 import sys
 
 INPUT_RECORD_SEPARATOR = '\n'
-DEFAULT_TIMEOUT = 2000
+DEFAULT_TIMEOUT = 3000
 
 SCRIPT_PATH = os.path.realpath(__file__)
 BASE = os.path.expanduser(os.path.join(os.path.dirname(SCRIPT_PATH), '..'))
@@ -610,10 +610,7 @@ class TestSkim(TestBase):
             '-1',
             # --exit-0
             '--exit-0',
-            '-0',
-            # --filter
-            '--filter',
-            '-f']
+            '-0']
         for opt in options:
             self.command_until(sk_options=[opt], until_predicate=find_prompt)
 
@@ -659,7 +656,6 @@ class TestSkim(TestBase):
             '--no-sort --no-sort',
             '--select-1 --select-1',
             '--exit-0 --exit-0',
-            '--filter --filter'
         ]
         for opt in options:
             self.command_until(sk_options=[opt], until_predicate=find_prompt)
