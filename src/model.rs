@@ -198,6 +198,7 @@ impl Model {
             .unwrap_or(false);
 
         if matcher_stopped {
+            let reader_stopped = self.reader_control.as_ref().map(ReaderControl::is_done).unwrap_or(true);
             let ctrl = self.matcher_control.take().unwrap();
             let lock = ctrl.into_items();
             let mut items = lock.lock();
@@ -210,7 +211,7 @@ impl Model {
                     env.clear_selection = ClearStrategy::DontClear;
                 }
                 ClearStrategy::ClearIfNotNull => {
-                    if !matched.is_empty() {
+                    if reader_stopped || !matched.is_empty() {
                         self.selection.clear();
                         env.clear_selection = ClearStrategy::DontClear;
                     }
@@ -219,7 +220,7 @@ impl Model {
             self.selection.append_sorted_items(matched);
         }
 
-        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+        let processed = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
         // run matcher if matcher had been stopped and reader had new items.
         if !processed && self.matcher_control.is_none() {
             self.restart_matcher();
@@ -430,7 +431,7 @@ impl Model {
         }
 
         // if there are new items, move them to item pool
-        let processed = self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true);
+        let processed = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
         if !processed {
             // take out new items and put them into items
             let new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
@@ -476,7 +477,7 @@ impl Draw for Model {
             multi_selection: self.selection.is_multi_selection(),
             selected: self.selection.get_num_selected(),
             current_item_idx: self.selection.get_current_item_idx(),
-            reading: !self.reader_control.as_ref().map(|c| c.is_processed()).unwrap_or(true),
+            reading: !self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true),
             time_since_read: self.reader_timer.elapsed(),
             time_since_match: self.matcher_timer.elapsed(),
             matcher_mode,
