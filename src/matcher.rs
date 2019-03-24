@@ -90,24 +90,23 @@ impl Matcher {
                 .par_iter()
                 .filter_map(|item| {
                     processed.fetch_add(1, Ordering::Relaxed);
-                    matcher_engine.match_item(item.clone())
-                })
-                .map(|item| {
-                    matched.fetch_add(1, Ordering::Relaxed);
                     if stopped.load(Ordering::Relaxed) {
-                        Err("matcher killed")
+                        Some(Err("matcher killed"))
+                    } else if let Some(item) = matcher_engine.match_item(item.clone()) {
+                        matched.fetch_add(1, Ordering::Relaxed);
+                        Some(Ok(item))
                     } else {
-                        Ok(item)
+                        None
                     }
                 })
                 .collect();
 
             if let Ok(items) = result {
-                //                items.par_sort_unstable();
                 let mut pool = matched_items.lock();
                 *pool = items;
-                stopped.store(true, Ordering::Relaxed);
             }
+
+            stopped.store(true, Ordering::Relaxed);
         });
 
         MatcherControl {
