@@ -228,6 +228,10 @@ impl ItemPool {
         self.length.load(Ordering::SeqCst)
     }
 
+    pub fn num_not_taken(&self) -> usize {
+        self.length.load(Ordering::SeqCst) - self.taken.load(Ordering::SeqCst)
+    }
+
     pub fn clear(&self) {
         let mut items = self.pool.lock();
         items.clear();

@@ -69,7 +69,7 @@ class Alt(Key):
 
 class TmuxOutput(list):
     """A list that contains the output of tmux"""
-    RE = re.compile(r'^. ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])?')
+    RE = re.compile(r'(?:^|[^<]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?$')
     def __init__(self, iteratable=[]):
         super(TmuxOutput, self).__init__(iteratable)
         self._counts = None
@@ -78,23 +78,33 @@ class TmuxOutput(list):
         if self._counts is not None:
             return self._counts
 
-        ret = (0, 0, 0)
+        # match_count item_count select_count item_cursor matcher_stopped
+        ret = (0, 0, 0, 0, '.')
         for line in self:
             mat = TmuxOutput.RE.match(line)
             if mat is not None:
-                ret = tuple(map(lambda x: int(x) if x is not None else 0, mat.groups()))
+                ret = mat.groups()
                 break;
         self._counts = ret
         return ret
 
     def match_count(self):
-        return self.counts()[0]
+        count = self.counts()[0]
+        return int(count) if count is not None else None
 
     def item_count(self):
-        return self.counts()[1]
+        count = self.counts()[1]
+        return int(count) if count is not None else None
 
     def select_count(self):
-        return self.counts()[2]
+        count = self.counts()[2]
+        return int(count) if count is not None else None
+
+    def matcher_stopped(self):
+        return self.counts()[4] != '.'
+
+    def ready_with_lines(self, lines):
+        return self.item_count() == lines and self.matcher_stopped()
 
     def any_include(self, val):
         if hasattr(re, '_pattern_type') and isinstance(val, re._pattern_type):
@@ -373,20 +383,20 @@ class TestSkim(TestBase):
         num_of_files = len(nfiles)
 
         self.tmux.send_keys(f"find . | {self.sk()}", Key('Enter'))
-        self.tmux.until(lambda lines: num_of_files == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(num_of_files))
         self.tmux.send_keys(Key('Enter'))
 
         orig = self.readonce().strip()
 
         self.tmux.send_keys(f"find . -print0 | {self.sk('--read0')}", Key('Enter'))
-        self.tmux.until(lambda lines: num_of_files == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(num_of_files))
         self.tmux.send_keys(Key('Enter'))
 
         self.assertEqual(orig, self.readonce().strip())
 
     def test_print0(self):
         self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-m', '--print0')}", Key('Enter'))
-        self.tmux.until(lambda lines: 2 == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(2))
         self.tmux.send_keys(Key('BTab'), Key('Enter'))
 
         lines = self.readonce().strip()
@@ -420,7 +430,7 @@ class TestSkim(TestBase):
         for field, expected in tests:
             sk_command = self.sk("--delimiter ','", f'--with-nth={field}')
             self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
-            self.tmux.until(lambda lines: lines.item_count() == 1)
+            self.tmux.until(lambda lines: lines.ready_with_lines(1))
             lines = self.tmux.capture()
             self.tmux.send_keys(Key('Enter'))
             self.assertEqual(f'> {expected}'.strip(), lines[-3])
@@ -444,12 +454,12 @@ class TestSkim(TestBase):
         for field, query, count in tests:
             sk_command = self.sk(f"--delimiter ',' --nth={field} -q {query}")
             self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
-            self.tmux.until(lambda lines: lines.item_count() == 1 and lines.match_count() == count)
+            self.tmux.until(lambda lines: lines.ready_with_lines(1))
             self.tmux.send_keys(Key('Enter'))
 
     def test_print_query(self):
         self.tmux.send_keys(f"seq 1 1000 | {self.sk('-q 10', '--print-query')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.item_count() == 1000)
+        self.tmux.until(lambda lines: lines.ready_with_lines(1000))
         self.tmux.send_keys(Key('Enter'))
 
         lines = self.readonce().strip()
@@ -457,7 +467,7 @@ class TestSkim(TestBase):
 
     def test_print_cmd(self):
         self.tmux.send_keys(f"seq 1 1000 | {self.sk('--cmd-query 10', '--print-cmd')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.item_count() == 1000)
+        self.tmux.until(lambda lines: lines.ready_with_lines(1000))
         self.tmux.send_keys(Key('Enter'))
 
         lines = self.readonce().strip()
@@ -465,7 +475,7 @@ class TestSkim(TestBase):
 
     def test_print_cmd_and_query(self):
         self.tmux.send_keys(f"seq 1 1000 | {self.sk('-q 10', '--cmd-query cmd', '--print-cmd', '--print-query')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.item_count() == 1000)
+        self.tmux.until(lambda lines: lines.ready_with_lines(1000))
         self.tmux.send_keys(Key('Enter'))
 
         lines = self.readonce().strip()
@@ -476,7 +486,7 @@ class TestSkim(TestBase):
         self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b')}", Key('Enter'))
         self.tmux.send_keys(f"b{'a'*1000}", Key('Enter'))
         self.tmux.send_keys(f"EOF", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].endswith('..'))
         self.tmux.send_keys(Key('Enter'))
 
@@ -484,7 +494,7 @@ class TestSkim(TestBase):
         self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b')}", Key('Enter'))
         self.tmux.send_keys(f"{'a'*1000}b", Key('Enter'))
         self.tmux.send_keys(f"EOF", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].endswith('b'))
         self.tmux.send_keys(Key('Enter'))
 
@@ -492,7 +502,7 @@ class TestSkim(TestBase):
         self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b')}", Key('Enter'))
         self.tmux.send_keys(f"{'a'*1000}b{'a'*1000}", Key('Enter'))
         self.tmux.send_keys(f"EOF", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> ..'))
         self.tmux.until(lambda lines: lines[-3].endswith('..'))
         self.tmux.send_keys(Key('Enter'))
@@ -501,33 +511,33 @@ class TestSkim(TestBase):
         self.tmux.send_keys(f"cat <<EOF | {self.sk('-q b', '--no-hscroll')}", Key('Enter'))
         self.tmux.send_keys(f"{'a'*1000}b", Key('Enter'))
         self.tmux.send_keys(f"EOF", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> a'))
         self.tmux.send_keys(Key('Enter'))
 
     def test_tabstop(self):
         self.tmux.send_keys(f"echo -e 'a\\tb' | {self.sk()}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> a       b'))
         self.tmux.send_keys(Key('Enter'))
 
         self.tmux.send_keys(f"echo -e 'a\\tb' | {self.sk('--tabstop 1')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> a b'))
         self.tmux.send_keys(Key('Enter'))
 
         self.tmux.send_keys(f"echo -e 'aa\\tb' | {self.sk('--tabstop 2')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> aa  b'))
         self.tmux.send_keys(Key('Enter'))
 
         self.tmux.send_keys(f"echo -e 'aa\\tb' | {self.sk('--tabstop 3')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> aa b'))
         self.tmux.send_keys(Key('Enter'))
 
         self.tmux.send_keys(f"echo -e 'a\\tb' | {self.sk('--tabstop 4')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> a   b'))
         self.tmux.send_keys(Key('Enter'))
 
@@ -551,7 +561,7 @@ class TestSkim(TestBase):
 
         # test that inline info is does not overwrite query
         self.tmux.send_keys(f"echo -e 'a1\\nabcd2\\nabcd3\\nabcd4' | {self.sk('--inline-info')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(4))
         self.tmux.send_keys("bc", Ctrl("a"), "a")
         self.tmux.until(lambda lines: lines[-1].find(INLINE_INFO_SEP) != -1 and
                         lines[-1].split(INLINE_INFO_SEP)[0] == "> abc ")
@@ -690,7 +700,7 @@ class TestSkim(TestBase):
     def test_ansi_and_read0(self):
         """should keep the NULL character, see #142"""
         self.tmux.send_keys(f"echo -e 'a\\0b' | {self.sk('--ansi')}", Key('Enter'))
-        self.tmux.until(lambda lines: lines.match_count() == lines.item_count())
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.send_keys(Key('Enter'))
         output = ":".join("{:02x}".format(ord(c)) for c in self.readonce())
         self.assertTrue(output.find("61:00:62:0a") >= 0)

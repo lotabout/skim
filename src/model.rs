@@ -467,6 +467,7 @@ impl Draw for Model {
 
         let matched =
             self.selection.num_options() + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
+        let matcher_running = self.item_pool.num_not_taken() != 0 || matched != self.selection.num_options();
         let processed = self
             .matcher_control
             .as_ref()
@@ -477,7 +478,7 @@ impl Draw for Model {
             total,
             matched,
             processed,
-            matcher_running: self.matcher_control.is_some(),
+            matcher_running,
             multi_selection: self.selection.is_multi_selection(),
             selected: self.selection.get_num_selected(),
             current_item_idx: self.selection.get_current_item_idx(),
@@ -590,8 +591,8 @@ impl Draw for Status {
             ..self.theme.info()
         };
 
-        let a_while_since_read = self.time_since_read > Duration::from_millis(200);
-        let a_while_since_match = self.time_since_match > Duration::from_millis(200);
+        let a_while_since_read = self.time_since_read > Duration::from_millis(50);
+        let a_while_since_match = self.time_since_match > Duration::from_millis(50);
 
         let mut col = 0;
         if self.inline_info {
@@ -632,7 +633,7 @@ impl Draw for Status {
         }
 
         // item cursor
-        let line_num_str = format!(" {} ", self.current_item_idx);
+        let line_num_str = format!(" {}{}", self.current_item_idx, if self.matcher_running {'.'} else {' '});
         canvas.print_with_attr(0, screen_width - line_num_str.len(), &line_num_str, info_attr_bold)?;
 
         Ok(())
