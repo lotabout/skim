@@ -31,6 +31,7 @@ pub struct Model {
     reader: Reader,
     query: Query,
     selection: Selection,
+    num_options: usize,
     matcher: Matcher,
     term: Arc<Term>,
 
@@ -92,6 +93,7 @@ impl Model {
             reader,
             query,
             selection,
+            num_options: 0,
             matcher,
             term,
             item_pool,
@@ -221,6 +223,7 @@ impl Model {
                     }
                 }
             };
+            self.num_options += matched.len();
             self.selection.append_sorted_items(matched);
         }
 
@@ -245,6 +248,7 @@ impl Model {
 
         env.clear_selection = ClearStrategy::Clear;
         self.item_pool.reset();
+        self.num_options = 0;
         self.restart_matcher();
     }
 
@@ -257,8 +261,9 @@ impl Model {
             ctrl.kill();
         }
 
-        self.item_pool.clear();
         env.clear_selection = ClearStrategy::ClearIfNotNull;
+        self.item_pool.clear();
+        self.num_options = 0;
 
         // restart reader
         self.reader_control.replace(self.reader.run(&env.cmd));
@@ -273,6 +278,7 @@ impl Model {
         }
         env.clear_selection = ClearStrategy::Clear;
         self.item_pool.reset();
+        self.num_options = 0;
         self.restart_matcher();
     }
 
@@ -465,9 +471,8 @@ impl Draw for Model {
             "RE".to_string()
         };
 
-        let matched =
-            self.selection.num_options() + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
-        let matcher_running = self.item_pool.num_not_taken() != 0 || matched != self.selection.num_options();
+        let matched = self.num_options + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
+        let matcher_running = self.item_pool.num_not_taken() != 0 || matched != self.num_options;
         let processed = self
             .matcher_control
             .as_ref()
@@ -633,7 +638,11 @@ impl Draw for Status {
         }
 
         // item cursor
-        let line_num_str = format!(" {}{}", self.current_item_idx, if self.matcher_running {'.'} else {' '});
+        let line_num_str = format!(
+            " {}{}",
+            self.current_item_idx,
+            if self.matcher_running { '.' } else { ' ' }
+        );
         canvas.print_with_attr(0, screen_width - line_num_str.len(), &line_num_str, info_attr_bold)?;
 
         Ok(())

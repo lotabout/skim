@@ -242,10 +242,6 @@ impl Selection {
         self.multi_selection
     }
 
-    pub fn num_options(&self) -> usize {
-        self.items.len()
-    }
-
     pub fn get_current_item(&self) -> Option<Arc<Item>> {
         let item_idx = self.get_current_item_idx();
         self.items.get(item_idx).map(|item| item.item.clone())
