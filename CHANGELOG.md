@@ -1,5 +1,22 @@
 # Change Log
 
+## 0.6.3: 2019-03-25
+
+Feature:
+- support action: `execute`
+- support action chaining
+- preview window actions: `toggle-preview-wrap`, `preview-[up|down|left|right]`, `preview-page-[up|down]`
+- support `--filter` mode, it will print out the screen and matched item
+- support more (alt) keys
+
+Bug Fixes:
+- wrong cursor position after item changed
+- #142: NULL character was dropped with `--ansi`
+- regression: `--margin` not working
+- #148: screen won't clear in interactive mode
+- number of matched item not showing correctly (during matching)
+- lag in changing query on large collection of inputs
+
 ## 0.6.2: 2019-03-19
 
 Feature:

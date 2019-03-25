@@ -414,7 +414,7 @@ First, add skim into your `Cargo.toml`:
 
 ```toml
 [dependencies]
-skim = "0.6.2"
+skim = "0.6.3"
 ```
 
 Then try to run this simple example:
