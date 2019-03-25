@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.6.4: 2019-03-26
+
+Fix: #153 build fail with rust 2018 (1.31.0)
+
 ## 0.6.3: 2019-03-25
 
 Feature:
