@@ -106,7 +106,7 @@ impl Skim {
     }
 
     pub fn filter(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> i32 {
-        use engine::{EngineFactory, MatcherMode};
+        use crate::engine::{EngineFactory, MatcherMode};
 
         let output_ending = if options.print0 { "\0" } else { "\n" };
         let query = options.filter;
