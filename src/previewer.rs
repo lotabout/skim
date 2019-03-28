@@ -8,7 +8,6 @@ use nix::libc;
 use regex::Regex;
 use std::cmp::{max, min};
 use std::env;
-use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -278,39 +277,24 @@ pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<Ve
     }
 }
 
-fn wait_and_update(
-    mut spawned: std::process::Child,
-    content: Arc<SpinLock<Vec<AnsiString>>>,
-    stopped: Arc<AtomicBool>,
-) {
-    let status = spawned.wait();
+fn wait_and_update(spawned: std::process::Child, content: Arc<SpinLock<Vec<AnsiString>>>, stopped: Arc<AtomicBool>) {
+    let output = spawned.wait_with_output();
     stopped.store(true, Ordering::SeqCst);
 
-    if status.is_err() {
+    if output.is_err() {
         return;
     }
-    let status = status.unwrap();
+
+    let output = output.unwrap();
 
     // Capture stderr in case users want to debug ...
-    let mut pipe: Box<dyn BufRead> = if status.success() {
-        Box::new(BufReader::new(spawned.stdout.unwrap()))
+    let out_str = String::from_utf8_lossy(if output.status.success() {
+        &output.stdout
     } else {
-        Box::new(BufReader::new(spawned.stderr.unwrap()))
-    };
+        &output.stderr
+    });
 
-    let mut lines = Vec::new();
-
-    let mut res = String::new();
-    while let Ok(n) = pipe.read_line(&mut res) {
-        if n == 0 {
-            break;
-        }
-
-        let astdout = AnsiString::from_str(&res);
-        lines.push(astdout);
-        res.clear();
-    }
-
+    let lines = out_str.lines().map(AnsiString::from_str).collect();
     *content.lock() = lines;
 }
 
