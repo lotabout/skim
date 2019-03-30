@@ -10,21 +10,23 @@ use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin};
+use chrono::Duration as TimerDuration;
 use regex::Regex;
 use std::env;
 use std::mem;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use timer::{Guard as TimerGuard, Timer};
 use tuikit::prelude::{Event as TermEvent, *};
 
+const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
-    static ref REFRESH_DURATION: Duration = Duration::from_millis(50);
 }
 
 pub struct Model {
@@ -58,11 +60,13 @@ pub struct Model {
     margin_bottom: Size,
     margin_left: Size,
 
-    // Options
     layout: String,
     delimiter: Regex,
     inline_info: bool,
     theme: Arc<ColorTheme>,
+
+    timer: Timer, // timer thread for scheduled events
+    hb_timer_guard: Option<TimerGuard>,
 }
 
 impl Model {
@@ -121,6 +125,8 @@ impl Model {
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             inline_info: false,
             theme,
+            timer: Timer::new(),
+            hb_timer_guard: None,
         };
         ret.parse_options(options);
         ret
@@ -231,6 +237,16 @@ impl Model {
         // run matcher if matcher had been stopped and reader had new items.
         if !processed && self.matcher_control.is_none() {
             self.restart_matcher();
+        }
+
+        if self.matcher_control.is_some() || !processed {
+            let tx = self.tx.clone();
+            let hb_timer_guard =
+                self.timer
+                    .schedule_with_delay(TimerDuration::milliseconds(REFRESH_DURATION), move || {
+                        let _ = tx.send((Event::EvHeartBeat, Box::new(true)));
+                    });
+            self.hb_timer_guard.replace(hb_timer_guard);
         }
     }
 
@@ -448,9 +464,18 @@ impl Model {
             self.item_pool.append(new_items);
         };
 
-        let _tx_clone = self.tx.clone();
-        self.matcher_control
-            .replace(self.matcher.run(&query, self.item_pool.clone(), self.matcher_mode));
+        // send heart beat (so that heartbeat/refresh is triggered)
+        let _ = self.tx.send((Event::EvHeartBeat, Box::new(true)));
+
+        let tx = self.tx.clone();
+        let new_matcher_control = self
+            .matcher
+            .run(&query, self.item_pool.clone(), self.matcher_mode, move |_| {
+                // notify refresh immediately
+                let _ = tx.send((Event::EvHeartBeat, Box::new(true)));
+            });
+
+        self.matcher_control.replace(new_matcher_control);
     }
 }
 

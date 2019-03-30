@@ -68,7 +68,16 @@ impl Matcher {
         }
     }
 
-    pub fn run(&self, query: &str, item_pool: Arc<ItemPool>, mode: Option<MatcherMode>) -> MatcherControl {
+    pub fn run<C>(
+        &self,
+        query: &str,
+        item_pool: Arc<ItemPool>,
+        mode: Option<MatcherMode>,
+        callback: C,
+    ) -> MatcherControl
+    where
+        C: Fn(Arc<SpinLock<Vec<MatchedItem>>>) + Send + 'static,
+    {
         let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
@@ -106,6 +115,7 @@ impl Matcher {
                 *pool = items;
             }
 
+            callback(matched_items.clone());
             stopped.store(true, Ordering::Relaxed);
         });
 

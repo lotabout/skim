@@ -37,10 +37,7 @@ use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
 use tuikit::term::{Term, TermHeight, TermOptions};
-
-const REFRESH_DURATION: u64 = 25;
 
 pub struct Skim {}
 
@@ -93,11 +90,7 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // start a timer for notifying refresh
-        let tx_clone = tx.clone();
-        thread::spawn(move || loop {
-            let _ = tx_clone.send((EvHeartBeat, Box::new(true)));
-            thread::sleep(Duration::from_millis(REFRESH_DURATION));
-        });
+        let _ = tx.send((EvHeartBeat, Box::new(true)));
 
         //------------------------------------------------------------------------------
         // model + previewer

@@ -30,11 +30,14 @@ log = "0.3.8"
 env_logger = "0.4.3"
 time = "0.1.38"
 clap = "2.26.2"
-tuikit = "0.2.5"
+tuikit = "0.2.6"
 vte = "0.3.3"
 fuzzy-matcher = "0.2.1"
 rayon = "1.0.3"
 derive_builder = "0.7.1"
+bitflags = "1.0.4"
+timer = "0.2.0"
+chrono = "0.4"
 
 [features]
 default = []

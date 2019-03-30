@@ -1,5 +1,6 @@
 // All the events that will be used
 
+use bitflags::bitflags;
 use std::any::Any;
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -68,12 +69,12 @@ pub enum Event {
     EvActYank,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum UpdateScreen {
-    /// Redraw the screen
-    Redraw,
-    /// Don't redraw the screen
-    DontRedraw,
+bitflags! {
+    /// `Effect` is the effect of a text
+    pub struct UpdateScreen: u8 {
+        const Redraw = 0b00000000;
+        const DontRedraw = 0b00000010;
+    }
 }
 
 pub trait EventHandler {
