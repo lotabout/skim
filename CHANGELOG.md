@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.6.5: 2019-03-26
+
+Bug Fixes:
+
+- #155: screen is not fully cleared upon resize
+- #156: preview dies on large chunk of input
+- #157: cursor overflow on empty input
+- #154: reduce CPU usage on idle
+- wrong matches on empty input lines
+
 ## 0.6.4: 2019-03-26
 
 Fix: #153 build fail with rust 2018 (1.31.0)
