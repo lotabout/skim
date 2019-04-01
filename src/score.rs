@@ -4,8 +4,10 @@ use fuzzy_matcher;
 use regex::Regex;
 
 pub fn fuzzy_match(choice: &str, pattern: &str) -> Option<(i64, Vec<usize>)> {
-    if pattern.is_empty() || choice.is_empty() {
+    if pattern.is_empty() {
         return Some((0, Vec::new()));
+    } else if choice.is_empty() {
+        return None;
     }
 
     fuzzy_matcher::skim::fuzzy_indices(choice, pattern)
