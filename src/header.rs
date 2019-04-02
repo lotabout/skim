@@ -158,10 +158,10 @@ impl EventHandler for Header {
             }
 
             _ => {
-                return UpdateScreen::DontRedraw;
+                return UpdateScreen::DONT_REDRAW;
             }
         }
 
-        UpdateScreen::Redraw
+        UpdateScreen::REDRAW
     }
 }

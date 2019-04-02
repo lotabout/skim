@@ -297,7 +297,7 @@ impl EventHandler for Selection {
             }
             _ => {}
         }
-        UpdateScreen::Redraw
+        UpdateScreen::REDRAW
     }
 }
 

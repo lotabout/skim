@@ -8,6 +8,7 @@ use crate::previewer::Previewer;
 use crate::query::Query;
 use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
+use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin};
 use chrono::Duration as TimerDuration;
@@ -157,10 +158,13 @@ impl Model {
         self.preview_hidden = !preview_shown;
 
         if let Some(preview_cmd) = options.preview {
+            let tx = Arc::new(SpinLock::new(self.tx.clone()));
             self.previewer = Some(
-                Previewer::new(Some(preview_cmd.to_string()))
-                    .wrap(preview_wrap)
-                    .delimiter(self.delimiter.clone()),
+                Previewer::new(Some(preview_cmd.to_string()), move || {
+                    let _ = tx.lock().send((Event::EvHeartBeat, Box::new(true)));
+                })
+                .wrap(preview_wrap)
+                .delimiter(self.delimiter.clone()),
             );
         }
     }

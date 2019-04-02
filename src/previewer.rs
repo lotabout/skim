@@ -36,11 +36,19 @@ pub struct Previewer {
 }
 
 impl Previewer {
-    pub fn new(preview_cmd: Option<String>) -> Self {
+    pub fn new<C>(preview_cmd: Option<String>, callback: C) -> Self
+    where
+        C: Fn() + Send + Sync + 'static,
+    {
         let content_lines = Arc::new(SpinLock::new(Vec::new()));
         let (tx_preview, rx_preview) = channel();
         let content_clone = content_lines.clone();
-        let thread_previewer = thread::spawn(move || run(rx_preview, content_clone));
+        let thread_previewer = thread::spawn(move || {
+            run(rx_preview, move |lines| {
+                *content_clone.lock() = lines;
+                callback();
+            })
+        });
 
         Self {
             tx_preview,
@@ -157,7 +165,7 @@ impl EventHandler for Previewer {
             EvActPreviewPageDown => self.act_scroll_down(height as i32),
             _ => {}
         }
-        UpdateScreen::Redraw
+        UpdateScreen::REDRAW
     }
 }
 
@@ -224,7 +232,11 @@ impl PreviewThread {
     }
 }
 
-pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<Vec<AnsiString>>>) {
+pub fn run<C>(rx_preview: Receiver<(Event, PreviewInput)>, on_return: C)
+where
+    C: Fn(Vec<AnsiString>) + Send + Sync + 'static,
+{
+    let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
     while let Ok((_ev, mut new_prv)) = rx_preview.recv() {
         if preview_thread.is_some() {
@@ -262,24 +274,31 @@ pub fn run(rx_preview: Receiver<(Event, PreviewInput)>, content: Arc<SpinLock<Ve
         match spawned {
             Err(err) => {
                 let astdout = AnsiString::from_str(format!("Failed to spawn: {} / {}", cmd, err).as_str());
-                *content.lock() = vec![astdout];
+                callback(vec![astdout]);
                 preview_thread = None;
             }
             Ok(spawned) => {
                 let pid = spawned.id();
                 let stopped = Arc::new(AtomicBool::new(false));
                 let stopped_clone = stopped.clone();
-                let content_clone = content.clone();
-                let thread = thread::spawn(move || wait_and_update(spawned, content_clone, stopped_clone));
+                let callback_clone = callback.clone();
+                let thread = thread::spawn(move || {
+                    wait(spawned, move |lines| {
+                        stopped_clone.store(true, Ordering::SeqCst);
+                        callback_clone(lines);
+                    })
+                });
                 preview_thread = Some(PreviewThread { pid, thread, stopped });
             }
         }
     }
 }
 
-fn wait_and_update(spawned: std::process::Child, content: Arc<SpinLock<Vec<AnsiString>>>, stopped: Arc<AtomicBool>) {
+fn wait<C>(spawned: std::process::Child, callback: C)
+where
+    C: Fn(Vec<AnsiString>),
+{
     let output = spawned.wait_with_output();
-    stopped.store(true, Ordering::SeqCst);
 
     if output.is_err() {
         return;
@@ -295,7 +314,7 @@ fn wait_and_update(spawned: std::process::Child, content: Arc<SpinLock<Vec<AnsiS
     });
 
     let lines = out_str.lines().map(AnsiString::from_str).collect();
-    *content.lock() = lines;
+    callback(lines);
 }
 
 #[derive(Builder, Default, Debug)]
