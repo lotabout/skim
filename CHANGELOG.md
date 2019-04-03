@@ -1,6 +1,10 @@
 # Change Log
 
-## 0.6.5: 2019-03-26
+## 0.6.6: 2019-04-03
+
+fix #158: preview window not udpate correctly.
+
+## 0.6.5: 2019-04-01
 
 Bug Fixes:
 
