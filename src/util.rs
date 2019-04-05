@@ -6,7 +6,7 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 lazy_static! {
-    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,q]*? *})").unwrap();
 }
 
 pub fn escape_single_quote(text: &str) -> String {
@@ -279,7 +279,7 @@ pub fn parse_margin(margin_option: &str) -> (Size, Size, Size, Size) {
 /// inject the fields into commands
 /// cmd: `echo {1..}`, text: `a,b,c`, delimiter: `,`
 /// => `echo b,c`
-pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str) -> Cow<'a, str> {
+pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str, query: &str) -> Cow<'a, str> {
     RE_FIELDS.replace_all(cmd, |caps: &Captures| {
         // \{...
         if &caps[0][0..1] == "\\" {
@@ -287,12 +287,14 @@ pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str) -> Cow<'a
         }
 
         // {1..} and other variant
-        assert!(caps[1].len() >= 2);
-        let range = &caps[1][1..caps[1].len() - 1];
-        let replacement = if range == "" {
-            text
-        } else {
-            get_string_by_range(delimiter, text, range).unwrap_or("")
+        let range = &caps[1];
+        assert!(range.len() >= 2);
+        let range = &range[1..range.len() - 1];
+        let range = range.trim();
+        let replacement = match range {
+            "q" => query,
+            "" => text,
+            _ => get_string_by_range(delimiter, text, range).unwrap_or(""),
         };
 
         format!("'{}'", escape_single_quote(replacement))

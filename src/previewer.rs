@@ -30,6 +30,7 @@ pub struct Previewer {
     wrap: bool,
 
     prev_item: Option<Arc<Item>>,
+    prev_query: Option<String>,
     preview_cmd: Option<String>,
     delimiter: Regex,
     thread_previewer: Option<JoinHandle<()>>,
@@ -61,6 +62,7 @@ impl Previewer {
             wrap: false,
 
             prev_item: None,
+            prev_query: None,
             preview_cmd,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             thread_previewer: Some(thread_previewer),
@@ -77,24 +79,39 @@ impl Previewer {
         self
     }
 
-    pub fn on_item_change(&mut self, item: Arc<Item>) {
-        if self
-            .prev_item
-            .as_ref()
-            .map(|prev| prev.get_output_text() == item.get_output_text())
-            .unwrap_or(false)
-        {
+    pub fn on_item_change(&mut self, new_item: Option<Arc<Item>>, new_query: Option<String>) {
+        let item_changed = match (self.prev_item.as_ref(), new_item.as_ref()) {
+            (None, None) => false,
+            (None, Some(_)) => true,
+            (Some(_), None) => true,
+            (Some(prev), Some(cur)) => prev.get_output_text() != cur.get_output_text(),
+        };
+
+        let query_changed = match (self.prev_query.as_ref(), new_query.as_ref()) {
+            (None, None) => false,
+            (None, Some(_)) => true,
+            (Some(_), None) => true,
+            (Some(prev), Some(cur)) => prev != cur,
+        };
+
+        if !item_changed && !query_changed {
             return;
         }
 
-        let cmd = self.preview_cmd.as_ref().expect("previewer: invalid preview command");
+        self.prev_item = new_item;
+        self.prev_query = new_query;
 
-        self.prev_item.replace(item);
-        let text = self.prev_item.as_ref().map(|item| item.get_output_text()).unwrap();
-        let cmd = inject_command(&cmd, &self.delimiter, &text).to_string();
+        let cmd = self.preview_cmd.as_ref().expect("previewer: invalid preview command");
+        let text = self
+            .prev_item
+            .as_ref()
+            .map(|item| item.get_output_text())
+            .unwrap_or("".into());
+        let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
+        let cmd = inject_command(&cmd, &self.delimiter, &text, query).to_string();
+
         let columns = self.width.load(Ordering::Relaxed);
         let lines = self.height.load(Ordering::Relaxed);
-
         let request = PreviewInput { cmd, columns, lines };
         let _ = self.tx_preview.send((Event::EvPreviewRequest, request));
 

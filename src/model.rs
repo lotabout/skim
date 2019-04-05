@@ -1,3 +1,14 @@
+use std::env;
+use std::mem;
+use std::process::Command;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use chrono::Duration as TimerDuration;
+use regex::Regex;
+use timer::{Guard as TimerGuard, Timer};
+use tuikit::prelude::{Event as TermEvent, *};
+
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::item::ItemPool;
@@ -11,15 +22,6 @@ use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin};
-use chrono::Duration as TimerDuration;
-use regex::Regex;
-use std::env;
-use std::mem;
-use std::process::Command;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use timer::{Guard as TimerGuard, Timer};
-use tuikit::prelude::{Event as TermEvent, *};
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -66,7 +68,8 @@ pub struct Model {
     inline_info: bool,
     theme: Arc<ColorTheme>,
 
-    timer: Timer, // timer thread for scheduled events
+    // timer thread for scheduled events
+    timer: Timer,
     hb_timer_guard: Option<TimerGuard>,
 }
 
@@ -312,7 +315,8 @@ impl Model {
         debug!("execute command before: {}", cmd);
         let item = self.selection.get_current_item();
         let text = item.as_ref().map(|item| item.get_output_text()).unwrap();
-        let cmd = inject_command(cmd, &self.delimiter, &text).to_string();
+        let query = self.query.get_query();
+        let cmd = inject_command(cmd, &self.delimiter, &text, &query).to_string();
         debug!("execute command after: {}", cmd);
         let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
         let _ = Command::new(shell).arg("-c").arg(cmd).status();
@@ -436,11 +440,8 @@ impl Model {
             // re-draw
             if !self.preview_hidden {
                 let item = self.selection.get_current_item();
-                if item.is_some() {
-                    let item = item.unwrap();
-                    if let Some(previewer) = self.previewer.as_mut() {
-                        previewer.on_item_change(item);
-                    }
+                if let Some(previewer) = self.previewer.as_mut() {
+                    previewer.on_item_change(item, Some(env.query.to_string()));
                 }
             }
 
