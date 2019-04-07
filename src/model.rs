@@ -21,7 +21,7 @@ use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
-use crate::util::{inject_command, margin_string_to_size, parse_margin};
+use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -314,9 +314,19 @@ impl Model {
     fn act_execute_silent(&mut self, cmd: &str) {
         debug!("execute command before: {}", cmd);
         let item = self.selection.get_current_item();
-        let text = item.as_ref().map(|item| item.get_output_text()).unwrap();
+        let current_selection = item.as_ref().map(|item| item.get_output_text()).unwrap();
         let query = self.query.get_query();
-        let cmd = inject_command(cmd, &self.delimiter, &text, &query).to_string();
+        let cmd_query = self.query.get_cmd_query();
+
+        let context = InjectContext {
+            delimiter: &self.delimiter,
+            current_selection: &current_selection,
+            selections: &[], // not supported for now
+            query: &query,
+            cmd_query: &cmd_query,
+        };
+
+        let cmd = inject_command(cmd, context).to_string();
         debug!("execute command after: {}", cmd);
         let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
         let _ = Command::new(shell).arg("-c").arg(cmd).status();
@@ -326,6 +336,7 @@ impl Model {
         let mut env = ModelEnv {
             cmd: self.query.get_cmd(),
             query: self.query.get_query(),
+            cmd_query: self.query.get_cmd_query(),
             clear_selection: ClearStrategy::DontClear,
         };
 
@@ -414,6 +425,8 @@ impl Model {
 
             if self.query.accept_event(ev) {
                 self.query.handle(ev, &arg);
+                env.cmd_query = self.query.get_cmd_query();
+
                 let new_query = self.query.get_query();
                 let new_cmd = self.query.get_cmd();
 
@@ -441,7 +454,7 @@ impl Model {
             if !self.preview_hidden {
                 let item = self.selection.get_current_item();
                 if let Some(previewer) = self.previewer.as_mut() {
-                    previewer.on_item_change(item, Some(env.query.to_string()));
+                    previewer.on_item_change(item, env.query.to_string(), env.cmd_query.to_string());
                 }
             }
 
@@ -487,6 +500,7 @@ impl Model {
 struct ModelEnv {
     pub cmd: String,
     pub query: String,
+    pub cmd_query: String,
     pub clear_selection: ClearStrategy,
 }
 

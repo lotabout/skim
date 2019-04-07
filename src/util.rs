@@ -2,11 +2,12 @@ use crate::field::get_string_by_range;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::min;
+use std::prelude::v1::*;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 lazy_static! {
-    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,q]*? *})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
 }
 
 pub fn escape_single_quote(text: &str) -> String {
@@ -276,10 +277,26 @@ pub fn parse_margin(margin_option: &str) -> (Size, Size, Size, Size) {
     }
 }
 
+/// The context for injecting command.
+#[derive(Copy, Clone)]
+pub struct InjectContext<'a> {
+    pub delimiter: &'a Regex,
+    pub current_selection: &'a str,
+    pub selections: &'a [&'a str],
+    pub query: &'a str,
+    pub cmd_query: &'a str,
+}
+
 /// inject the fields into commands
 /// cmd: `echo {1..}`, text: `a,b,c`, delimiter: `,`
 /// => `echo b,c`
-pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str, query: &str) -> Cow<'a, str> {
+///
+/// * `{}` for current selection
+/// * `{1..}`, etc. for fields
+/// * `{+}` for all selections
+/// * `{q}` for query
+/// * `{cq}` for command query
+pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, str> {
     RE_FIELDS.replace_all(cmd, |caps: &Captures| {
         // \{...
         if &caps[0][0..1] == "\\" {
@@ -291,10 +308,28 @@ pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str, query: &s
         assert!(range.len() >= 2);
         let range = &range[1..range.len() - 1];
         let range = range.trim();
+
+        if range == "+" {
+            let current_selection = vec![context.current_selection];
+            let selections = if context.selections.is_empty() {
+                &current_selection
+            } else {
+                context.selections
+            };
+
+            return selections
+                .iter()
+                .map(|&s| format!("'{}'", escape_single_quote(s)))
+                .collect::<Vec<_>>()
+                .join(" ");
+        }
+
         let replacement = match range {
-            "q" => query,
-            "" => text,
-            _ => get_string_by_range(delimiter, text, range).unwrap_or(""),
+            "" => context.current_selection,
+            "+" => unreachable!(),
+            "q" => context.query,
+            "cq" => context.cmd_query,
+            _ => get_string_by_range(context.delimiter, context.current_selection, range).unwrap_or(""),
         };
 
         format!("'{}'", escape_single_quote(replacement))
@@ -303,7 +338,7 @@ pub fn inject_command<'a>(cmd: &'a str, delimiter: &Regex, text: &str, query: &s
 
 #[cfg(test)]
 mod tests {
-    use super::{accumulate_text_width, reshape_string};
+    use super::*;
 
     #[test]
     fn test_accumulate_text_width() {
@@ -321,5 +356,40 @@ mod tests {
         assert_eq!(reshape_string("a\tb\tc", 10, 0, 0, 8), (0, 17));
         assert_eq!(reshape_string("a\t中b\tc", 8, 0, 0, 8), (0, 17));
         assert_eq!(reshape_string("a\t中b\tc012345", 8, 0, 0, 8), (0, 23));
+    }
+
+    #[test]
+    fn test_inject_command() {
+        let delimiter = Regex::new(r",").unwrap();
+        let current_selection = "a,b,c";
+        let selections = vec!["a,b,c", "x,y,z"];
+        let query = "query";
+        let cmd_query = "cmd_query";
+
+        let default_context = InjectContext {
+            delimiter: &delimiter,
+            current_selection,
+            selections: &selections,
+            query,
+            cmd_query,
+        };
+
+        assert_eq!("'a,b,c'", inject_command("{}", default_context));
+        assert_eq!("'a,b,c'", inject_command("{ }", default_context));
+
+        assert_eq!("'a'", inject_command("{1}", default_context));
+        assert_eq!("'b'", inject_command("{2}", default_context));
+        assert_eq!("'c'", inject_command("{3}", default_context));
+        assert_eq!("''", inject_command("{4}", default_context));
+        assert_eq!("'c'", inject_command("{-1}", default_context));
+        assert_eq!("'b'", inject_command("{-2}", default_context));
+        assert_eq!("'a'", inject_command("{-3}", default_context));
+        assert_eq!("''", inject_command("{-4}", default_context));
+        assert_eq!("'a,b'", inject_command("{1..2}", default_context));
+        assert_eq!("'b,c'", inject_command("{2..}", default_context));
+
+        assert_eq!("'query'", inject_command("{q}", default_context));
+        assert_eq!("'cmd_query'", inject_command("{cq}", default_context));
+        assert_eq!("'a,b,c' 'x,y,z'", inject_command("{+}", default_context));
     }
 }
