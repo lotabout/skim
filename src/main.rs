@@ -100,12 +100,15 @@ Usage: sk [options]
 ";
 
 fn main() {
-    use env_logger::LogBuilder;
-    use log::{LogLevelFilter, LogRecord};
+    use env_logger::Builder;
+    use env_logger::fmt::Formatter;
+    use log::{LevelFilter, Record};
+    use std::io::Write;
 
-    let format = |record: &LogRecord| {
+    let format = |buf: &mut Formatter, record: &Record| {
         let t = time::now();
-        format!(
+        writeln!(
+            buf,
             "{},{:03} - {} - {}",
             time::strftime("%Y-%m-%d %H:%M:%S", &t).expect("main: time format error"),
             t.tm_nsec / 1_000_000,
@@ -114,14 +117,14 @@ fn main() {
         )
     };
 
-    let mut builder = LogBuilder::new();
-    builder.format(format).filter(None, LogLevelFilter::Info);
+    let mut builder = Builder::new();
+    builder.format(format).filter(None, LevelFilter::Info);
 
     if env::var("RUST_LOG").is_ok() {
-        builder.parse(&env::var("RUST_LOG").unwrap());
+        builder.parse_filters(&env::var("RUST_LOG").unwrap());
     }
 
-    builder.init().expect("failed to initialize logger builder");
+    builder.try_init().expect("failed to initialize logger builder");
 
     let exit_code = real_main();
     std::process::exit(exit_code);
