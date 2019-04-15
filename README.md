@@ -69,7 +69,7 @@ executable](https://github.com/lotabout/skim/releases), but extra utilities are 
 Using Homebrew:
 
 ```
-brew install sbdchd/skim/skim
+brew install sk
 ```
 
 But the Linux way described above will also work.
