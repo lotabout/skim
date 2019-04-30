@@ -53,6 +53,26 @@ impl ColorTheme {
         }
     }
 
+    fn bw() -> Self {
+        ColorTheme {
+            fg:               Color::Default,
+            bg:               Color::Default,
+            matched:          Color::Default,
+            matched_bg:       Color::Default,
+            current:          Color::Default,
+            current_bg:       Color::Default,
+            current_match:    Color::Default,
+            current_match_bg: Color::Default,
+            spinner:          Color::Default,
+            info:             Color::Default,
+            prompt:           Color::Default,
+            cursor:           Color::Default,
+            selected:         Color::Default,
+            header:           Color::Default,
+            border:           Color::Default,
+        }
+    }
+
     fn default16() -> Self {
         ColorTheme {
             fg:               Color::Default,
@@ -142,6 +162,7 @@ impl ColorTheme {
                     "molokai"  => ColorTheme::molokai256(),
                     "light"    => ColorTheme::light256(),
                     "16"       => ColorTheme::default16(),
+                    "bw"       => ColorTheme::bw(),
                     "dark" | "default" | _ => ColorTheme::dark256(),
                 };
                 continue;
