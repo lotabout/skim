@@ -42,7 +42,7 @@ impl Query {
             replstr: "{}".to_string(),
             query_prompt: "> ".to_string(),
             cmd_prompt: "c> ".to_string(),
-            theme: Arc::new(DEFAULT_THEME),
+            theme: Arc::new(*DEFAULT_THEME),
         }
     }
 

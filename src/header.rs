@@ -29,7 +29,7 @@ impl Header {
             tabstop: 8,
             hscroll_offset: 0,
             reverse: false,
-            theme: Arc::new(DEFAULT_THEME),
+            theme: Arc::new(*DEFAULT_THEME),
             item_pool: Arc::new(ItemPool::new()),
         }
     }
