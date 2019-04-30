@@ -3,42 +3,32 @@ use crate::options::SkimOptions;
 use tuikit::attr::{Attr, Color, Effect};
 
 #[rustfmt::skip]
-pub const DEFAULT_THEME: ColorTheme = ColorTheme {
-    fg:               Color::Default,
-    bg:               Color::Default,
-    matched:          Color::AnsiValue(108),
-    matched_bg:       Color::AnsiValue(0),
-    current:          Color::AnsiValue(254),
-    current_bg:       Color::AnsiValue(236),
-    current_match:    Color::AnsiValue(151),
-    current_match_bg: Color::AnsiValue(236),
-    spinner:          Color::AnsiValue(148),
-    info:             Color::AnsiValue(144),
-    prompt:           Color::AnsiValue(110),
-    cursor:           Color::AnsiValue(161),
-    selected:         Color::AnsiValue(168),
-    header:           Color::AnsiValue(109),
-    border:           Color::AnsiValue(59),
-};
+lazy_static! {
+    pub static ref DEFAULT_THEME:  ColorTheme = ColorTheme::dark256();
+}
 
 #[rustfmt::skip]
 #[derive(Copy, Clone, Debug)]
 pub struct ColorTheme {
-    fg:               Color, // text fg
-    bg:               Color, // text bg
-    matched:          Color,
-    matched_bg:       Color,
-    current:          Color,
-    current_bg:       Color,
-    current_match:    Color,
-    current_match_bg: Color,
-    spinner:          Color,
-    info:             Color,
-    prompt:           Color,
-    cursor:           Color,
-    selected:         Color,
-    header:           Color,
-    border:           Color,
+    fg:                   Color, // text fg
+    bg:                   Color, // text bg
+    normal_effect:        Effect,
+    matched:              Color,
+    matched_bg:           Color,
+    matched_effect:       Effect,
+    current:              Color,
+    current_bg:           Color,
+    current_effect:       Effect,
+    current_match:        Color,
+    current_match_bg:     Color,
+    current_match_effect: Effect,
+    spinner:              Color,
+    info:                 Color,
+    prompt:               Color,
+    cursor:               Color,
+    selected:             Color,
+    header:               Color,
+    border:               Color,
 }
 
 #[rustfmt::skip]
@@ -53,30 +43,41 @@ impl ColorTheme {
         }
     }
 
+    fn empty() -> Self {
+        ColorTheme {
+            fg:                   Color::Default,
+            bg:                   Color::Default,
+            normal_effect:        Effect::empty(),
+            matched:              Color::Default,
+            matched_bg:           Color::Default,
+            matched_effect:       Effect::empty(),
+            current:              Color::Default,
+            current_bg:           Color::Default,
+            current_effect:       Effect::empty(),
+            current_match:        Color::Default,
+            current_match_bg:     Color::Default,
+            current_match_effect: Effect::empty(),
+            spinner:              Color::Default,
+            info:                 Color::Default,
+            prompt:               Color::Default,
+            cursor:               Color::Default,
+            selected:             Color::Default,
+            header:               Color::Default,
+            border:               Color::Default,
+        }
+    }
+
     fn bw() -> Self {
         ColorTheme {
-            fg:               Color::Default,
-            bg:               Color::Default,
-            matched:          Color::Default,
-            matched_bg:       Color::Default,
-            current:          Color::Default,
-            current_bg:       Color::Default,
-            current_match:    Color::Default,
-            current_match_bg: Color::Default,
-            spinner:          Color::Default,
-            info:             Color::Default,
-            prompt:           Color::Default,
-            cursor:           Color::Default,
-            selected:         Color::Default,
-            header:           Color::Default,
-            border:           Color::Default,
+            matched_effect:       Effect::UNDERLINE,
+            current_effect:       Effect::REVERSE,
+            current_match_effect: Effect::UNDERLINE | Effect::REVERSE,
+            ..ColorTheme::empty()
         }
     }
 
     fn default16() -> Self {
         ColorTheme {
-            fg:               Color::Default,
-            bg:               Color::Default,
             matched:          Color::GREEN,
             matched_bg:       Color::BLACK,
             current:          Color::YELLOW,
@@ -90,13 +91,12 @@ impl ColorTheme {
             selected:         Color::MAGENTA,
             header:           Color::CYAN,
             border:           Color::LIGHT_BLACK,
+            ..ColorTheme::empty()
         }
     }
 
     fn dark256() -> Self {
         ColorTheme {
-            fg:               Color::Default,
-            bg:               Color::Default,
             matched:          Color::AnsiValue(108),
             matched_bg:       Color::AnsiValue(0),
             current:          Color::AnsiValue(254),
@@ -110,13 +110,12 @@ impl ColorTheme {
             selected:         Color::AnsiValue(168),
             header:           Color::AnsiValue(109),
             border:           Color::AnsiValue(59),
+            ..ColorTheme::empty()
         }
     }
 
     fn molokai256() -> Self {
         ColorTheme {
-            fg:               Color::Default,
-            bg:               Color::Default,
             matched:          Color::AnsiValue(234),
             matched_bg:       Color::AnsiValue(186),
             current:          Color::AnsiValue(254),
@@ -130,13 +129,12 @@ impl ColorTheme {
             selected:         Color::AnsiValue(168),
             header:           Color::AnsiValue(109),
             border:           Color::AnsiValue(59),
+            ..ColorTheme::empty()
         }
     }
 
     fn light256() -> Self {
         ColorTheme {
-            fg:               Color::Default,
-            bg:               Color::Default,
             matched:          Color::AnsiValue(0),
             matched_bg:       Color::AnsiValue(220),
             current:          Color::AnsiValue(237),
@@ -150,6 +148,7 @@ impl ColorTheme {
             selected:         Color::AnsiValue(168),
             header:           Color::AnsiValue(31),
             border:           Color::AnsiValue(145),
+            ..ColorTheme::empty()
         }
     }
 
@@ -163,6 +162,7 @@ impl ColorTheme {
                     "light"    => ColorTheme::light256(),
                     "16"       => ColorTheme::default16(),
                     "bw"       => ColorTheme::bw(),
+                    "empty"    => ColorTheme::empty(),
                     "dark" | "default" | _ => ColorTheme::dark256(),
                 };
                 continue;
@@ -206,7 +206,7 @@ impl ColorTheme {
         Attr {
             fg: self.fg,
             bg: self.bg,
-            effect: Effect::empty(),
+            effect: self.normal_effect,
         }
     }
 
@@ -214,7 +214,7 @@ impl ColorTheme {
         Attr {
             fg: self.matched,
             bg: self.matched_bg,
-            effect: Effect::empty(),
+            effect: self.matched_effect,
         }
     }
 
@@ -222,7 +222,7 @@ impl ColorTheme {
         Attr {
             fg: self.current,
             bg: self.current_bg,
-            effect: Effect::empty(),
+            effect: self.current_effect,
         }
     }
 
@@ -230,7 +230,7 @@ impl ColorTheme {
         Attr {
             fg: self.current_match,
             bg: self.current_match_bg,
-            effect: Effect::empty(),
+            effect: self.current_match_effect,
         }
     }
 

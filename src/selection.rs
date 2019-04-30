@@ -66,7 +66,7 @@ impl Selection {
             multi_selection: false,
             reverse: false,
             no_hscroll: false,
-            theme: Arc::new(DEFAULT_THEME),
+            theme: Arc::new(*DEFAULT_THEME),
         }
     }
 
