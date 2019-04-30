@@ -320,6 +320,12 @@ impl Selection {
             self.theme.normal()
         };
 
+        let matched_attr = if is_current {
+            self.theme.current_match()
+        } else {
+            self.theme.matched()
+        };
+
         // print selection cursor
         if self.selected.contains_key(&index) {
             let _ = canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
@@ -379,7 +385,7 @@ impl Selection {
                 for (ch_idx, ch) in text.chars().enumerate() {
                     match matched_indices_iter.peek() {
                         Some(&&match_idx) if ch_idx == match_idx => {
-                            printer.print_char(canvas, ch, default_attr.extend(self.theme.matched()), false);
+                            printer.print_char(canvas, ch, matched_attr, false);
                             let _ = matched_indices_iter.next();
                         }
                         Some(_) | None => {
@@ -391,12 +397,7 @@ impl Selection {
 
             Some(MatchedRange::ByteRange(start, end)) => {
                 for (idx, ch) in text.char_indices() {
-                    printer.print_char(
-                        canvas,
-                        ch,
-                        default_attr.extend(self.theme.matched()),
-                        !(idx >= start && idx < end),
-                    );
+                    printer.print_char(canvas, ch, matched_attr, !(idx >= start && idx < end));
                 }
             }
 

@@ -100,8 +100,8 @@ Usage: sk [options]
 ";
 
 fn main() {
-    use env_logger::Builder;
     use env_logger::fmt::Formatter;
+    use env_logger::Builder;
     use log::{LevelFilter, Record};
     use std::io::Write;
 

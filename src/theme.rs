@@ -179,21 +179,21 @@ impl ColorTheme {
             };
 
             match color[0] {
-                "fg"               => theme.fg               = new_color,
-                "bg"               => theme.bg               = new_color,
-                "matched"          => theme.matched          = new_color,
-                "matched_bg"       => theme.matched_bg       = new_color,
-                "current"          => theme.current          = new_color,
-                "current_bg"       => theme.current_bg       = new_color,
-                "current_match"    => theme.current_match    = new_color,
-                "current_match_bg" => theme.current_match_bg = new_color,
-                "spinner"          => theme.spinner          = new_color,
-                "info"             => theme.info             = new_color,
-                "prompt"           => theme.prompt           = new_color,
-                "cursor"           => theme.cursor           = new_color,
-                "selected"         => theme.selected         = new_color,
-                "header"           => theme.header           = new_color,
-                "border"           => theme.border           = new_color,
+                "fg"                    => theme.fg               = new_color,
+                "bg"                    => theme.bg               = new_color,
+                "matched" | "hl"        => theme.matched          = new_color,
+                "matched_bg"            => theme.matched_bg       = new_color,
+                "current" | "fg+"       => theme.current          = new_color,
+                "current_bg" | "bg+"    => theme.current_bg       = new_color,
+                "current_match" | "hl+" => theme.current_match    = new_color,
+                "current_match_bg"      => theme.current_match_bg = new_color,
+                "spinner"               => theme.spinner          = new_color,
+                "info"                  => theme.info             = new_color,
+                "prompt"                => theme.prompt           = new_color,
+                "cursor" | "pointer"    => theme.cursor           = new_color,
+                "selected" | "marker"   => theme.selected         = new_color,
+                "header"                => theme.header           = new_color,
+                "border"                => theme.border           = new_color,
                 _ => {}
             }
         }
