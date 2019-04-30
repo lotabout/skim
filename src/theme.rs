@@ -175,7 +175,9 @@ impl ColorTheme {
                 let b = u8::from_str_radix(&color[1][5..7], 16).unwrap_or(255);
                 Color::Rgb(r, g, b)
             } else {
-                Color::AnsiValue(color[1].parse::<u8>().unwrap_or(255))
+                color[1].parse::<u8>()
+                    .map(Color::AnsiValue)
+                    .unwrap_or(Color::Default)
             };
 
             match color[0] {
