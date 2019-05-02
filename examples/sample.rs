@@ -1,6 +1,5 @@
 extern crate skim;
 use skim::{Skim, SkimOptions};
-use std::default::Default;
 
 pub fn main() {
     let options = SkimOptions::default();
