@@ -1,3 +1,4 @@
+[![Crates.io](https://img.shields.io/crates/v/skim.svg)](https://crates.io/crates/skim)
 [![Build Status](https://travis-ci.org/lotabout/skim.svg?branch=master)](https://travis-ci.org/lotabout/skim)
 
 > Life is short, skim!
