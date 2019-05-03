@@ -422,7 +422,6 @@ Then try to run this simple example:
 ```rust
 extern crate skim;
 use skim::{Skim, SkimOptionsBuilder};
-use std::default::Default;
 use std::io::Cursor;
 
 pub fn main() {
