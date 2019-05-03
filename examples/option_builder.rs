@@ -1,6 +1,5 @@
 extern crate skim;
 use skim::{Skim, SkimOptionsBuilder};
-use std::default::Default;
 use std::io::Cursor;
 
 pub fn main() {
