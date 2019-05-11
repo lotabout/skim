@@ -348,8 +348,9 @@ impl AndEngine {
         let mut ranges = vec![];
         for item in items {
             match item.matched_range {
-                Some(MatchedRange::ByteRange(start, end)) => {
-                    ranges.extend(start..end);
+                Some(MatchedRange::ByteRange(..)) => {
+                    ranges.extend(
+                      item.to_chars_range().unwrap());
                 }
                 Some(MatchedRange::Chars(vec)) => {
                     ranges.extend(vec.iter());

@@ -193,6 +193,18 @@ impl MatchedItem {
     pub fn build(self) -> Self {
         self
     }
+
+    pub fn to_chars_range(&self) -> Option<Vec<usize>> {
+      self.matched_range.as_ref().map(|r| match r {
+        MatchedRange::ByteRange(start, end) => {
+          self.item.orig_text[*start..*end]
+            .chars()
+            .map(|x| x as usize)
+            .collect()
+        },
+        MatchedRange::Chars(vec) => vec.clone(),
+      })
+    }
 }
 
 const ITEM_POOL_CAPACITY: usize = 1024;
