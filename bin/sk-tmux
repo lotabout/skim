@@ -185,8 +185,8 @@ trap 'cleanup 1' SIGUSR1
 trap 'cleanup' EXIT
 
 envs="env TERM=$TERM "
-[[ -n "$SKIM_DEFAULT_OPTIONS" ]] && envs="$envs SKIM_DEFAULT_OPTIONS=$(printf %q "$SK_DEFAULT_OPTIONS")"
-[[ -n "$SKIM_DEFAULT_COMMAND" ]] && envs="$envs SKIM_DEFAULT_COMMAND=$(printf %q "$SK_DEFAULT_COMMAND")"
+[[ -n "$SKIM_DEFAULT_OPTIONS" ]] && envs="$envs SKIM_DEFAULT_OPTIONS=$(printf %q "$SKIM_DEFAULT_OPTIONS")"
+[[ -n "$SKIM_DEFAULT_COMMAND" ]] && envs="$envs SKIM_DEFAULT_COMMAND=$(printf %q "$SKIM_DEFAULT_COMMAND")"
 
 mkfifo -m o+w $fifo2
 mkfifo -m o+w $fifo3
