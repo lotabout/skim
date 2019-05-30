@@ -9,7 +9,7 @@ use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
 use tuikit::prelude::{Event as TermEvent, *};
 
-use crate::event::{Event, EventHandler, EventReceiver, EventSender};
+use crate::event::{Event, EventHandler, EventReceiver, EventSender, EventArg};
 use crate::header::Header;
 use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
@@ -312,7 +312,6 @@ impl Model {
     }
 
     fn act_execute_silent(&mut self, cmd: &str) {
-        debug!("execute command before: {}", cmd);
         let item = self.selection.get_current_item();
         let current_selection = item.as_ref().map(|item| item.get_output_text()).unwrap();
         let query = self.query.get_query();
@@ -327,7 +326,6 @@ impl Model {
         };
 
         let cmd = inject_command(cmd, context).to_string();
-        debug!("execute command after: {}", cmd);
         let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
         let _ = Command::new(shell).arg("-c").arg(cmd).status();
     }
@@ -342,10 +340,21 @@ impl Model {
 
         self.reader_control = Some(self.reader.run(&env.cmd));
 
-        while let Ok((ev, arg)) = self.rx.recv() {
-            debug!("model: ev: {:?}, arg: {:?}", ev, arg);
+        // In the event loop, thhere might need
+        let mut next_event = None;
+        loop {
+            let (ev, arg) = if next_event.is_some() {
+                next_event.take().unwrap()
+            } else if let Ok((ev, arg)) = self.rx.recv() {
+                (ev, arg)
+            } else {
+                break; // end of the event stream;
+            };
+
             match ev {
                 Event::EvHeartBeat => {
+                    // consume follwing HeartBeat event
+                    next_event = self.consume_additional_event(Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
                 }
 
@@ -463,6 +472,20 @@ impl Model {
         }
 
         None
+    }
+
+    fn consume_additional_event(&self, target_event: Event) -> Option<(Event, EventArg)> {
+        // consume additional HeartBeat event
+        let mut rx_try_iter = self.rx.try_iter().peekable();
+        while let Some((ev, _)) = rx_try_iter.peek() {
+            if *ev == target_event {
+                let _ = rx_try_iter.next();
+            } else {
+                break;
+            }
+        }
+        // once the event is peeked, it is removed from the pipe, thus need to be saved.
+        return rx_try_iter.next();
     }
 
     fn restart_matcher(&mut self) {
