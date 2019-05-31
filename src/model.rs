@@ -337,7 +337,7 @@ impl Model {
             cmd_query: self.query.get_cmd_query(),
             clear_selection: ClearStrategy::DontClear,
         };
-        let mut idx = 0;
+        let mut append_idx = 0;
 
         self.reader_control = Some(self.reader.run(&env.cmd));
 
@@ -398,14 +398,13 @@ impl Model {
                             &Vec::new(),
                             &Vec::new(),
                             &Regex::new("").unwrap(),
-                            (std::usize::MAX, idx),
+                            (std::usize::MAX, append_idx),
                         );
-                        dbg!((std::usize::MAX, idx));
-                        idx = idx + 1;
-                        let arc = Arc::new(item);
-                        v.push(arc.clone());
+                        append_idx += 1;
+                        let item = Arc::new(item);
+                        v.push(item.clone());
                         self.item_pool.append(v);
-                        let mitem = MatchedItem::builder(arc).build();
+                        let mitem = MatchedItem::builder(item).build();
                         self.selection.act_toggle_item(mitem);
                         env.clear_selection = ClearStrategy::Clear;
                         self.query.act_line_discard();
