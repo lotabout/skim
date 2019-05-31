@@ -1,5 +1,5 @@
-use crate::options::SkimOptions;
 ///! Handle the color theme
+use crate::options::SkimOptions;
 use tuikit::attr::{Attr, Color, Effect};
 
 #[rustfmt::skip]
@@ -7,11 +7,22 @@ lazy_static! {
     pub static ref DEFAULT_THEME:  ColorTheme = ColorTheme::dark256();
 }
 
+/// The color scheme of skim's UI
+///
+/// <pre>
+/// +----------------+
+/// | >selected line |  --> selected & normal(fg/bg) & matched
+/// |> current line  |  --> cursor & current & current_match
+/// |  normal line   |
+/// |\ 8/10          |  --> spinner & info
+/// |> query         |  --> prompt & query
+/// +----------------+
+/// </pre>
 #[rustfmt::skip]
 #[derive(Copy, Clone, Debug)]
 pub struct ColorTheme {
-    fg:                   Color, // text fg
-    bg:                   Color, // text bg
+    fg:                   Color,
+    bg:                   Color,
     normal_effect:        Effect,
     matched:              Color,
     matched_bg:           Color,
@@ -22,6 +33,9 @@ pub struct ColorTheme {
     current_match:        Color,
     current_match_bg:     Color,
     current_match_effect: Effect,
+    query_fg:             Color,
+    query_bg:             Color,
+    query_effect:         Effect,
     spinner:              Color,
     info:                 Color,
     prompt:               Color,
@@ -57,6 +71,9 @@ impl ColorTheme {
             current_match:        Color::Default,
             current_match_bg:     Color::Default,
             current_match_effect: Effect::empty(),
+            query_fg:             Color::Default,
+            query_bg:             Color::Default,
+            query_effect:         Effect::empty(),
             spinner:              Color::Default,
             info:                 Color::Default,
             prompt:               Color::Default,
@@ -189,6 +206,8 @@ impl ColorTheme {
                 "current_bg" | "bg+"    => theme.current_bg       = new_color,
                 "current_match" | "hl+" => theme.current_match    = new_color,
                 "current_match_bg"      => theme.current_match_bg = new_color,
+                "query"                 => theme.query_fg         = new_color,
+                "query_bg"              => theme.query_bg         = new_color,
                 "spinner"               => theme.spinner          = new_color,
                 "info"                  => theme.info             = new_color,
                 "prompt"                => theme.prompt           = new_color,
@@ -231,6 +250,14 @@ impl ColorTheme {
             fg: self.current_match,
             bg: self.current_match_bg,
             effect: self.current_match_effect,
+        }
+    }
+
+    pub fn query(&self) -> Attr {
+        Attr {
+            fg: self.query_fg,
+            bg: self.query_bg,
+            effect: self.query_effect,
         }
     }
 
