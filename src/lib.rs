@@ -62,7 +62,7 @@ impl Skim {
         input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
         let tx_clone = tx.clone();
         let term_clone = term.clone();
-        thread::spawn(move || 'outer: loop {
+        let input_thread = thread::spawn(move || 'outer: loop {
             if let Ok(key) = term_clone.poll_event() {
                 for (ev, arg) in input.translate_event(key).into_iter() {
                     let _ = tx_clone.send((ev, arg));
@@ -94,8 +94,11 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // model + previewer
-        let mut model = Model::new(rx, tx, reader, term, &options);
-        model.start()
+        let mut model = Model::new(rx, tx, reader, term.clone(), &options);
+        let ret = model.start();
+        let _ = input_thread.join();
+        let _ = term.pause();
+        ret
     }
 
     pub fn filter(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> i32 {
