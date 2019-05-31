@@ -11,7 +11,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 
 use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
-use crate::item::ItemPool;
+use crate::item::{Item, ItemPool, MatchedItem};
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -337,6 +337,7 @@ impl Model {
             cmd_query: self.query.get_cmd_query(),
             clear_selection: ClearStrategy::DontClear,
         };
+        let mut idx = 0;
 
         self.reader_control = Some(self.reader.run(&env.cmd));
 
@@ -382,6 +383,34 @@ impl Model {
                         cmd: self.query.get_cmd_query(),
                         selected_items: self.selection.get_selected_items(),
                     });
+                }
+
+                Event::EvActAppendAndSelect => {
+                    let query = self.query.get_query();
+                    let tx = Arc::new(SpinLock::new(self.tx.clone()));
+                    if query.len() == 0 {
+                        let _ = tx.lock().send((Event::EvHeartBeat, Box::new(true)));
+                    } else {
+                        let mut v = Vec::new();
+                        let item = Item::new(
+                            String::from_utf8_lossy(query.to_string().as_bytes()),
+                            false,
+                            &Vec::new(),
+                            &Vec::new(),
+                            &Regex::new("").unwrap(),
+                            (std::usize::MAX, idx),
+                        );
+                        dbg!((std::usize::MAX, idx));
+                        idx = idx + 1;
+                        let arc = Arc::new(item);
+                        v.push(arc.clone());
+                        self.item_pool.append(v);
+                        let mitem = MatchedItem::builder(arc).build();
+                        self.selection.act_toggle_item(mitem);
+                        env.clear_selection = ClearStrategy::Clear;
+                        self.query.act_line_discard();
+                        self.on_query_change(&mut env);
+                    }
                 }
 
                 Event::EvActAbort => {

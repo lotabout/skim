@@ -185,6 +185,18 @@ impl Selection {
         }
     }
 
+    pub fn act_toggle_item(&mut self, mitem: MatchedItem) {
+        if !self.multi_selection {
+            return;
+        }
+        let index = mitem.item.get_full_index();
+        if !self.selected.contains_key(&index) {
+            self.selected.insert(index, mitem.clone());
+        } else {
+            self.selected.remove(&index);
+        }
+    }
+
     pub fn act_toggle_all(&mut self) {
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
