@@ -9,7 +9,7 @@ use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
 use tuikit::prelude::{Event as TermEvent, *};
 
-use crate::event::{Event, EventHandler, EventReceiver, EventSender, EventArg};
+use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};

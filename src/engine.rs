@@ -349,8 +349,7 @@ impl AndEngine {
         for item in items {
             match item.matched_range {
                 Some(MatchedRange::ByteRange(..)) => {
-                    ranges.extend(
-                      item.to_chars_range().unwrap());
+                    ranges.extend(item.to_chars_range().unwrap());
                 }
                 Some(MatchedRange::Chars(vec)) => {
                     ranges.extend(vec.iter());
