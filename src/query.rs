@@ -481,9 +481,9 @@ impl Draw for Query {
         let prompt = self.get_prompt();
 
         let prompt_width = canvas.print_with_attr(0, 0, prompt, self.theme.prompt())?;
-        let before_width = canvas.print_with_attr(0, prompt_width, &before, self.theme.normal())?;
+        let before_width = canvas.print_with_attr(0, prompt_width, &before, self.theme.query())?;
         let col = prompt_width + before_width;
-        canvas.print_with_attr(0, col, &after, self.theme.normal())?;
+        canvas.print_with_attr(0, col, &after, self.theme.query())?;
         canvas.set_cursor(0, col)?;
         canvas.show_cursor(true)?;
         Ok(())
