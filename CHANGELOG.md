@@ -1,5 +1,17 @@
 # Change Log
 
+## 0.6.7: 2019-05-31
+
+Feature:
+- Refer to query and command query with `{q}` and `{cq}` in preview command.
+- Support fzf's theme strings, e.g. `bg+` for current line's background.
+- Support customizing styles of query strings.
+
+Bug fixes:
+- skim would crash if multiple CJK items are matched in an `OR` query.
+- SKIM_DEFAULT_COMMAND not correctly recognized in `sk-tmux`
+- UI responses are slow on large input
+
 ## 0.6.6: 2019-04-03
 
 fix #158: preview window not udpate correctly.
