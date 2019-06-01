@@ -406,9 +406,6 @@ impl Model {
                         self.item_pool.append(v);
                         let mitem = MatchedItem::builder(item).build();
                         self.selection.act_toggle_item(mitem);
-                        env.clear_selection = ClearStrategy::Clear;
-                        self.query.act_line_discard();
-                        self.on_query_change(&mut env);
                     }
                 }
 
