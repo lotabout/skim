@@ -6,8 +6,8 @@ main() {
         return
     fi
 
-    cross test --release --frozen --target $TARGET
-    cross build --release --frozen --target $TARGET
+    cross test --release --target $TARGET
+    cross build --release --target $TARGET
     mkdir -p target/release
     cp target/$TARGET/release/sk target/release
 
