@@ -11,6 +11,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 
 use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
+use crate::input::parse_action_arg;
 use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
@@ -358,6 +359,26 @@ impl Model {
                     self.act_heart_beat(&mut env);
                 }
 
+                Event::EvActIfQueryEmpty => {
+                    if env.query.is_empty() {
+                        next_event = arg
+                            .downcast_ref::<Option<String>>()
+                            .and_then(|os| os.as_ref().cloned())
+                            .and_then(|arg_str| parse_action_arg(&arg_str));
+                        continue;
+                    }
+                }
+
+                Event::EvActIfQueryNotEmpty => {
+                    if !env.query.is_empty() {
+                        next_event = arg
+                            .downcast_ref::<Option<String>>()
+                            .and_then(|os| os.as_ref().cloned())
+                            .and_then(|arg_str| parse_action_arg(&arg_str));
+                        continue;
+                    }
+                }
+
                 Event::EvActTogglePreview => {
                     self.preview_hidden = !self.preview_hidden;
                 }
@@ -564,16 +585,16 @@ impl Draw for Model {
 
         let win_selection = Win::new(&self.selection);
         let win_query = Win::new(&self.query)
-            .basis(if self.inline_info { 0 } else { 1 }.into())
+            .basis(if self.inline_info { 0 } else { 1 })
             .grow(0)
             .shrink(0);
         let win_status = Win::new(&status)
-            .basis(if self.inline_info { 0 } else { 1 }.into())
+            .basis(if self.inline_info { 0 } else { 1 })
             .grow(0)
             .shrink(0);
         let win_header = Win::new(&self.header).grow(0).shrink(0);
         let win_query_status = HSplit::default()
-            .basis(if self.inline_info { 1 } else { 0 }.into())
+            .basis(if self.inline_info { 1 } else { 0 })
             .grow(0)
             .shrink(0)
             .split(Win::new(&self.query).grow(0).shrink(0))

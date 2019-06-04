@@ -2,7 +2,7 @@
 use std::borrow::Cow;
 use std::default::Default;
 use std::mem;
-use tuikit::attr::{Attr, Color, Effect};
+use tuikit::prelude::*;
 use vte::Perform;
 
 /// An ANSI Parser, will parse one line at a time.

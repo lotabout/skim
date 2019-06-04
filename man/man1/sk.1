@@ -444,6 +444,8 @@ e.g. \fBsk --bind=ctrl-j:accept,ctrl-k:kill-line\fR
     \fBexecute-silent(...)\fR   (see below for the details)
     \fBforward-char\fR          \fIctrl-f  right\fR
     \fBforward-word\fR          \fIalt-f   shift-right\fR
+    \fBif-query-empty\fR
+    \fBif-query-not-empty\fR
     \fBignore\fR
     \fBkill-line\fR
     \fBkill-word\fR             \fIalt-d\fR
@@ -504,6 +506,14 @@ output, you might want to use \fBexecute-silent\fR instead, which silently
 executes the command without the switching. Note that sk will not be
 responsive until the command is complete. For asynchronous execution, start
 your command as a background process (i.e. appending \fB&\fR).
+
+With \fBif-query-empty\fR and \fBif-query-not-empty\fR action, you could
+specify the action to execute depends on the query condition. For example
+
+    \fBsk --bind 'ctrl-d:if-query-empty(abort)+delete-char'\fR
+
+If the query is empty, skim will execute \fBabort\fR action, otherwise execute
+\fBdelete-char\fR action. It is equal to `delete-char/eof`.
 
 .SH AUTHOR
 Jinzhou Zhang (\fIlotabout@gmail.com\fR)
