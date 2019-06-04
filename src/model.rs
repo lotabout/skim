@@ -11,6 +11,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 
 use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
+use crate::input::parse_action_arg;
 use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
@@ -356,6 +357,26 @@ impl Model {
                     // consume follwing HeartBeat event
                     next_event = self.consume_additional_event(Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
+                }
+
+                Event::EvActIfQueryEmpty => {
+                    if env.query.is_empty() {
+                        next_event = arg
+                            .downcast_ref::<Option<String>>()
+                            .and_then(|os| os.as_ref().cloned())
+                            .and_then(|arg_str| parse_action_arg(&arg_str));
+                        continue;
+                    }
+                }
+
+                Event::EvActIfQueryNotEmpty => {
+                    if !env.query.is_empty() {
+                        next_event = arg
+                            .downcast_ref::<Option<String>>()
+                            .and_then(|os| os.as_ref().cloned())
+                            .and_then(|arg_str| parse_action_arg(&arg_str));
+                        continue;
+                    }
                 }
 
                 Event::EvActTogglePreview => {

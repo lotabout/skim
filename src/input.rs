@@ -105,7 +105,7 @@ impl Input {
 
 /// parse key action string to `(key, action, argument)` tuple
 /// key_action is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
-fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String>)>)> {
+pub fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String>)>)> {
     lazy_static! {
         // match `key:action` or `key:action:arg` or `key:action(arg)` etc.
         static ref RE: Regex =
@@ -130,6 +130,22 @@ fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String>)>)
             (key, actions)
         })
         .collect()
+}
+
+/// e.g. execute(...) => Some(Event::EvActExecute, Box::new(Option("...")))
+pub fn parse_action_arg(action_arg: &str) -> Option<(Event, EventArg)> {
+    // construct a fake key_action: `fake_key:action(arg)`
+    let fake_key_action = format!("fake_key:{}", action_arg);
+    // get keys: [(key, [(action, arg), (action, arg)]), ...]
+    let keys = parse_key_action(&fake_key_action);
+    // only get the first key(since it is faked), and get the first action
+    if keys.is_empty() || keys[0].1.is_empty() {
+        None
+    } else {
+        // first action pair of key(keys[0].1) and first action (keys[0].1[0])
+        let (action, new_arg) = keys[0].1[0].clone();
+        parse_action(action).map(|act| (act, Box::new(new_arg) as EventArg))
+    }
 }
 
 #[rustfmt::skip]
