@@ -564,16 +564,16 @@ impl Draw for Model {
 
         let win_selection = Win::new(&self.selection);
         let win_query = Win::new(&self.query)
-            .basis(if self.inline_info { 0 } else { 1 }.into())
+            .basis(if self.inline_info { 0 } else { 1 })
             .grow(0)
             .shrink(0);
         let win_status = Win::new(&status)
-            .basis(if self.inline_info { 0 } else { 1 }.into())
+            .basis(if self.inline_info { 0 } else { 1 })
             .grow(0)
             .shrink(0);
         let win_header = Win::new(&self.header).grow(0).shrink(0);
         let win_query_status = HSplit::default()
-            .basis(if self.inline_info { 1 } else { 0 }.into())
+            .basis(if self.inline_info { 1 } else { 0 })
             .grow(0)
             .shrink(0)
             .split(Win::new(&self.query).grow(0).shrink(0))

@@ -3,7 +3,7 @@
 use crate::event::{parse_action, Event, EventArg};
 use regex::Regex;
 use std::collections::HashMap;
-use tuikit::event::Event as TuiEvent;
+use tuikit::event::Event as TermEvent;
 use tuikit::key::{from_keyname, Key};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,10 +37,10 @@ impl Input {
         }
     }
 
-    pub fn translate_event(&self, event: TuiEvent) -> Vec<(Event, EventArg)> {
+    pub fn translate_event(&self, event: TermEvent) -> Vec<(Event, EventArg)> {
         match event {
             // search event from keymap
-            TuiEvent::Key(key) => self
+            TermEvent::Key(key) => self
                 .keymap
                 .get(&key)
                 .map(|chain| {
@@ -56,7 +56,7 @@ impl Input {
                         vec![(Event::EvInputKey, Box::new(key) as EventArg)]
                     }
                 }),
-            TuiEvent::Resize { .. } => vec![(Event::EvActRedraw, Box::new(true))],
+            TermEvent::Resize { .. } => vec![(Event::EvActRedraw, Box::new(true))],
             _ => vec![(Event::EvInputInvalid, Box::new(true))],
         }
     }

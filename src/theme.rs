@@ -1,6 +1,6 @@
 ///! Handle the color theme
 use crate::options::SkimOptions;
-use tuikit::attr::{Attr, Color, Effect};
+use tuikit::prelude::*;
 
 #[rustfmt::skip]
 lazy_static! {

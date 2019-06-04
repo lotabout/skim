@@ -37,7 +37,7 @@ use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
-use tuikit::term::{Term, TermHeight, TermOptions};
+use tuikit::prelude::{Event as TermEvent, *};
 
 pub struct Skim {}
 
@@ -64,11 +64,12 @@ impl Skim {
         let term_clone = term.clone();
         let input_thread = thread::spawn(move || 'outer: loop {
             if let Ok(key) = term_clone.poll_event() {
+                if key == TermEvent::User1 {
+                    break;
+                }
+
                 for (ev, arg) in input.translate_event(key).into_iter() {
                     let _ = tx_clone.send((ev, arg));
-                    if ev == EvActAccept || ev == EvActAbort {
-                        break 'outer;
-                    }
                 }
             }
         });
@@ -96,6 +97,7 @@ impl Skim {
         // model + previewer
         let mut model = Model::new(rx, tx, reader, term.clone(), &options);
         let ret = model.start();
+        let _ = term.send_event(TermEvent::User1); // interrupt the input thread
         let _ = input_thread.join();
         let _ = term.pause();
         ret
