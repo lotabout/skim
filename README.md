@@ -201,52 +201,18 @@ You can switch to `regex` mode dynamically by pressing `Ctrl-R` (Rotate Mode).
 
 # Customization
 
+The doc here is only a preview, please check the man page(`man sk`) for full
+list of options.
+
 ## Keymap
 
 Specify the bindings with comma seperated pairs(no space allowed), example:
 
 `sk --bind 'alt-a:select-all,alt-d:deselect-all'`
 
-| Action               | Default key                 |
-|----------------------|-----------------------------|
-| abort                | esc, ctrl-c, ctrl-g         |
-| accept               | enter                       |
-| backward-char        | left, ctrl-b                |
-| backward-delete-char | ctrl-h, backspace           |
-| backward-kill-word   | alt-backspace               |
-| backward-word        | alt-b, shift-left           |
-| beginning-of-line    | ctrl-a                      |
-| cancel               | None                        |
-| clear-screen         | ctrl-l                      |
-| delete-char          | del                         |
-| delete-charEOF       | ctrl-d                      |
-| deselect-all         | None                        |
-| down                 | ctrl-j, ctrl-n, down        |
-| end-of-line          | ctrl-e, end                 |
-| forward-char         | ctrl-f, right               |
-| forward-word         | alt-f, shift-right          |
-| ignore               | None                        |
-| kill-line            | ctrl-k                      |
-| kill-word            | alt-d                       |
-| page-down            | page-down                   |
-| page-up              | page-up                     |
-| rotate-mode          | ctrl-r                      |
-| scroll-left          | alt-h                       |
-| scroll-right         | alt-l                       |
-| select-all           | None                        |
-| toggle               | None                        |
-| toggle-all           | None                        |
-| toggle+down          | tab                         |
-| toggle-interactive   | ctrl-q                      |
-| toggle-out           | None                        |
-| toggle-preview       | None                        |
-| toggle-sort          | None                        |
-| toggle+up            | shift-tab                   |
-| unix-line-discard    | ctrl-u                      |
-| unix-word-rubout     | ctrl-w                      |
-| up                   | ctrl-p, ctrl-k, up          |
-
 Additionaly, use `+` to concatenate actions, such as `execute-silent(echo {} | pbcopy)+abort`.
+
+See _KEY BINDINGS_ section of the man page for details.
 
 ## Sort Criteria
 
@@ -272,36 +238,7 @@ sk --color=current_bg:24
 sk --color=light,fg:232,bg:255,current_bg:116,info:27
 ```
 
-You can choose the `BASE SCHEME` among the following(default: dark on
-256-color terminal, otherwise 16):
-
-
-| Base Scheme | Description                               |
-|-------------|-------------------------------------------|
-| dark        | Color scheme for dark 256-color terminal  |
-| light       | Color scheme for light 256-color terminal |
-| 16          | Color scheme for 16-color terminal        |
-| bw          | No colors                                 |
-
-While the customisable `COLOR`s are
-
-| Color            | Description                                      |
-|------------------|--------------------------------------------------|
-| fg               | Text                                             |
-| bg               | Background                                       |
-| matched          | Text color of matched items                      |
-| matched_bg       | Background color of matched items                |
-| current          | Text color (current line)                        |
-| current_bg       | Background color (current line)                  |
-| current_match    | Text color of matched items (current line)       |
-| current_match_bg | Background color of matched items (current line) |
-| spinner          | Streaming input indicator                        |
-| info             | Info area                                        |
-| prompt           | Prompt                                           |
-| cursor           | Cursor                                           |
-| selected         | Text color of "selected" indicator               |
-| border           | Border color of preview window                   |
-
+See `--color` option in the man page for details.
 
 ## Misc
 
