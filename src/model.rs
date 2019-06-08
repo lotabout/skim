@@ -12,7 +12,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::ItemPool;
+use crate::item::{Item, ItemPool};
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -72,6 +72,8 @@ pub struct Model {
     // timer thread for scheduled events
     timer: Timer,
     hb_timer_guard: Option<TimerGuard>,
+
+    next_idx_to_append: usize, // for AppendAndSelect action
 }
 
 impl Model {
@@ -132,6 +134,8 @@ impl Model {
             theme,
             timer: Timer::new(),
             hb_timer_guard: None,
+
+            next_idx_to_append: 0,
         };
         ret.parse_options(options);
         ret
@@ -241,12 +245,16 @@ impl Model {
             self.selection.append_sorted_items(matched);
         }
 
-        let processed = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
+        let items_consumed = self.item_pool.num_not_taken() == 0;
+        let reader_stopped = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
+        let processed = reader_stopped && items_consumed;
+
         // run matcher if matcher had been stopped and reader had new items.
         if !processed && self.matcher_control.is_none() {
             self.restart_matcher();
         }
 
+        // send next heart beat if matcher is still running or there are items not been processed.
         if self.matcher_control.is_some() || !processed {
             let tx = self.tx.clone();
             let hb_timer_guard =
@@ -329,6 +337,29 @@ impl Model {
         let cmd = inject_command(cmd, context).to_string();
         let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
         let _ = Command::new(shell).arg("-c").arg(cmd).status();
+    }
+
+    fn act_append_and_select(&mut self, env: &mut ModelEnv) {
+        let query = self.query.get_query();
+        if query.is_empty() {
+            return;
+        }
+
+        let item = Arc::new(Item::new(
+            String::from_utf8_lossy(query.to_string().as_bytes()),
+            false,
+            &Vec::new(),
+            &Vec::new(),
+            &Regex::new("").unwrap(),
+            (std::usize::MAX, self.next_idx_to_append),
+        ));
+
+        self.next_idx_to_append += 1;
+
+        self.item_pool.append(vec![item.clone()]);
+        self.selection.act_select_item(item);
+
+        self.act_heart_beat(env);
     }
 
     pub fn start(&mut self) -> Option<SkimOutput> {
@@ -442,6 +473,10 @@ impl Model {
                         .and_then(|os| os.as_ref().cloned())
                         .unwrap();
                     self.act_execute_silent(&cmd);
+                }
+
+                Event::EvActAppendAndSelect => {
+                    self.act_append_and_select(&mut env);
                 }
 
                 _ => {}
