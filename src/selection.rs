@@ -26,7 +26,7 @@ lazy_static! {
 pub struct Selection {
     criterion: Vec<RankCriteria>,
     items: OrderedVec<MatchedItem>, // all items
-    selected: HashMap<(usize, usize), MatchedItem>,
+    selected: HashMap<(usize, usize), Arc<Item>>,
 
     //
     // |>------ items[items.len()-1]
@@ -179,27 +179,43 @@ impl Selection {
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
         let index = current_item.item.get_full_index();
         if !self.selected.contains_key(&index) {
-            self.selected.insert(index, current_item.clone());
+            self.selected.insert(index, current_item.item.clone());
         } else {
             self.selected.remove(&index);
         }
     }
 
     pub fn act_toggle_all(&mut self) {
+        if !self.multi_selection || self.items.is_empty() {
+            return;
+        }
+
         for current_item in self.items.iter() {
             let index = current_item.item.get_full_index();
             if !self.selected.contains_key(&index) {
-                self.selected.insert(index, current_item.clone());
+                self.selected.insert(index, current_item.item.clone());
             } else {
                 self.selected.remove(&index);
             }
         }
     }
 
+    pub fn act_select_item(&mut self, item: Arc<Item>) {
+        if !self.multi_selection {
+            return;
+        }
+
+        self.selected.insert(item.get_full_index(), item);
+    }
+
     pub fn act_select_all(&mut self) {
+        if !self.multi_selection || self.items.is_empty() {
+            return;
+        }
+
         for current_item in self.items.iter() {
-            let index = current_item.item.get_full_index();
-            self.selected.insert(index, current_item.clone());
+            let item = current_item.item.clone();
+            self.selected.insert(item.get_full_index(), item);
         }
     }
 
@@ -222,11 +238,11 @@ impl Selection {
                 .items
                 .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
-            let index = current_item.item.get_full_index();
-            self.selected.insert(index, current_item.clone());
+            let item = current_item.item.clone();
+            self.selected.insert(item.get_full_index(), item);
         }
 
-        let mut selected: Vec<Arc<Item>> = self.selected.values().map(|item| item.item.clone()).collect();
+        let mut selected: Vec<Arc<Item>> = self.selected.values().map(|item| item.clone()).collect();
 
         selected.sort_by_key(|item| item.get_full_index());
         selected

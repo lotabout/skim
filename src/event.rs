@@ -21,6 +21,7 @@ pub enum Event {
     EvActAbort,
     EvActAccept,
     EvActAddChar,
+    EvActAppendAndSelect,
     EvActBackwardChar,
     EvActBackwardDeleteChar,
     EvActBackwardKillWord,
@@ -91,6 +92,7 @@ pub fn parse_action(action: &str) -> Option<Event> {
     match action {
         "abort"                =>   Some(Event::EvActAbort),
         "accept"               =>   Some(Event::EvActAccept),
+        "append-and-select"    =>   Some(Event::EvActAppendAndSelect),
         "backward-char"        =>   Some(Event::EvActBackwardChar),
         "backward-delete-char" =>   Some(Event::EvActBackwardDeleteChar),
         "backward-kill-word"   =>   Some(Event::EvActBackwardKillWord),
