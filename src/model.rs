@@ -448,14 +448,8 @@ impl Model {
 
                 Event::EvActDeleteCharEOF => {
                     if env.query.is_empty() {
-                        let _ = self.term.send_event(TermEvent::Key(Key::Null));
-                        if let Some(ctrl) = self.reader_control.take() {
-                            ctrl.kill();
-                        }
-                        if let Some(ctrl) = self.matcher_control.take() {
-                            ctrl.kill();
-                        }
-                        return None;
+                        next_event = Some((Event::EvActAbort, Box::new(true)));
+                        continue;
                     }
                 }
 
