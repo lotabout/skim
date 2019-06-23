@@ -1,5 +1,19 @@
 # Change Log
 
+## 0.6.8: 2019-06-23
+
+Feature:
+- New action: `if-query-empty`, `if-query-not-empty`. Execute actions on
+  certain query conditions.
+- New action: `append-and-select` allows you to append current query to the
+    item pool and select it. It would help to turn skim into a tag manager
+    where new tags could be added to the candidate list.
+
+Bug fixes:
+- Fix #188: crates.io breaks on 0.6.7
+- Fix: `run_with` will break if called multiple times from the same process.
+- Update nix to 0.14
+
 ## 0.6.7: 2019-05-31
 
 Feature:

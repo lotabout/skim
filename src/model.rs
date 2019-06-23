@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use chrono::Duration as TimerDuration;
 use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
-use tuikit::prelude::{Event as TermEvent, *};
+use tuikit::prelude::*;
 
 use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
