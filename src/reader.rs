@@ -46,7 +46,7 @@ impl ReaderControl {
 
 pub struct Reader {
     option: Arc<ReaderOption>,
-    source_file: Option<Box<BufRead + Send>>,
+    source_file: Option<Box<dyn BufRead + Send>>,
 }
 
 impl Reader {
@@ -57,7 +57,7 @@ impl Reader {
         }
     }
 
-    pub fn source(mut self, source_file: Option<Box<BufRead + Send>>) -> Self {
+    pub fn source(mut self, source_file: Option<Box<dyn BufRead + Send>>) -> Self {
         self.source_file = source_file;
         self
     }
@@ -143,8 +143,8 @@ impl ReaderOption {
     }
 }
 
-type CommandOutput = (Option<Child>, Box<BufRead + Send>);
-fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<Error>> {
+type CommandOutput = (Option<Child>, Box<dyn BufRead + Send>);
+fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
     let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let mut command = Command::new(shell)
         .arg("-c")
@@ -176,7 +176,7 @@ fn reader(
     stopped: Arc<AtomicBool>,
     items: Arc<SpinLock<Vec<Arc<Item>>>>,
     option: Arc<ReaderOption>,
-    source_file: Option<Box<BufRead + Send>>,
+    source_file: Option<Box<dyn BufRead + Send>>,
 ) {
     let (command, mut source) = source_file
         .map(|f| (None, f))

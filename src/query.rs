@@ -474,7 +474,7 @@ impl EventHandler for Query {
 }
 
 impl Draw for Query {
-    fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
         canvas.clear()?;
         let before = self.get_before();
         let after = self.get_after();

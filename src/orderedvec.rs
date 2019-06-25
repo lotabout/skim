@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 use std::cmp::Ordering;
 
-pub type CompareFunction<T> = Box<Fn(&T, &T) -> Ordering + Send + Sync>;
+pub type CompareFunction<T> = Box<dyn Fn(&T, &T) -> Ordering + Send + Sync>;
 const ORDERED_SIZE: usize = 300;
 
 pub struct OrderedVec<T: Send> {
@@ -42,7 +42,7 @@ impl<T: Send> OrderedVec<T> {
         self.vec.is_empty()
     }
 
-    pub fn iter<'a>(&'a self) -> Box<Iterator<Item = &T> + 'a> {
+    pub fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &T> + 'a> {
         Box::new(self.vec.iter())
     }
 }

@@ -217,7 +217,7 @@ impl ExactEngine {
 }
 
 // <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
-type ExactFilter = Box<Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
+type ExactFilter = Box<dyn Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
 
 impl MatchEngine for ExactEngine {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
@@ -270,7 +270,7 @@ impl MatchEngine for ExactEngine {
 //------------------------------------------------------------------------------
 // OrEngine, a combinator
 struct OrEngine {
-    engines: Vec<Box<MatchEngine>>,
+    engines: Vec<Box<dyn MatchEngine>>,
 }
 
 impl OrEngine {
@@ -309,7 +309,7 @@ impl MatchEngine for OrEngine {
 //------------------------------------------------------------------------------
 // AndEngine, a combinator
 struct AndEngine {
-    engines: Vec<Box<MatchEngine>>,
+    engines: Vec<Box<dyn MatchEngine>>,
 }
 
 impl AndEngine {
@@ -349,7 +349,7 @@ impl AndEngine {
         for item in items {
             match item.matched_range {
                 Some(MatchedRange::ByteRange(..)) => {
-                    ranges.extend(item.to_chars_range().unwrap());
+                    ranges.extend(item.to_chars().unwrap());
                 }
                 Some(MatchedRange::Chars(vec)) => {
                     ranges.extend(vec.iter());
@@ -394,7 +394,7 @@ impl MatchEngine for AndEngine {
 //------------------------------------------------------------------------------
 pub struct EngineFactory {}
 impl EngineFactory {
-    pub fn build(query: &str, mode: MatcherMode) -> Box<MatchEngine> {
+    pub fn build(query: &str, mode: MatcherMode) -> Box<dyn MatchEngine> {
         match mode {
             MatcherMode::Regex => Box::new(RegexEngine::builder(query).build()),
             MatcherMode::Fuzzy | MatcherMode::Exact => {
@@ -407,7 +407,7 @@ impl EngineFactory {
         }
     }
 
-    fn build_single(query: &str, mode: MatcherMode) -> Box<MatchEngine> {
+    fn build_single(query: &str, mode: MatcherMode) -> Box<dyn MatchEngine> {
         if query.starts_with('\'') {
             if mode == MatcherMode::Exact {
                 Box::new(FuzzyEngine::builder(&query[1..]).build())

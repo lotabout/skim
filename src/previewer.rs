@@ -218,7 +218,7 @@ impl EventHandler for Previewer {
 }
 
 impl Draw for Previewer {
-    fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
         canvas.clear()?;
         let (screen_width, screen_height) = canvas.size()?;
 
@@ -380,7 +380,7 @@ struct Printer {
 }
 
 impl Printer {
-    pub fn print_lines(&mut self, canvas: &mut Canvas, content: &[AnsiString]) {
+    pub fn print_lines(&mut self, canvas: &mut dyn Canvas, content: &[AnsiString]) {
         for (line_no, line) in content.iter().enumerate() {
             if line_no < self.skip_rows {
                 self.move_to_next_line();
@@ -411,7 +411,7 @@ impl Printer {
         self.col = 0;
     }
 
-    fn print_char_with_attr(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
+    fn print_char_with_attr(&mut self, canvas: &mut dyn Canvas, ch: char, attr: Attr) -> Result<()> {
         match ch {
             '\n' | '\r' | '\0' => {}
             '\t' => {
@@ -430,7 +430,7 @@ impl Printer {
         Ok(())
     }
 
-    fn print_char_raw(&mut self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<()> {
+    fn print_char_raw(&mut self, canvas: &mut dyn Canvas, ch: char, attr: Attr) -> Result<()> {
         if self.row < self.skip_rows || self.row >= self.height + self.skip_rows {
             return Ok(());
         }
@@ -452,7 +452,7 @@ impl Printer {
         Ok(())
     }
 
-    fn adjust_scroll_print(&self, canvas: &mut Canvas, ch: char, attr: Attr) -> Result<usize> {
+    fn adjust_scroll_print(&self, canvas: &mut dyn Canvas, ch: char, attr: Attr) -> Result<usize> {
         if self.row < self.skip_rows || self.col < self.skip_cols {
             canvas.put_char_with_attr(usize::max_value(), usize::max_value(), ch, attr)
         } else {

@@ -42,7 +42,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 pub struct Skim {}
 
 impl Skim {
-    pub fn run_with(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> Option<SkimOutput> {
+    pub fn run_with(options: &SkimOptions, source: Option<Box<dyn BufRead + Send>>) -> Option<SkimOutput> {
         let min_height = options
             .min_height
             .map(Skim::parse_height_string)
@@ -103,7 +103,7 @@ impl Skim {
         ret
     }
 
-    pub fn filter(options: &SkimOptions, source: Option<Box<BufRead + Send>>) -> i32 {
+    pub fn filter(options: &SkimOptions, source: Option<Box<dyn BufRead + Send>>) -> i32 {
         use crate::engine::{EngineFactory, MatcherMode};
 
         let output_ending = if options.print0 { "\0" } else { "\n" };
