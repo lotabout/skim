@@ -161,7 +161,7 @@ pub struct Rank {
 #[allow(dead_code)]
 pub enum MatchedRange {
     ByteRange(usize, usize), // range of bytes
-    Chars(Vec<usize>),       // individual characters matched
+    Chars(Vec<usize>),       // individual character indices matched
 }
 
 #[derive(Clone, Debug)]
@@ -194,10 +194,12 @@ impl MatchedItem {
         self
     }
 
-    pub fn to_chars_range(&self) -> Option<Vec<usize>> {
+    pub fn to_chars(&self) -> Option<Vec<usize>> {
         self.matched_range.as_ref().map(|r| match r {
             MatchedRange::ByteRange(start, end) => {
-                self.item.orig_text[*start..*end].chars().map(|x| x as usize).collect()
+                let first = self.item.orig_text[..*start].chars().count();
+                let last = first + self.item.orig_text[*start..*end].chars().count();
+                (first..last).collect()
             }
             MatchedRange::Chars(vec) => vec.clone(),
         })
