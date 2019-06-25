@@ -4,7 +4,7 @@ use bitflags::bitflags;
 use std::any::Any;
 use std::sync::mpsc::{Receiver, Sender};
 
-pub type EventArg = Box<Any + 'static + Send>;
+pub type EventArg = Box<dyn Any + 'static + Send>;
 pub type EventReceiver = Receiver<(Event, EventArg)>;
 pub type EventSender = Sender<(Event, EventArg)>;
 

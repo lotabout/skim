@@ -110,7 +110,7 @@ impl LinePrinter {
         self.end = self.start + self.container_width;
     }
 
-    fn print_ch_to_canvas(&mut self, canvas: &mut Canvas, ch: char, attr: Attr, skip: bool) {
+    fn print_ch_to_canvas(&mut self, canvas: &mut dyn Canvas, ch: char, attr: Attr, skip: bool) {
         let w = ch.width().unwrap_or(2);
 
         if !skip {
@@ -120,7 +120,7 @@ impl LinePrinter {
         self.screen_col += w;
     }
 
-    fn print_char_raw(&mut self, canvas: &mut Canvas, ch: char, attr: Attr, skip: bool) {
+    fn print_char_raw(&mut self, canvas: &mut dyn Canvas, ch: char, attr: Attr, skip: bool) {
         // hide the content that outside the screen, and show the hint(i.e. `..`) for overflow
         // the hidden character
 
@@ -148,7 +148,7 @@ impl LinePrinter {
         self.current_pos += w as i32;
     }
 
-    pub fn print_char(&mut self, canvas: &mut Canvas, ch: char, attr: Attr, skip: bool) {
+    pub fn print_char(&mut self, canvas: &mut dyn Canvas, ch: char, attr: Attr, skip: bool) {
         if ch != '\t' {
             self.print_char_raw(canvas, ch, attr, skip);
         } else {

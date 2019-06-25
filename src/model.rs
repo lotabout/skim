@@ -578,7 +578,7 @@ struct ModelEnv {
 }
 
 impl Draw for Model {
-    fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
         let (_screen_width, _screen_height) = canvas.size()?;
 
         let total = self.item_pool.len();
@@ -703,7 +703,7 @@ struct Status {
 
 #[allow(unused_assignments)]
 impl Draw for Status {
-    fn draw(&self, canvas: &mut Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
         canvas.clear()?;
         let (screen_width, _) = canvas.size()?;
 
