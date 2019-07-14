@@ -82,7 +82,9 @@ impl Input {
 
     // key_action is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
     pub fn parse_keymap(&mut self, key_action: &str) {
+        debug!("got key_action: {:?}", key_action);
         for (key, action_chain) in parse_key_action(key_action).into_iter() {
+            debug!("parsed key_action: {:?}: {:?}", key, action_chain);
             let action_chain = action_chain
                 .into_iter()
                 .filter_map(|(action, arg)| {
@@ -112,18 +114,28 @@ pub fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String
             Regex::new(r#"(?si)([^:]+?):((?:\+?[a-z-]+?(?:"[^"]*?"|'[^']*?'|\([^\)]*?\)|\[[^\]]*?\]|:[^:]*?)?\s*)+)(?:,|$)"#)
                 .unwrap();
         // grab key, action and arg out.
-        static ref RE_BIND: Regex = Regex::new(r#"(?si)([a-z-]+)(?:[:\(\["'](.+?)[\)"'\]]?)?(?:\+|$)"#).unwrap();
+        static ref RE_BIND: Regex = Regex::new(r#"(?si)([a-z-]+)("[^"]+?"|'[^']+?'|\([^\)]+?\)|\[[^\]]+?\]|:[^:]+?)?(?:\+|$)"#).unwrap();
     }
 
     RE.captures_iter(&key_action)
         .map(|caps| {
+            debug!("RE: caps: {:?}", caps);
             let key = caps.get(1).unwrap().as_str();
             let actions = RE_BIND
                 .captures_iter(caps.get(2).unwrap().as_str())
                 .map(|caps| {
+                    debug!("RE_BIND: caps: {:?}", caps);
                     (
                         caps.get(1).unwrap().as_str(),
-                        caps.get(2).map(|s| s.as_str().to_string()),
+                        caps.get(2).map(|s| {
+                            // (arg) => arg, :end_arg => arg
+                            let action = s.as_str();
+                            if action.starts_with(":") {
+                                return action[1..].to_string();
+                            } else {
+                                return action[1..action.len() - 1].to_string();
+                            }
+                        }),
                     )
                 })
                 .collect();
@@ -223,6 +235,14 @@ mod test {
         assert_eq!(
             ("ctrl-y", vec![("execute-silent", Some("echo {} | pbcopy".to_string()))]),
             key_action[1]
+        );
+
+        // #196
+        let key_action_str = "enter:execute($EDITOR +{2} {1})";
+        let key_action = parse_key_action(key_action_str);
+        assert_eq!(
+            ("enter", vec![("execute", Some("$EDITOR +{2} {1}".to_string()))]),
+            key_action[0]
         );
     }
 
