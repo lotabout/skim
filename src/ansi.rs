@@ -2,6 +2,7 @@
 use std::borrow::Cow;
 use std::default::Default;
 use std::mem;
+
 use tuikit::prelude::*;
 use vte::Perform;
 
@@ -69,60 +70,88 @@ impl Perform for ANSIParser {
         }
 
         let mut attr = self.last_attr;
-        match params.len() {
-            // CSI m, reset
-            0 => attr = Attr::default(),
-            // CSI <num> m
-            1 => match params[0] {
+        let mut iter = params.into_iter();
+
+        while let Some(&code) = iter.next() {
+            match code {
                 0 => attr = Attr::default(),
                 1 => attr.effect |= Effect::BOLD,
+                2 => attr.effect |= !Effect::BOLD,
                 4 => attr.effect |= Effect::UNDERLINE,
                 5 => attr.effect |= Effect::BLINK,
                 7 => attr.effect |= Effect::REVERSE,
                 num if num >= 30 && num <= 37 => {
                     attr.fg = Color::AnsiValue((num - 30) as u8);
                 }
+                38 => match iter.next() {
+                    Some(2) => {
+                        // ESC[ 38;2;<r>;<g>;<b> m Select RGB foreground color
+                        let or = iter.next();
+                        let og = iter.next();
+                        let ob = iter.next();
+                        if ob.is_none() {
+                            trace!("ignore CSI {:?} m", params);
+                            continue;
+                        }
+
+                        let r = *or.unwrap() as u8;
+                        let g = *og.unwrap() as u8;
+                        let b = *ob.unwrap() as u8;
+
+                        attr.fg = Color::Rgb(r, g, b);
+                    }
+                    Some(5) => {
+                        // ESC[ 38;5;<n> m Select foreground color
+                        let color = iter.next();
+                        if color.is_none() {
+                            trace!("ignore CSI {:?} m", params);
+                            continue;
+                        }
+                        attr.fg = Color::AnsiValue(*color.unwrap() as u8);
+                    }
+                    _ => {
+                        trace!("error on parsing CSI {:?} m", params);
+                    }
+                },
+                39 => attr.fg = Color::Default,
                 num if num >= 40 && num <= 47 => {
                     attr.bg = Color::AnsiValue((num - 40) as u8);
                 }
-                39 => attr.fg = Color::Default,
+                48 => match iter.next() {
+                    Some(2) => {
+                        // ESC[ 48;2;<r>;<g>;<b> m Select RGB background color
+                        let or = iter.next();
+                        let og = iter.next();
+                        let ob = iter.next();
+                        if ob.is_none() {
+                            trace!("ignore CSI {:?} m", params);
+                            continue;
+                        }
+
+                        let r = *or.unwrap() as u8;
+                        let g = *og.unwrap() as u8;
+                        let b = *ob.unwrap() as u8;
+
+                        attr.bg = Color::Rgb(r, g, b);
+                    }
+                    Some(5) => {
+                        // ESC[ 48;5;<n> m Select background color
+                        let color = iter.next();
+                        if color.is_none() {
+                            trace!("ignore CSI {:?} m", params);
+                            continue;
+                        }
+                        attr.bg = Color::AnsiValue(*color.unwrap() as u8);
+                    }
+                    _ => {
+                        trace!("ignore CSI {:?} m", params);
+                    }
+                },
                 49 => attr.bg = Color::Default,
                 _ => {
                     trace!("ignore CSI {:?} m", params);
                 }
-            },
-            // ESC[ 38;5;<n> m Select foreground color
-            // ESC[ 48;5;<n> m Select background color
-            3 => {
-                if params[1] != 5 {
-                    trace!("ignore CSI {:?} m", params);
-                } else {
-                    let color = Color::AnsiValue(params[2] as u8);
-                    if params[0] == 38 {
-                        attr.fg = color;
-                    } else if params[0] == 48 {
-                        attr.bg = color;
-                    }
-                }
             }
-            // ESC[ 38;2;<r>;<g>;<b> m Select RGB foreground color
-            // ESC[ 48;2;<r>;<g>;<b> m Select RGB background color
-            5 => {
-                if params[1] != 2 {
-                    trace!("ignore CSI {:?} m", params);
-                } else {
-                    let r = params[2] as u8;
-                    let g = params[3] as u8;
-                    let b = params[4] as u8;
-                    let color = Color::Rgb(r, g, b);
-                    if params[0] == 38 {
-                        attr.fg = color;
-                    } else if params[0] == 48 {
-                        attr.bg = color;
-                    }
-                }
-            }
-            _ => trace!("ignore CSI {:?} m", params),
         }
 
         self.attr_change(attr);
@@ -300,5 +329,21 @@ mod tests {
         assert_eq!(None, it.next());
 
         assert_eq!("ab", ansistring.into_inner())
+    }
+
+    #[test]
+    fn test_multiple_attributes() {
+        let input = "\x1B[1;31mhi";
+        let ansistring = ANSIParser::default().parse_ansi(input);
+        let mut it = ansistring.iter();
+        let attr = Attr {
+            fg: Color::AnsiValue(1),
+            effect: Effect::BOLD,
+            ..Attr::default()
+        };
+
+        assert_eq!(Some(('h', attr)), it.next());
+        assert_eq!(Some(('i', attr)), it.next());
+        assert_eq!(None, it.next());
     }
 }
