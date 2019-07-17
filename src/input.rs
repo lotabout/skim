@@ -176,6 +176,7 @@ fn get_default_key_map() -> HashMap<Key, ActionChain> {
     ret.insert(Key::Alt('b'),     vec![(Event::EvActBackwardWord,       None)]);
     ret.insert(Key::ShiftLeft,    vec![(Event::EvActBackwardWord,       None)]);
     ret.insert(Key::Ctrl('a'),    vec![(Event::EvActBeginningOfLine,    None)]);
+    ret.insert(Key::Home,         vec![(Event::EvActBeginningOfLine,    None)]);
     ret.insert(Key::Ctrl('l'),    vec![(Event::EvActClearScreen,        None)]);
     ret.insert(Key::Delete,       vec![(Event::EvActDeleteChar,         None)]);
     ret.insert(Key::Ctrl('d'),    vec![(Event::EvActDeleteCharEOF,      None)]);
