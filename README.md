@@ -55,6 +55,12 @@ skim project contains several components:
 dnf install skim
 ```
 
+### On Alpine
+
+```sh
+apk add skim
+```
+
 ### From sources
 
 Clone this repository and run the install script:
