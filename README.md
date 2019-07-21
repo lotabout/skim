@@ -49,6 +49,14 @@ skim project contains several components:
 
 ## Linux
 
+### On Fedora
+
+```sh
+dnf install skim
+```
+
+### From sources
+
 Clone this repository and run the install script:
 
 ```sh
@@ -61,6 +69,8 @@ Next: add `~/.skim/bin` to your PATH by putting the following line into your `~/
 ```
 export PATH="$PATH:$HOME/.skim/bin"
 ```
+
+### From binary
 
 As an alternative, you can directly [download the sk
 executable](https://github.com/lotabout/skim/releases), but extra utilities are recommended.
