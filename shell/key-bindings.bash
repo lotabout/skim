@@ -57,7 +57,7 @@ __skim_history__() (
   local line
   shopt -u nocaseglob nocasematch
   line=$(
-    HISTTIMEFORMAT= history |
+    HISTTIMEFORMAT= builtin history |
     SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS --tac --sync -n2..,.. --tiebreak=index $SKIM_CTRL_R_OPTS -m" $(__skimcmd) |
     command grep '^ *[0-9]') &&
     if [[ $- =~ H ]]; then

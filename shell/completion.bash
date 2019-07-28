@@ -8,6 +8,8 @@
 # - $SKIM_COMPLETION_TRIGGER (default: '**')
 # - $SKIM_COMPLETION_OPTS    (default: empty)
 
+if [[ $- =~ i ]]; then
+
 # To use custom commands instead of find, override _skim_compgen_{path,dir}
 if ! declare -f _skim_compgen_path > /dev/null; then
   _skim_compgen_path() {
@@ -120,11 +122,11 @@ _skim_handle_dynamic_completion() {
   if [ -n "$orig" ] && type "$orig" > /dev/null 2>&1; then
     $orig "$@"
   elif [ -n "$_skim_completion_loader" ]; then
-    orig_complete=$(complete -p "$cmd" 2> /dev/null)
+    orig_complete=$(complete -p "$orig_cmd" 2> /dev/null)
     _completion_loader "$@"
     ret=$?
     # _completion_loader may not have updated completion for the command
-    if [ "$(complete -p "$cmd" 2> /dev/null)" != "$orig_complete" ]; then
+    if [ "$(complete -p "$orig_cmd" 2> /dev/null)" != "$orig_complete" ]; then
       eval "$(complete | command grep " -F.* $orig_cmd$" | __skim_orig_completion_filter)"
       if [[ "$__skim_nospace_commands" = *" $orig_cmd "* ]]; then
         eval "${orig_complete/ -F / -o nospace -F }"
@@ -215,42 +217,50 @@ _skim_complete_kill() {
   skim="$(__skimcmd_complete)"
   selected=$(command ps -ef | sed 1d | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-50%} --min-height 15 --reverse $SKIM_DEFAULT_OPTIONS --preview 'echo {}' --preview-window down:3:wrap $SKIM_COMPLETION_OPTS" $skim -m | awk '{print $2}' | tr '\n' ' ')
   printf '\e[5n'
+
   if [ -n "$selected" ]; then
     COMPREPLY=( "$selected" )
     return 0
   fi
 }
+
 _skim_complete_telnet() {
   _skim_complete '-m' "$@" < <(
     command grep -v '^\s*\(#\|$\)' /etc/hosts | command grep -Fv '0.0.0.0' |
         awk '{if (length($2) > 0) {print $2}}' | sort -u
   )
 }
+
 _skim_complete_ssh() {
   _skim_complete '-m' "$@" < <(
-    cat <(cat ~/.ssh/config /etc/ssh/ssh_config 2> /dev/null | command grep -i '^host ' | command grep -v '[*?]' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}') \
+    cat <(cat ~/.ssh/config ~/.ssh/config.d/* /etc/ssh/ssh_config 2> /dev/null | command grep -i '^host ' | command grep -v '[*?]' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}') \
         <(command grep -oE '^[[a-z0-9.,:-]+' ~/.ssh/known_hosts | tr ',' '\n' | tr -d '[' | awk '{ print $1 " " $1 }') \
         <(command grep -v '^\s*\(#\|$\)' /etc/hosts | command grep -Fv '0.0.0.0') |
         awk '{if (length($2) > 0) {print $2}}' | sort -u
   )
 }
+
 _skim_complete_unset() {
   _skim_complete '-m' "$@" < <(
     declare -xp | sed 's/=.*//' | sed 's/.* //'
   )
 }
+
 _skim_complete_export() {
   _skim_complete '-m' "$@" < <(
     declare -xp | sed 's/=.*//' | sed 's/.* //'
   )
 }
+
 _skim_complete_unalias() {
   _skim_complete '-m' "$@" < <(
     alias | sed 's/=.*//' | sed 's/.* //'
   )
 }
+
 # skim options
 complete -o default -F _skim_opts_completion skim
+
 d_cmds="${SKIM_COMPLETION_DIR_COMMANDS:-cd pushd rmdir}"
 a_cmds="
   awk cat diff diff3
@@ -262,13 +272,16 @@ a_cmds="
   ln ls mv open rm rsync scp
   svn tar unzip zip"
 x_cmds="kill ssh telnet unset unalias export"
+
 # Preserve existing completion
 eval "$(complete |
   sed -E '/-F/!d; / _skim/d; '"/ ($(echo $d_cmds $a_cmds $x_cmds | sed 's/ /|/g; s/+/\\+/g'))$/"'!d' |
   __skim_orig_completion_filter)"
+
 if type _completion_loader > /dev/null 2>&1; then
   _skim_completion_loader=1
 fi
+
 _skim_defc() {
   local cmd func opts orig_var orig def
   cmd="$1"
@@ -283,22 +296,31 @@ _skim_defc() {
     complete -F "$func" $opts "$cmd"
   fi
 }
+
 # Anything
 for cmd in $a_cmds; do
   _skim_defc "$cmd" _skim_path_completion "-o default -o bashdefault"
 done
+
 # Directory
 for cmd in $d_cmds; do
   _skim_defc "$cmd" _skim_dir_completion "-o nospace -o dirnames"
 done
+
 unset _skim_defc
+
 # Kill completion
 complete -F _skim_complete_kill -o nospace -o default -o bashdefault kill
+
 # Host completion
 complete -F _skim_complete_ssh -o default -o bashdefault ssh
 complete -F _skim_complete_telnet -o default -o bashdefault telnet
+
 # Environment variables / Aliases
 complete -F _skim_complete_unset -o default -o bashdefault unset
 complete -F _skim_complete_export -o default -o bashdefault export
 complete -F _skim_complete_unalias -o default -o bashdefault unalias
+
 unset cmd d_cmds a_cmds x_cmds
+
+fi
