@@ -92,7 +92,10 @@ impl Model {
         let selection = Selection::with_options(options).theme(theme.clone());
         let matcher = Matcher::with_options(options);
         let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
-        let header = Header::empty().with_options(options).item_pool(item_pool.clone());
+        let header = Header::empty()
+            .with_options(options)
+            .item_pool(item_pool.clone())
+            .theme(theme.clone());
 
         let margins = options
             .margin

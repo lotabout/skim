@@ -39,6 +39,11 @@ impl Header {
         self
     }
 
+    pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
+        self.theme = theme;
+        self
+    }
+
     pub fn with_options(mut self, options: &SkimOptions) -> Self {
         if let Some(tabstop_str) = options.tabstop {
             let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
