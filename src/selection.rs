@@ -62,7 +62,7 @@ impl Selection {
             line_cursor: 0,
             hscroll_offset: 0,
             height: AtomicUsize::new(0),
-            tabstop: 0,
+            tabstop: 8,
             multi_selection: false,
             reverse: false,
             no_hscroll: false,
