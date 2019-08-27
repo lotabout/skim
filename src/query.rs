@@ -1,6 +1,8 @@
 use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
 use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
+use crate::util::escape_single_quote;
+use lazy_string_replace::LazyReplace;
 use std::mem;
 use std::sync::Arc;
 use tuikit::prelude::*;
@@ -120,7 +122,13 @@ impl Query {
             .cloned()
             .chain(self.cmd_after.iter().cloned().rev())
             .collect();
-        self.base_cmd.replace(&self.replstr, &arg)
+
+        let out = format!(
+            "{}",
+            self.base_cmd
+                .lazy_replace(&self.replstr[..], format_args!("'{}'", escape_single_quote(&arg)))
+        );
+        out
     }
 
     pub fn get_cmd_query(&self) -> String {

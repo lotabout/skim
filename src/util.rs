@@ -2,6 +2,7 @@ use crate::field::get_string_by_range;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::min;
+use std::fmt::Display;
 use std::prelude::v1::*;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
@@ -10,8 +11,8 @@ lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
 }
 
-pub fn escape_single_quote(text: &str) -> String {
-    text.replace("'", "'\\''")
+pub fn escape_single_quote<'a>(text: &'a str) -> impl Display + 'a {
+    lazy_string_replace::ReplacedString::new(text, '\'', "'\\''")
 }
 
 /// use to print a single line, properly handle the tabsteop and shift of a string
