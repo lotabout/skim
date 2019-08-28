@@ -116,12 +116,7 @@ impl Query {
     }
 
     pub fn get_cmd(&self) -> String {
-        let arg: String = self
-            .cmd_before
-            .iter()
-            .cloned()
-            .chain(self.cmd_after.iter().cloned().rev())
-            .collect();
+        let arg = self.get_cmd_query();
 
         let out = if arg.is_empty() {
             self.base_cmd.replace(&self.replstr[..], "")
