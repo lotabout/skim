@@ -12,7 +12,7 @@ lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
 }
 
-pub fn escape_single_quote<'a>(text: &'a str) -> impl Display + 'a {
+pub fn escape_single_quote(text: &str) -> impl Display + '_ {
     text.lazy_replace('\'', "'\\''")
 }
 
