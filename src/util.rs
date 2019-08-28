@@ -1,4 +1,5 @@
 use crate::field::get_string_by_range;
+use lazy_string_replace::LazyReplace;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::min;
@@ -12,7 +13,7 @@ lazy_static! {
 }
 
 pub fn escape_single_quote<'a>(text: &'a str) -> impl Display + 'a {
-    lazy_string_replace::ReplacedString::new(text, '\'', "'\\''")
+    text.lazy_replace('\'', "'\\''")
 }
 
 /// use to print a single line, properly handle the tabsteop and shift of a string
