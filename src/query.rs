@@ -126,11 +126,9 @@ impl Query {
         let out = if arg.is_empty() {
             self.base_cmd.replace(&self.replstr[..], "")
         } else {
-            format!(
-                "{}",
-                self.base_cmd
-                    .lazy_replace(&self.replstr[..], format_args!("'{}'", escape_single_quote(&arg)))
-            )
+            self.base_cmd
+                .lazy_replace(&self.replstr[..], format_args!("'{}'", escape_single_quote(&arg)))
+                .to_string()
         };
         out
     }
