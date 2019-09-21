@@ -1,5 +1,22 @@
 # Change Log
 
+## 0.6.9: 2019-09-22
+
+Bug fixes:
+- [PR #171](https://github.com/lotabout/skim/pull/171)
+    search with more than one multi-byte condition would crash skim.
+- [#194](https://github.com/lotabout/skim/issues/194)
+    color not working with ag
+- [#196](https://github.com/lotabout/skim/issues/196)
+    `+` in execute expression was eaten by skim
+- bind `Home` key to `begining-of-line` by default.
+- [#192](https://github.com/lotabout/skim/issues/192)
+    Prompt was eaten in shell completion
+- [#205](https://github.com/lotabout/skim/issues/205)
+    tabstop of selection was initialized to `0`, now to `8`.
+- [#207](https://github.com/lotabout/skim/issues/207)
+    color config not working for header
+
 ## 0.6.8: 2019-06-23
 
 Feature:
