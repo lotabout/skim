@@ -245,7 +245,7 @@ See the _KEY BINDINGS_ section of the man page for details.
 
 ## Sort Criteria
 
-There are four sort keys for results: `score, index, begin, end`, you can
+There are five sort keys for results: `score, index, begin, end, length`, you can
 specify how the records are sorted by `sk --tiebreak score,index,-begin` or any
 other order you want.
 
