@@ -80,10 +80,9 @@ impl Skim {
         // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
         let source = source.or_else(|| {
             let stdin = std::io::stdin();
-            if !isatty(stdin.as_raw_fd()).unwrap_or(true) {
-                Some(Box::new(BufReader::new(stdin)))
-            } else {
-                None
+            match isatty(stdin.as_raw_fd()) {
+                Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
+                Ok(true) | Err(_)  => None,
             }
         });
 
