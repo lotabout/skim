@@ -69,7 +69,8 @@ bindkey '\ec' skim-cd-widget
 skim-history-widget() {
   local selected num
   setopt localoptions noglobsubst noposixbuiltins pipefail 2> /dev/null
-  selected=( $(fc -rl 1 |
+  local cmd="${SKIM_CTRL_R_COMMAND:-"fc -rl 1"}"
+  selected=( $(eval "$cmd" |
     SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS -n2..,.. --tiebreak=index $SKIM_CTRL_R_OPTS --query=${(qqq)LBUFFER} -m" $(__skimcmd)) )
   local ret=$?
   if [ -n "$selected" ]; then
