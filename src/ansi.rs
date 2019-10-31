@@ -281,17 +281,20 @@ impl<'a> Iterator for AnsiStringIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let ch = self.chars_iter.as_mut().and_then(|iter| iter.next());
-        if ch.is_some() {
-            Some((ch.unwrap(), self.attr))
-        } else if ch.is_none() && self.fragment_idx >= self.fragments.len() {
-            None
-        } else {
-            // try next fragment
-            let (attr, string) = &self.fragments[self.fragment_idx];
-            self.attr = *attr;
-            self.chars_iter.replace(string.chars());
-            self.fragment_idx += 1;
-            self.next()
+        match ch {
+            Some(c) => Some((c, self.attr)),
+            None => {
+                if self.fragment_idx >= self.fragments.len() {
+                    None
+                } else {
+                    // try next fragment
+                    let (attr, string) = &self.fragments[self.fragment_idx];
+                    self.attr = *attr;
+                    self.chars_iter.replace(string.chars());
+                    self.fragment_idx += 1;
+                    self.next()
+                }
+            }
         }
     }
 }
