@@ -160,7 +160,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").multiple(true).takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi").multiple(true))
         .arg(Arg::with_name("exact").long("exact").short("e").multiple(true))
-        .arg(Arg::with_name("cmd").long("cmd").short("cmd").multiple(true).takes_value(true))
+        .arg(Arg::with_name("cmd").long("cmd").short("c").multiple(true).takes_value(true))
         .arg(Arg::with_name("interactive").long("interactive").short("i").multiple(true))
         .arg(Arg::with_name("query").long("query").short("q").multiple(true).takes_value(true))
         .arg(Arg::with_name("cmd-query").long("cmd-query").multiple(true).takes_value(true))
