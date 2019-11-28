@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
+use regex::Regex;
+use tuikit::event::Event as TermEvent;
+use tuikit::key::{from_keyname, Key, MouseButton};
+
 ///! Input will listens to user input, modify the query string, send special
 ///! keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
 use crate::event::{parse_action, Event, EventArg};
-use regex::Regex;
-use std::collections::HashMap;
-use tuikit::event::Event as TermEvent;
-use tuikit::key::{from_keyname, Key};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActionArg {
@@ -38,6 +40,17 @@ impl Input {
     }
 
     pub fn translate_event(&self, event: TermEvent) -> Vec<(Event, EventArg)> {
+        // align mouse event's position to (0, 0), same with binding.
+        let event = match event {
+            TermEvent::Key(Key::MousePress(MouseButton::WheelUp, _, _)) => {
+                TermEvent::Key(Key::MousePress(MouseButton::WheelUp, 0, 0))
+            }
+            TermEvent::Key(Key::MousePress(MouseButton::WheelDown, _, _)) => {
+                TermEvent::Key(Key::MousePress(MouseButton::WheelDown, 0, 0))
+            }
+            x => x,
+        };
+
         match event {
             // search event from keymap
             TermEvent::Key(key) => self
@@ -190,8 +203,8 @@ fn get_default_key_map() -> HashMap<Key, ActionChain> {
     ret.insert(Key::Alt('f'),     vec![(Event::EvActForwardWord,        None)]);
     ret.insert(Key::ShiftRight,   vec![(Event::EvActForwardWord,        None)]);
     ret.insert(Key::Alt('d'),     vec![(Event::EvActKillWord,           None)]);
-    ret.insert(Key::ShiftUp,      vec![(Event::EvActPreviewPageUp,      None)]);
-    ret.insert(Key::ShiftDown,    vec![(Event::EvActPreviewPageDown,    None)]);
+    ret.insert(Key::ShiftUp,      vec![(Event::EvActPreviewUp,          None)]);
+    ret.insert(Key::ShiftDown,    vec![(Event::EvActPreviewDown,        None)]);
     ret.insert(Key::PageDown,     vec![(Event::EvActPageDown,           None)]);
     ret.insert(Key::PageUp,       vec![(Event::EvActPageUp,             None)]);
     ret.insert(Key::Ctrl('r'),    vec![(Event::EvActRotateMode,         None)]);
@@ -207,6 +220,8 @@ fn get_default_key_map() -> HashMap<Key, ActionChain> {
     ret.insert(Key::Up,           vec![(Event::EvActUp,                 None)]);
     ret.insert(Key::Ctrl('y'),    vec![(Event::EvActYank,               None)]);
     ret.insert(Key::Null,         vec![(Event::EvActAbort,              None)]);
+    ret.insert(Key::MousePress(MouseButton::WheelUp, 0, 0), vec![(Event::EvActPreviewUp,    None)]);
+    ret.insert(Key::MousePress(MouseButton::WheelDown, 0, 0), vec![(Event::EvActPreviewDown,    None)]);
     ret
 }
 
