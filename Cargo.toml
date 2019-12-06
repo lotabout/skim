@@ -38,6 +38,7 @@ derive_builder = "0.7.1"
 bitflags = "1.0.4"
 timer = "0.2.0"
 chrono = "0.4"
+lazy-string-replace = "0.1.1"
 
 [features]
 default = []
