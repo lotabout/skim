@@ -28,6 +28,7 @@ use crate::event::{EventReceiver, EventSender};
 use crate::model::Model;
 pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
+pub use crate::score::FuzzyAlgorithm;
 use crate::reader::Reader;
 use nix::unistd::isatty;
 use std::env;
@@ -148,7 +149,7 @@ impl Skim {
             MatcherMode::Fuzzy
         };
 
-        let engine = EngineFactory::build(query, matcher_mode);
+        let engine = EngineFactory::build(query, matcher_mode, options.algorithm);
 
         //------------------------------------------------------------------------------
         // start

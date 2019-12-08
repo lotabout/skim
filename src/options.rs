@@ -1,4 +1,5 @@
 use derive_builder::Builder;
+use crate::FuzzyAlgorithm;
 
 #[derive(Debug, Builder)]
 #[builder(build_fn(name = "final_build"))]
@@ -41,6 +42,7 @@ pub struct SkimOptions<'a> {
     pub header_lines: usize,
     pub layout: &'a str,
     pub filter: &'a str,
+    pub algorithm: FuzzyAlgorithm,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -83,6 +85,7 @@ impl<'a> Default for SkimOptions<'a> {
             header_lines: 0,
             layout: "",
             filter: "",
+            algorithm: FuzzyAlgorithm::default(),
         }
     }
 }

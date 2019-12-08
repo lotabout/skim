@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use crate::FuzzyAlgorithm;
 
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
@@ -73,12 +74,13 @@ impl Matcher {
         query: &str,
         item_pool: Arc<ItemPool>,
         mode: Option<MatcherMode>,
+        fuzzy_algorithm: FuzzyAlgorithm,
         callback: C,
     ) -> MatcherControl
     where
         C: Fn(Arc<SpinLock<Vec<MatchedItem>>>) + Send + 'static,
     {
-        let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode));
+        let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode), fuzzy_algorithm);
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         let processed = Arc::new(AtomicUsize::new(0));
