@@ -28,8 +28,8 @@ use crate::event::{EventReceiver, EventSender};
 use crate::model::Model;
 pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
-pub use crate::score::FuzzyAlgorithm;
 use crate::reader::Reader;
+pub use crate::score::FuzzyAlgorithm;
 use nix::unistd::isatty;
 use std::env;
 use std::io::BufRead;
@@ -83,7 +83,7 @@ impl Skim {
             let stdin = std::io::stdin();
             match isatty(stdin.as_raw_fd()) {
                 Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
-                Ok(true) | Err(_)  => None,
+                Ok(true) | Err(_) => None,
             }
         });
 

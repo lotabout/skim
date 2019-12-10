@@ -1,11 +1,9 @@
-use fuzzy_matcher;
 ///! score is responsible for calculating the scores of the similarity between
 ///! the query and the choice.
-use regex::Regex;
-use fuzzy_matcher::FuzzyMatcher;
-use fuzzy_matcher::skim::{SkimMatcher, SkimMatcherV2};
 use fuzzy_matcher::clangd::ClangdMatcher;
-
+use fuzzy_matcher::skim::{SkimMatcher, SkimMatcherV2};
+use fuzzy_matcher::FuzzyMatcher;
+use regex::Regex;
 
 #[derive(Debug, Copy, Clone)]
 pub enum FuzzyAlgorithm {

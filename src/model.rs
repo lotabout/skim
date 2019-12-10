@@ -567,12 +567,16 @@ impl Model {
         let _ = self.tx.send((Event::EvHeartBeat, Box::new(true)));
 
         let tx = self.tx.clone();
-        let new_matcher_control = self
-            .matcher
-            .run(&query, self.item_pool.clone(), self.matcher_mode, self.fuzzy_algorithm, move |_| {
+        let new_matcher_control = self.matcher.run(
+            &query,
+            self.item_pool.clone(),
+            self.matcher_mode,
+            self.fuzzy_algorithm,
+            move |_| {
                 // notify refresh immediately
                 let _ = tx.send((Event::EvHeartBeat, Box::new(true)));
-            });
+            },
+        );
 
         self.matcher_control.replace(new_matcher_control);
     }

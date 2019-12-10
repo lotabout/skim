@@ -3,12 +3,12 @@ pub use crate::engine::MatcherMode;
 use crate::item::{ItemPool, MatchedItem};
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
+use crate::FuzzyAlgorithm;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use crate::FuzzyAlgorithm;
 
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,

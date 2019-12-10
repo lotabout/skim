@@ -1,5 +1,5 @@
-use derive_builder::Builder;
 use crate::FuzzyAlgorithm;
+use derive_builder::Builder;
 
 #[derive(Debug, Builder)]
 #[builder(build_fn(name = "final_build"))]

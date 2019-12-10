@@ -6,7 +6,7 @@ extern crate skim;
 extern crate time;
 
 use clap::{App, Arg, ArgMatches};
-use skim::{Skim, SkimOptions, SkimOptionsBuilder, FuzzyAlgorithm};
+use skim::{FuzzyAlgorithm, Skim, SkimOptions, SkimOptionsBuilder};
 use std::env;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -308,7 +308,9 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         )
         .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
         .filter(options.values_of("filter").and_then(|vals| vals.last()).unwrap_or(""))
-        .algorithm(FuzzyAlgorithm::of(options.values_of("algorithm").and_then(|vals| vals.last()).unwrap()))
+        .algorithm(FuzzyAlgorithm::of(
+            options.values_of("algorithm").and_then(|vals| vals.last()).unwrap(),
+        ))
         .build()
         .unwrap()
 }
