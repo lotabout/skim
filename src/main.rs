@@ -6,7 +6,7 @@ extern crate skim;
 extern crate time;
 
 use clap::{App, Arg, ArgMatches};
-use skim::{Skim, SkimOptions, SkimOptionsBuilder};
+use skim::{FuzzyAlgorithm, Skim, SkimOptions, SkimOptionsBuilder};
 use std::env;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -27,6 +27,8 @@ Usage: sk [options]
     -d, --delimiter \\t  specify the delimiter(in REGEX) for fields
     -e, --exact          start skim in exact mode
     --regex              use regex instead of fuzzy match
+    --algo=TYPE          Fuzzy matching algorithm:
+                         [skim_v1|skim_v2|clangd] (default: skim_v2)
 
   Interface
     -b, --bind KEYBINDS  comma seperated keybindings, in KEY:ACTION
@@ -83,7 +85,6 @@ Usage: sk [options]
 
   Reserved (not used for now)
     --extended
-    --algo=TYPE
     --literal
     --cycle
     --hscroll-off=COL
@@ -179,7 +180,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("preview-window").long("preview-window").multiple(true).takes_value(true).default_value("right:50%"))
         .arg(Arg::with_name("reverse").long("reverse").multiple(true))
 
-        .arg(Arg::with_name("algorithm").long("algo").multiple(true).takes_value(true).default_value(""))
+        .arg(Arg::with_name("algorithm").long("algo").multiple(true).takes_value(true).default_value("skim_v2"))
         .arg(Arg::with_name("literal").long("literal").multiple(true))
         .arg(Arg::with_name("cycle").long("cycle").multiple(true))
         .arg(Arg::with_name("no-hscroll").long("no-hscroll").multiple(true))
@@ -308,6 +309,9 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         )
         .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
         .filter(options.values_of("filter").and_then(|vals| vals.last()).unwrap_or(""))
+        .algorithm(FuzzyAlgorithm::of(
+            options.values_of("algorithm").and_then(|vals| vals.last()).unwrap(),
+        ))
         .build()
         .unwrap()
 }

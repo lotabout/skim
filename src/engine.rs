@@ -1,6 +1,7 @@
 ///! matcher engine
 use crate::item::{Item, MatchedItem, MatchedRange, Rank};
 use crate::score;
+use crate::score::FuzzyAlgorithm;
 use regex::Regex;
 use std::sync::Arc;
 
@@ -103,13 +104,20 @@ impl MatchEngine for RegexEngine {
 #[derive(Debug)]
 struct FuzzyEngine {
     query: String,
+    algorithm: FuzzyAlgorithm,
 }
 
 impl FuzzyEngine {
     pub fn builder(query: &str) -> Self {
         FuzzyEngine {
             query: query.to_string(),
+            algorithm: FuzzyAlgorithm::default(),
         }
+    }
+
+    pub fn algorithm(mut self, algorithm: FuzzyAlgorithm) -> Self {
+        self.algorithm = algorithm;
+        self
     }
 
     pub fn build(self) -> Self {
@@ -122,14 +130,15 @@ impl MatchEngine for FuzzyEngine {
         // iterate over all matching fields:
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges() {
-            matched_result = score::fuzzy_match(&item.get_text()[start..end], &self.query).map(|(s, vec)| {
-                if start != 0 {
-                    let start_char = &item.get_text()[..start].chars().count();
-                    (s, vec.iter().map(|x| x + start_char).collect())
-                } else {
-                    (s, vec)
-                }
-            });
+            matched_result =
+                score::fuzzy_match(&item.get_text()[start..end], &self.query, self.algorithm).map(|(s, vec)| {
+                    if start != 0 {
+                        let start_char = &item.get_text()[..start].chars().count();
+                        (s, vec.iter().map(|x| x + start_char).collect())
+                    } else {
+                        (s, vec)
+                    }
+                });
 
             if matched_result.is_some() {
                 break;
@@ -274,10 +283,13 @@ struct OrEngine {
 }
 
 impl OrEngine {
-    pub fn builder(query: &str, mode: MatcherMode) -> Self {
+    pub fn builder(query: &str, mode: MatcherMode, fuzzy_algorithm: FuzzyAlgorithm) -> Self {
         // mock
         OrEngine {
-            engines: RE_OR.split(query).map(|q| EngineFactory::build(q, mode)).collect(),
+            engines: RE_OR
+                .split(query)
+                .map(|q| EngineFactory::build(q, mode, fuzzy_algorithm))
+                .collect(),
         }
     }
 
@@ -313,7 +325,7 @@ struct AndEngine {
 }
 
 impl AndEngine {
-    pub fn builder(query: &str, mode: MatcherMode) -> Self {
+    pub fn builder(query: &str, mode: MatcherMode, fuzzy_algorithm: FuzzyAlgorithm) -> Self {
         let query_trim = query.trim_matches(|c| c == ' ' || c == '|');
         let mut engines = vec![];
         let mut last = 0;
@@ -321,18 +333,20 @@ impl AndEngine {
             let (start, end) = (mat.start(), mat.end());
             let term = &query_trim[last..start].trim_matches(|c| c == ' ' || c == '|');
             if !term.is_empty() {
-                engines.push(EngineFactory::build(term, mode));
+                engines.push(EngineFactory::build(term, mode, fuzzy_algorithm));
             }
 
             if !mat.as_str().trim().is_empty() {
-                engines.push(Box::new(OrEngine::builder(mat.as_str().trim(), mode).build()));
+                engines.push(Box::new(
+                    OrEngine::builder(mat.as_str().trim(), mode, fuzzy_algorithm).build(),
+                ));
             }
             last = end;
         }
 
         let term = &query_trim[last..].trim_matches(|c| c == ' ' || c == '|');
         if !term.is_empty() {
-            engines.push(EngineFactory::build(term, mode));
+            engines.push(EngineFactory::build(term, mode, fuzzy_algorithm));
         }
 
         AndEngine { engines }
@@ -394,23 +408,23 @@ impl MatchEngine for AndEngine {
 //------------------------------------------------------------------------------
 pub struct EngineFactory {}
 impl EngineFactory {
-    pub fn build(query: &str, mode: MatcherMode) -> Box<dyn MatchEngine> {
+    pub fn build(query: &str, mode: MatcherMode, fuzzy_algorithm: FuzzyAlgorithm) -> Box<dyn MatchEngine> {
         match mode {
             MatcherMode::Regex => Box::new(RegexEngine::builder(query).build()),
             MatcherMode::Fuzzy | MatcherMode::Exact => {
                 if query.contains(' ') {
-                    Box::new(AndEngine::builder(query, mode).build())
+                    Box::new(AndEngine::builder(query, mode, fuzzy_algorithm).build())
                 } else {
-                    EngineFactory::build_single(query, mode)
+                    EngineFactory::build_single(query, mode, fuzzy_algorithm)
                 }
             }
         }
     }
 
-    fn build_single(query: &str, mode: MatcherMode) -> Box<dyn MatchEngine> {
+    fn build_single(query: &str, mode: MatcherMode, fuzzy_algorithm: FuzzyAlgorithm) -> Box<dyn MatchEngine> {
         if query.starts_with('\'') {
             if mode == MatcherMode::Exact {
-                Box::new(FuzzyEngine::builder(&query[1..]).build())
+                Box::new(FuzzyEngine::builder(&query[1..]).algorithm(fuzzy_algorithm).build())
             } else {
                 Box::new(ExactEngine::builder(&query[1..], Algorithm::Exact).build())
             }
@@ -427,7 +441,7 @@ impl EngineFactory {
         } else if mode == MatcherMode::Exact {
             Box::new(ExactEngine::builder(query, Algorithm::Exact).build())
         } else {
-            Box::new(FuzzyEngine::builder(query).build())
+            Box::new(FuzzyEngine::builder(query).algorithm(fuzzy_algorithm).build())
         }
     }
 }
@@ -435,25 +449,34 @@ impl EngineFactory {
 #[cfg(test)]
 mod test {
     use super::{EngineFactory, MatcherMode};
+    use crate::engine::FuzzyAlgorithm;
 
     #[test]
     fn test_engine_factory() {
-        let x1 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Fuzzy);
+        let x1 = EngineFactory::build(
+            "'abc | def ^gh ij | kl mn",
+            MatcherMode::Fuzzy,
+            FuzzyAlgorithm::default(),
+        );
         assert_eq!(
             x1.display(),
             "(And: (Or: (Exact: abc), (Fuzzy: def)), (PrefixExact: gh), (Or: (Fuzzy: ij), (Fuzzy: kl)), (Fuzzy: mn))"
         );
 
-        let x3 = EngineFactory::build("'abc | def ^gh ij | kl mn", MatcherMode::Regex);
+        let x3 = EngineFactory::build(
+            "'abc | def ^gh ij | kl mn",
+            MatcherMode::Regex,
+            FuzzyAlgorithm::default(),
+        );
         assert_eq!(x3.display(), "(Regex: 'abc | def ^gh ij | kl mn)");
 
-        let x = EngineFactory::build("abc ", MatcherMode::Fuzzy);
+        let x = EngineFactory::build("abc ", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
         assert_eq!(x.display(), "(And: (Fuzzy: abc))");
 
-        let x = EngineFactory::build("abc def", MatcherMode::Fuzzy);
+        let x = EngineFactory::build("abc def", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
         assert_eq!(x.display(), "(And: (Fuzzy: abc), (Fuzzy: def))");
 
-        let x = EngineFactory::build("abc | def", MatcherMode::Fuzzy);
+        let x = EngineFactory::build("abc | def", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
         assert_eq!(x.display(), "(And: (Or: (Fuzzy: abc), (Fuzzy: def)))");
     }
 }

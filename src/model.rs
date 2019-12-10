@@ -23,6 +23,7 @@ use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
+use crate::FuzzyAlgorithm;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -47,6 +48,7 @@ pub struct Model {
     tx: EventSender,
 
     matcher_mode: Option<MatcherMode>,
+    fuzzy_algorithm: FuzzyAlgorithm,
     reader_timer: Instant,
     matcher_timer: Instant,
     reader_control: Option<ReaderControl>,
@@ -119,6 +121,7 @@ impl Model {
             reader_control: None,
             matcher_control: None,
             matcher_mode: None,
+            fuzzy_algorithm: FuzzyAlgorithm::default(),
 
             header,
             preview_hidden: true,
@@ -158,6 +161,8 @@ impl Model {
         if options.regex {
             self.matcher_mode = Some(MatcherMode::Regex);
         }
+
+        self.fuzzy_algorithm = options.algorithm;
 
         // preview related
         let (preview_direction, preview_size, preview_wrap, preview_shown) = options
@@ -562,12 +567,16 @@ impl Model {
         let _ = self.tx.send((Event::EvHeartBeat, Box::new(true)));
 
         let tx = self.tx.clone();
-        let new_matcher_control = self
-            .matcher
-            .run(&query, self.item_pool.clone(), self.matcher_mode, move |_| {
+        let new_matcher_control = self.matcher.run(
+            &query,
+            self.item_pool.clone(),
+            self.matcher_mode,
+            self.fuzzy_algorithm,
+            move |_| {
                 // notify refresh immediately
                 let _ = tx.send((Event::EvHeartBeat, Box::new(true)));
-            });
+            },
+        );
 
         self.matcher_control.replace(new_matcher_control);
     }

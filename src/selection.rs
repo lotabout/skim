@@ -318,7 +318,13 @@ impl EventHandler for Selection {
 }
 
 impl Selection {
-    fn draw_item(&self, canvas: &mut dyn Canvas, row: usize, matched_item: &MatchedItem, is_current: bool) -> Result<()> {
+    fn draw_item(
+        &self,
+        canvas: &mut dyn Canvas,
+        row: usize,
+        matched_item: &MatchedItem,
+        is_current: bool,
+    ) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
 
         // update item heights
