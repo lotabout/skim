@@ -69,9 +69,14 @@ impl Perform for ANSIParser {
             return;
         }
 
-        let mut attr = self.last_attr;
-        let mut iter = params.into_iter();
+        // \[[m => means reset
+        let mut attr = if params.is_empty() {
+            Attr::default()
+        } else {
+            self.last_attr
+        };
 
+        let mut iter = params.into_iter();
         while let Some(&code) = iter.next() {
             match code {
                 0 => attr = Attr::default(),
@@ -245,7 +250,8 @@ impl AnsiString {
     }
 
     pub fn has_attrs(&self) -> bool {
-        self.fragments.len() > 1
+        // more than 1 fragments or is not default attr
+        self.fragments.len() > 1 || (!self.fragments.is_empty() && self.fragments[0].0 != Attr::default())
     }
 
     pub fn from_str(raw: &str) -> AnsiString {
@@ -348,5 +354,12 @@ mod tests {
         assert_eq!(Some(('h', attr)), it.next());
         assert_eq!(Some(('i', attr)), it.next());
         assert_eq!(None, it.next());
+    }
+
+    #[test]
+    fn test_reset() {
+        let input = "\x1B[35mA\x1B[mB";
+        let ansistring = ANSIParser::default().parse_ansi(input);
+        assert_eq!(ansistring.fragments.len(), 2);
     }
 }
