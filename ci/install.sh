@@ -46,20 +46,17 @@ main() {
     # For test
     case $TARGET in
         x86_64-unknown-linux-gnu|i686-unknown-linux-gnu)
-            sudo add-apt-repository -y ppa:jonathonf/python-3.6
-            sudo apt-get update
-            sudo apt-get -y install python3.6
-            python3.6 -V
+            python3 -V
             tmux -V
             sudo apt-get install -y zsh
             stty cols 80
             ;;
         x86_64-apple-darwin|i686-apple-darwin)
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install tmux
+            HOMEBREW_NO_AUTO_UPDATE=1 brew install zsh
             python -V
             python3 -V
-            brew install tmux
             tmux -V
-            brew install zsh
             stty cols 80
             ;;
     esac
