@@ -61,6 +61,12 @@ dnf install skim
 apk add skim
 ```
 
+### On Arch
+
+```sh
+pacman -S skim
+```
+
 ### From sources
 
 Clone this repository and run the install script:
