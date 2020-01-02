@@ -56,12 +56,6 @@ impl Skim {
         let (tx, rx): (EventSender, EventReceiver) = channel();
         let term = Arc::new(Term::with_options(TermOptions::default().min_height(min_height).height(height)).unwrap());
 
-        if options.no_mouse {
-            let _ = term.disable_mouse_support();
-        } else {
-            let _ = term.enable_mouse_support();
-        }
-
         //------------------------------------------------------------------------------
         // input
         let mut input = input::Input::new();
@@ -89,7 +83,7 @@ impl Skim {
             let stdin = std::io::stdin();
             match isatty(stdin.as_raw_fd()) {
                 Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
-                Ok(true) | Err(_) => None,
+                Ok(true) | Err(_)  => None,
             }
         });
 
