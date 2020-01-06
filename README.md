@@ -10,8 +10,8 @@ It is blazingly fast as it reads the data source asynchronously.
 
 ![skim demo](https://cloud.githubusercontent.com/assets/1527040/21603846/09138f6e-d1db-11e6-9466-711cc5b1ead8.gif)
 
-skim provides a single executable: `sk`, basically anywhere you would want to use
-`grep` try `sk` instead.
+skim provides a single executable: `sk`. Basically anywhere you would want to use
+`grep`, try `sk` instead.
 
 # Table of contents
 
@@ -78,7 +78,7 @@ git clone --depth 1 git@github.com:lotabout/skim.git ~/.skim
 
 Next: add `~/.skim/bin` to your PATH by putting the following line into your `~/.bashrc`
 
-```
+```sh
 export PATH="$PATH:$HOME/.skim/bin"
 ```
 
@@ -91,7 +91,7 @@ executable](https://github.com/lotabout/skim/releases), but extra utilities are 
 
 Using Homebrew:
 
-```
+```sh
 brew install sk
 ```
 
@@ -142,7 +142,7 @@ interface for invoking commands.
 
 Try the following
 
-```
+```sh
 # directly invoke skim
 sk
 
@@ -155,15 +155,17 @@ the ones you selected in Vim.
 ## As Interactive Interface
 
 `skim` can invoke other commands dynamically. Normally you would want to
-integrate it with [rg](https://github.com/BurntSushi/ripgrep)
-[ag](https://github.com/ggreer/the_silver_searcher) or
-[ack](https://github.com/petdance/ack2) for searching contents in a project
+integrate it with [grep](https://www.gnu.org/software/grep/), [ack](https://github.com/petdance/ack2), [ag](https://github.com/ggreer/the_silver_searcher), or [rg](https://github.com/BurntSushi/ripgrep) for searching contents in a project
 directory:
 
-```
-# work with ag
+```sh
+# works with grep
+sk --ansi -i -c 'grep -rI --color=always --line-number "{}" .'
+# works with ack
+sk --ansi -i -c 'ack --color "{}"'
+# works with ag
 sk --ansi -i -c 'ag --color "{}"'
-# or with rg
+# works with rg
 sk --ansi -i -c 'rg --color=always --line-number "{}"'
 ```
 
@@ -197,17 +199,17 @@ Some commonly used keybindings:
 
 `skim` also supports the combination of tokens.
 
-- space has the meaning of `AND`. With the term `src main`, `skim` will search
+- Whitespace has the meaning of `AND`. With the term `src main`, `skim` will search
     for items that match **both** `src` and `main`.
 - ` | ` means `OR` (note the spaces around `|`). With the term `.md$ |
     .markdown$`, `skim` will search for items ends with either `.md` or
     `.markdown`.
-- `OR` have higher precedence. So `readme .md$ | .markdown$` is grouped into
+- `OR` has higher precedence. So `readme .md$ | .markdown$` is grouped into
     `readme AND (.md$ OR .markdown$)`.
 
 In case that you want to use regular expressions, `skim` provides `regex` mode:
 
-```
+```sh
 sk --regex
 ```
 
@@ -230,11 +232,13 @@ list of options.
 
 Specify the bindings with comma seperated pairs(no space allowed), example:
 
-`sk --bind 'alt-a:select-all,alt-d:deselect-all'`
+```sh
+sk --bind 'alt-a:select-all,alt-d:deselect-all'
+```
 
 Additionaly, use `+` to concatenate actions, such as `execute-silent(echo {} | pbcopy)+abort`.
 
-See _KEY BINDINGS_ section of the man page for details.
+See the _KEY BINDINGS_ section of the man page for details.
 
 ## Sort Criteria
 
@@ -247,7 +251,7 @@ other order you want.
 It is a high chance that you are a better artist than me. Luckily you won't
 be stuck with the default colors, `skim` supports customization of the color scheme.
 
-```
+```sh
 --color=[BASE_SCHEME][,COLOR:ANSI]
 ```
 
@@ -255,7 +259,7 @@ The configuration of colors starts with the name of the base color scheme,
 followed by custom color mappings. For example:
 
 
-```
+```sh
 sk --color=current_bg:24
 sk --color=light,fg:232,bg:255,current_bg:116,info:27
 ```
@@ -273,7 +277,7 @@ See `--color` option in the man page for details.
 
 With "interactive mode", you could invoke command dynamically. Try out:
 
-```
+```sh
 sk --ansi -i -c 'rg --color=always --line-number "{}"'
 ```
 
@@ -294,7 +298,7 @@ If you want to further narrow down the result returned by the command, press
 
 You can set up key bindings for starting external processes without leaving skim (`execute`, `execute-silent`).
 
-```
+```sh
 # Press F1 to open the file with less without leaving skim
 # Press CTRL-Y to copy the line to clipboard and aborts skim (requires pbcopy)
 sk --bind 'f1:execute(less -f {}),ctrl-y:execute-silent(echo {} | pbcopy)+abort'
@@ -308,7 +312,7 @@ finally decide which lines to pick by checking the context around the line.
 `grep` and `ag` has an option `--context`, skim can do better with preview
 window. For example:
 
-```
+```sh
 sk --ansi -i -c 'ag --color "{}"' --preview "preview.sh {}"
 ```
 
@@ -342,7 +346,7 @@ Normally only plugin users need to understand this.
 
 For example, you have the data source with the format:
 
-```
+```sh
 <filename>:<line number>:<column number>
 ```
 
@@ -427,7 +431,7 @@ of your files not shown.
 As described in [#3](https://github.com/lotabout/skim/issues/3), in the Vim
 plugin, `SKIM_DEFAULT_COMMAND` is set to the command by default:
 
-```
+```vim
 let $SKIM_DEFAULT_COMMAND = "git ls-tree -r --name-only HEAD || rg --files || ag -l -g \"\" || find ."
 ```
 
