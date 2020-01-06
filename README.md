@@ -155,8 +155,11 @@ the ones you selected in Vim.
 ## As Interactive Interface
 
 `skim` can invoke other commands dynamically. Normally you would want to
-integrate it with [grep](https://www.gnu.org/software/grep/), [ack](https://github.com/petdance/ack2), [ag](https://github.com/ggreer/the_silver_searcher), or [rg](https://github.com/BurntSushi/ripgrep) for searching contents in a project
-directory:
+integrate it with [grep](https://www.gnu.org/software/grep/),
+[ack](https://github.com/petdance/ack2),
+[ag](https://github.com/ggreer/the_silver_searcher), or
+[rg](https://github.com/BurntSushi/ripgrep) for searching contents in a
+project directory:
 
 ```sh
 # works with grep
