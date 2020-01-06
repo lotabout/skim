@@ -76,7 +76,7 @@ git clone --depth 1 git@github.com:lotabout/skim.git ~/.skim
 ~/.skim/install
 ```
 
-Next: add `~/.skim/bin` to your PATH by putting the following line into your `~/.bashrc`
+Next, add `~/.skim/bin` to your PATH by putting the following line into your `~/.bashrc`:
 
 ```sh
 export PATH="$PATH:$HOME/.skim/bin"
@@ -105,7 +105,7 @@ cargo install skim
 
 ## Install as Vim plugin
 
-Once you have cloned the repository, add the following line to your .vimrc:
+Once you have cloned the repository, add the following line to your `.vimrc`:
 
 ```vim
 set rtp+=~/.skim
