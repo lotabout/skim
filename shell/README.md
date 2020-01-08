@@ -1,4 +1,4 @@
-This direction contains the shell bindings for skim. 
+This directory contains the shell bindings for skim. 
 
 Note that the content in this directory is copied from
 [fzf](https://github.com/junegunn/fzf/tree/master/shell) and modified to fit
