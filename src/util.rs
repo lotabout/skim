@@ -1,4 +1,5 @@
 use crate::field::get_string_by_range;
+use crate::item::Item;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::min;
@@ -161,6 +162,18 @@ impl LinePrinter {
             for _ in 0..rest {
                 self.print_char_raw(canvas, ' ', attr, skip);
             }
+        }
+    }
+}
+
+pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &Item, default_attr: Attr) {
+    if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
+        for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter() {
+            printer.print_char(canvas, ch, default_attr.extend(attr), false);
+        }
+    } else {
+        for ch in item.get_text().chars() {
+            printer.print_char(canvas, ch, default_attr, false);
         }
     }
 }

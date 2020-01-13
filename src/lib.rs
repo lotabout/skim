@@ -83,7 +83,7 @@ impl Skim {
             let stdin = std::io::stdin();
             match isatty(stdin.as_raw_fd()) {
                 Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
-                Ok(true) | Err(_)  => None,
+                Ok(true) | Err(_) => None,
             }
         });
 
