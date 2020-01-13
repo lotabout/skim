@@ -5,7 +5,7 @@ use crate::item::{Item, MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
-use crate::util::{reshape_string, LinePrinter};
+use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::SkimOptions;
 use std::cmp::max;
 use std::cmp::min;
@@ -388,15 +388,7 @@ impl Selection {
             .build();
 
         // print out the original content
-        if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
-            for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter() {
-                printer.print_char(canvas, ch, default_attr.extend(attr), false);
-            }
-        } else {
-            for ch in item.get_text().chars() {
-                printer.print_char(canvas, ch, default_attr, false);
-            }
-        }
+        print_item(canvas, &mut printer, &item, default_attr);
 
         // print the highlighted content
         printer.reset();

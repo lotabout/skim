@@ -5,7 +5,7 @@ use crate::event::{Event, EventArg, EventHandler};
 use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
-use crate::util::LinePrinter;
+use crate::util::{print_item, LinePrinter};
 use crate::SkimOptions;
 use std::cmp::max;
 use std::sync::Arc;
@@ -133,10 +133,7 @@ impl Draw for Header {
                 .text_width(screen_width - 2)
                 .hscroll_offset(self.hscroll_offset)
                 .build();
-
-            for ch in item.get_text().chars() {
-                printer.print_char(canvas, ch, self.theme.header(), false);
-            }
+            print_item(canvas, &mut printer, &item, self.theme.header());
         }
 
         Ok(())
