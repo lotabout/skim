@@ -37,8 +37,8 @@ impl Perform for ANSIParser {
 
     fn execute(&mut self, byte: u8) {
         match byte {
-            // put back \0 \r \n \t
-            0x00 | 0x0d | 0x0A | 0x09 => self.partial_str.push(byte as char),
+            // put back \0 \r \n \b \t
+            0x00 | 0x0d | 0x0A | 0x08 | 0x09 => self.partial_str.push(byte as char),
             // ignore all others
             _ => trace!("AnsiParser:execute ignored {:?}", byte),
         }
