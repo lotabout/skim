@@ -22,6 +22,7 @@ matrix:
     - env: TARGET=arm-unknown-linux-gnueabi DISABLE_TESTS=1
     - env: TARGET=armv7-unknown-linux-gnueabihf DISABLE_TESTS=1
     - env: TARGET=x86_64-unknown-linux-gnu
+    - env: TARGET=x86_64-unknown-linux-musl
 
     # OSX
     - env: TARGET=x86_64-apple-darwin
