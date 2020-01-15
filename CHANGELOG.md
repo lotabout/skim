@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.7.0: 2020-01-15
+
+Feature:
+- New fuzzy matching algorithm, should be more precise and faster.
+
+Bug fixes:
+- [PR #227](https://github.com/lotabout/skim/pull/227)
+    Fix `isatty` check on more OS.
+- Fix various cases where ANSI code not behave correctly.
+
 ## 0.6.9: 2019-09-22
 
 Bug fixes:
