@@ -232,7 +232,8 @@ impl Selection {
 
     pub fn get_selected_items(&mut self) -> Vec<Arc<Item>> {
         // select the current one
-        if !self.items.is_empty() {
+        let select_cursor = !self.multi_selection || self.selected.is_empty();
+        if select_cursor && !self.items.is_empty() {
             let cursor = self.item_cursor + self.line_cursor;
             let current_item = self
                 .items
