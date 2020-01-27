@@ -159,17 +159,17 @@ impl Skim {
         while !reader_control.is_done() {
             for item in reader_control.take().into_iter() {
                 if let Some(matched) = engine.match_item(item) {
-                    println!("{}\t{}", -matched.rank.score, matched.item.get_output_text());
+                    if options.print_score {
+                        println!("{}\t{}", -matched.rank.score, matched.item.get_output_text());
+                    } else {
+                        println!("{}", matched.item.get_output_text());
+                    }
                     match_count += 1;
                 }
             }
         }
 
-        if match_count == 0 {
-            return 1;
-        } else {
-            return 0;
-        }
+        return if match_count == 0 { 1 } else { 0 };
     }
 
     // 10 -> TermHeight::Fixed(10)
