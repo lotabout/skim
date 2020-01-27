@@ -74,6 +74,7 @@ Usage: sk [options]
     --print0             Print output delimited by ASCII NUL(\\0) characters
     --print-query        Print query as the first line
     --print-cmd          Print command query as the first line (after --print-query)
+    --print-score        Print matching score in filter output (with --filter)
     -f, --filter=STR     Filter mode. Do not start interactive finder.
 
   Environment variables
@@ -197,6 +198,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("history-size").long("history-size").multiple(true).takes_value(true).default_value("500"))
         .arg(Arg::with_name("print-query").long("print-query").multiple(true))
         .arg(Arg::with_name("print-cmd").long("print-cmd").multiple(true))
+        .arg(Arg::with_name("print-score").long("print-score").multiple(true))
         .arg(Arg::with_name("read0").long("read0").multiple(true))
         .arg(Arg::with_name("print0").long("print0").multiple(true))
         .arg(Arg::with_name("sync").long("sync").multiple(true))
@@ -291,6 +293,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .print0(options.is_present("print0"))
         .print_query(options.is_present("print-query"))
         .print_cmd(options.is_present("print-cmd"))
+        .print_score(options.is_present("print-score"))
         .no_hscroll(options.is_present("no-hscroll"))
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
         .tiebreak(options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")))
