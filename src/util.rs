@@ -1,11 +1,13 @@
-use crate::field::get_string_by_range;
-use crate::item::Item;
-use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::cmp::min;
 use std::prelude::v1::*;
+
+use regex::{Captures, Regex};
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
+
+use crate::field::get_string_by_range;
+use crate::item::Item;
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
@@ -150,18 +152,22 @@ impl LinePrinter {
     }
 
     pub fn print_char(&mut self, canvas: &mut dyn Canvas, ch: char, attr: Attr, skip: bool) {
-        if ch != '\t' {
-            self.print_char_raw(canvas, ch, attr, skip);
-        } else {
-            // handle tabstop
-            let rest = if self.current_pos < 0 {
-                self.tabstop
-            } else {
-                self.tabstop - (self.current_pos as usize) % self.tabstop
-            };
-            for _ in 0..rest {
-                self.print_char_raw(canvas, ' ', attr, skip);
+        match ch {
+            '\u{08}' => {
+                // ignore \b character
             }
+            '\t' => {
+                // handle tabstop
+                let rest = if self.current_pos < 0 {
+                    self.tabstop
+                } else {
+                    self.tabstop - (self.current_pos as usize) % self.tabstop
+                };
+                for _ in 0..rest {
+                    self.print_char_raw(canvas, ' ', attr, skip);
+                }
+            }
+            ch => self.print_char_raw(canvas, ch, attr, skip),
         }
     }
 }
