@@ -138,7 +138,9 @@ impl Draw for Header {
 
         Ok(())
     }
+}
 
+impl Widget<Event> for Header {
     fn size_hint(&self) -> (Option<usize>, Option<usize>) {
         (None, Some(self.lines_of_header()))
     }

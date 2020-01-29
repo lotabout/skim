@@ -458,6 +458,8 @@ impl Draw for Selection {
     }
 }
 
+impl Widget<Event> for Selection {}
+
 fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<MatchedItem> {
     use std::cmp::Ordering as CmpOrd;
     Box::new(move |a: &MatchedItem, b: &MatchedItem| {

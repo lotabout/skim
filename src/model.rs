@@ -663,7 +663,7 @@ impl Draw for Model {
                 .split(&win_query_status),
         };
 
-        let screen: Box<dyn Draw> = if !self.preview_hidden && self.previewer.is_some() {
+        let screen: Box<dyn Widget<Event>> = if !self.preview_hidden && self.previewer.is_some() {
             let previewer = self.previewer.as_ref().unwrap();
             let win = Win::new(previewer)
                 .basis(self.preview_size)
@@ -777,6 +777,8 @@ impl Draw for Status {
         Ok(())
     }
 }
+
+impl Widget<Event> for Status {}
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 enum Direction {

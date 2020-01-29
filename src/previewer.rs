@@ -258,6 +258,8 @@ impl Draw for Previewer {
     }
 }
 
+impl Widget<Event> for Previewer {}
+
 #[derive(Debug)]
 pub struct PreviewInput {
     pub cmd: String,

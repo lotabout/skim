@@ -488,7 +488,9 @@ impl Draw for Query {
         canvas.show_cursor(true)?;
         Ok(())
     }
+}
 
+impl Widget<Event> for Query {
     fn size_hint(&self) -> (Option<usize>, Option<usize>) {
         let before = self.get_before();
         let after = self.get_after();
