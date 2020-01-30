@@ -55,6 +55,9 @@ impl Skim {
 
         let (tx, rx): (EventSender, EventReceiver) = channel();
         let term = Arc::new(Term::with_options(TermOptions::default().min_height(min_height).height(height)).unwrap());
+        if !options.no_mouse {
+            let _ = term.enable_mouse_support();
+        }
 
         //------------------------------------------------------------------------------
         // input

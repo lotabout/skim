@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use chrono::Duration as TimerDuration;
 use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
-use tuikit::prelude::*;
+use tuikit::prelude::{*, Event as TermEvent};
 
 use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
@@ -481,6 +481,19 @@ impl Model {
                     self.act_append_and_select(&mut env);
                 }
 
+                Event::EvInputKey => {
+                    let key = *arg.downcast_ref::<Key>().unwrap();
+                    // dispatch key(normally the mouse keys) to sub-widgets
+                    self.do_with_widget(|root| {
+                        let (width, height) = self.term.term_size().unwrap();
+                        let rect = Rectangle {top: 0, left: 0, width, height};
+                        let messages = root.on_event(TermEvent::Key(key), rect);
+                        for message in messages {
+                            let _ = self.tx.send(message);
+                        }
+                    })
+                }
+
                 _ => {}
             }
 
@@ -525,7 +538,7 @@ impl Model {
                 }
             }
 
-            let _ = self.term.draw(self);
+            let _ = self.do_with_widget(|root| self.term.draw(&root));
             let _ = self.term.present();
         }
 
@@ -580,19 +593,12 @@ impl Model {
 
         self.matcher_control.replace(new_matcher_control);
     }
-}
 
-struct ModelEnv {
-    pub cmd: String,
-    pub query: String,
-    pub cmd_query: String,
-    pub clear_selection: ClearStrategy,
-}
-
-impl Draw for Model {
-    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
-        let (_screen_width, _screen_height) = canvas.size()?;
-
+    /// construct the widget tree
+    fn do_with_widget<'a, R, F>(&'a self, action: F) -> R
+    where
+        F: Fn(Box<dyn Widget<(Event, EventArg)> + 'a>) -> R,
+    {
         let total = self.item_pool.len();
         let matcher_mode = if self.matcher_mode.is_none() {
             "".to_string()
@@ -623,13 +629,14 @@ impl Draw for Model {
             theme: self.theme.clone(),
             inline_info: self.inline_info,
         };
+        let status_inline = status.clone();
 
         let win_selection = Win::new(&self.selection);
         let win_query = Win::new(&self.query)
             .basis(if self.inline_info { 0 } else { 1 })
             .grow(0)
             .shrink(0);
-        let win_status = Win::new(&status)
+        let win_status = Win::new(status)
             .basis(if self.inline_info { 0 } else { 1 })
             .grow(0)
             .shrink(0);
@@ -639,31 +646,31 @@ impl Draw for Model {
             .grow(0)
             .shrink(0)
             .split(Win::new(&self.query).grow(0).shrink(0))
-            .split(Win::new(&status).grow(1).shrink(0));
+            .split(Win::new(status_inline).grow(1).shrink(0));
 
         let layout = &self.layout as &str;
         let win_main = match layout {
             "reverse" => VSplit::default()
-                .split(&win_query_status)
-                .split(&win_query)
-                .split(&win_status)
-                .split(&win_header)
-                .split(&win_selection),
+                .split(win_query_status)
+                .split(win_query)
+                .split(win_status)
+                .split(win_header)
+                .split(win_selection),
             "reverse-list" => VSplit::default()
-                .split(&win_selection)
-                .split(&win_header)
-                .split(&win_status)
-                .split(&win_query)
-                .split(&win_query_status),
+                .split(win_selection)
+                .split(win_header)
+                .split(win_status)
+                .split(win_query)
+                .split(win_query_status),
             _ => VSplit::default()
-                .split(&win_selection)
-                .split(&win_header)
-                .split(&win_status)
-                .split(&win_query)
-                .split(&win_query_status),
+                .split(win_selection)
+                .split(win_header)
+                .split(win_status)
+                .split(win_query)
+                .split(win_query_status),
         };
 
-        let screen: Box<dyn Draw> = if !self.preview_hidden && self.previewer.is_some() {
+        let screen: Box<dyn Widget<(Event, EventArg)>> = if !self.preview_hidden && self.previewer.is_some() {
             let previewer = self.previewer.as_ref().unwrap();
             let win = Win::new(previewer)
                 .basis(self.preview_size)
@@ -688,15 +695,24 @@ impl Draw for Model {
             Box::new(win_main)
         };
 
-        Win::new(screen.as_ref())
+        let root = Win::new(screen)
             .margin_top(self.margin_top)
             .margin_right(self.margin_right)
             .margin_bottom(self.margin_bottom)
-            .margin_left(self.margin_left)
-            .draw(canvas)
+            .margin_left(self.margin_left);
+
+        action(Box::new(root))
     }
 }
 
+struct ModelEnv {
+    pub cmd: String,
+    pub query: String,
+    pub cmd_query: String,
+    pub clear_selection: ClearStrategy,
+}
+
+#[derive(Clone)]
 struct Status {
     total: usize,
     matched: usize,
@@ -777,6 +793,8 @@ impl Draw for Status {
         Ok(())
     }
 }
+
+impl Widget<(Event, EventArg)> for Status {}
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 enum Direction {

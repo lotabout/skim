@@ -35,6 +35,7 @@ Usage: sk [options]
                          such as 'ctrl-j:accept,ctrl-k:kill-line'
     -m, --multi          Enable Multiple Selection
     --no-multi           Disable Multiple Selection
+    --no-mouse           Disable mouse events
     -c, --cmd ag         command to invoke dynamically
     -I replstr           replace `replstr` with the selected item
     -i, --interactive    Start skim in interactive(command) mode
@@ -86,7 +87,6 @@ Usage: sk [options]
   Reserved (not used for now)
     --extended
     --literal
-    --no-mouse
     --cycle
     --hscroll-off=COL
     --filepath-word
@@ -176,13 +176,13 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("min-height").long("min-height").multiple(true).takes_value(true).default_value("10"))
         .arg(Arg::with_name("height").long("height").multiple(true).takes_value(true).default_value("100%"))
         .arg(Arg::with_name("no-height").long("no-height").multiple(true))
+        .arg(Arg::with_name("no-mouse").long("no-mouse").multiple(true))
         .arg(Arg::with_name("preview").long("preview").multiple(true).takes_value(true))
         .arg(Arg::with_name("preview-window").long("preview-window").multiple(true).takes_value(true).default_value("right:50%"))
         .arg(Arg::with_name("reverse").long("reverse").multiple(true))
 
         .arg(Arg::with_name("algorithm").long("algo").multiple(true).takes_value(true).default_value("skim_v2"))
         .arg(Arg::with_name("literal").long("literal").multiple(true))
-        .arg(Arg::with_name("no-mouse").long("no-mouse").multiple(true))
         .arg(Arg::with_name("cycle").long("cycle").multiple(true))
         .arg(Arg::with_name("no-hscroll").long("no-hscroll").multiple(true))
         .arg(Arg::with_name("hscroll-off").long("hscroll-off").multiple(true).takes_value(true).default_value("10"))
@@ -295,6 +295,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .print_cmd(options.is_present("print-cmd"))
         .print_score(options.is_present("print-score"))
         .no_hscroll(options.is_present("no-hscroll"))
+        .no_mouse(options.is_present("no-mouse"))
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
         .tiebreak(options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")))
         .tac(options.is_present("tac"))
