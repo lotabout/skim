@@ -458,7 +458,7 @@ impl Draw for Selection {
     }
 }
 
-impl Widget<Event> for Selection {}
+impl Widget<(Event, EventArg)> for Selection {}
 
 fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<MatchedItem> {
     use std::cmp::Ordering as CmpOrd;

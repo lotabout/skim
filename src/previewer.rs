@@ -14,7 +14,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use tuikit::prelude::*;
+use tuikit::prelude::{Event as TermEvent, *};
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -258,7 +258,17 @@ impl Draw for Previewer {
     }
 }
 
-impl Widget<Event> for Previewer {}
+impl Widget<(Event, EventArg)> for Previewer {
+    fn on_event(&self, event: TermEvent, _rect: Rectangle) -> Vec<(Event, EventArg)> {
+        let mut ret = vec![];
+        match event {
+            TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push((Event::EvActPreviewUp, Box::new(true) as EventArg)),
+            TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push((Event::EvActPreviewDown, Box::new(true) as EventArg)),
+            _ => {}
+        }
+        return ret;
+    }
+}
 
 #[derive(Debug)]
 pub struct PreviewInput {
