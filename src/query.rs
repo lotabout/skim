@@ -1,4 +1,4 @@
-use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
+use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use std::mem;
@@ -357,33 +357,7 @@ impl Query {
 }
 
 impl EventHandler for Query {
-    fn accept_event(&self, event: Event) -> bool {
-        use crate::event::Event::*;
-        match event {
-            EvActDeleteCharEOF => !self.get_query().is_empty(),
-            EvActAddChar
-            | EvActBackwardChar
-            | EvActBackwardDeleteChar
-            | EvActBackwardKillWord
-            | EvActBackwardWord
-            | EvActBeginningOfLine
-            | EvActDeleteChar
-            | EvActEndOfLine
-            | EvActForwardChar
-            | EvActForwardWord
-            | EvActKillLine
-            | EvActKillWord
-            | EvActNextHistory
-            | EvActPreviousHistory
-            | EvActUnixLineDiscard
-            | EvActUnixWordRubout
-            | EvActYank
-            | EvActToggleInteractive => true,
-            _ => false,
-        }
-    }
-
-    fn handle(&mut self, event: Event, arg: &EventArg) -> UpdateScreen {
+    fn handle(&mut self, event: &Event) -> UpdateScreen {
         use crate::event::Event::*;
 
         let mode = self.mode;
@@ -393,9 +367,8 @@ impl EventHandler for Query {
         let cmd_after_len = self.cmd_after.len();
 
         match event {
-            EvActAddChar => {
-                let ch: char = *arg.downcast_ref().expect("EvActAddChar: failed to get argument");
-                self.act_add_char(ch);
+            EvActAddChar(ch) => {
+                self.act_add_char(*ch);
             }
 
             EvActDeleteChar | EvActDeleteCharEOF => {
@@ -490,7 +463,7 @@ impl Draw for Query {
     }
 }
 
-impl Widget<(Event, EventArg)> for Query {
+impl Widget<Event> for Query {
     fn size_hint(&self) -> (Option<usize>, Option<usize>) {
         let before = self.get_before();
         let after = self.get_after();

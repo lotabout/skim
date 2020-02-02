@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 use chrono::Duration as TimerDuration;
 use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
-use tuikit::prelude::{*, Event as TermEvent};
+use tuikit::prelude::{Event as TermEvent, *};
 
-use crate::event::{Event, EventArg, EventHandler, EventReceiver, EventSender};
+use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
 use crate::item::{Item, ItemPool};
@@ -177,7 +177,7 @@ impl Model {
             let tx = Arc::new(SpinLock::new(self.tx.clone()));
             self.previewer = Some(
                 Previewer::new(Some(preview_cmd.to_string()), move || {
-                    let _ = tx.lock().send((Event::EvHeartBeat, Box::new(true)));
+                    let _ = tx.lock().send(Event::EvHeartBeat);
                 })
                 .wrap(preview_wrap)
                 .delimiter(self.delimiter.clone()),
@@ -268,7 +268,7 @@ impl Model {
             let hb_timer_guard =
                 self.timer
                     .schedule_with_delay(TimerDuration::milliseconds(REFRESH_DURATION), move || {
-                        let _ = tx.send((Event::EvHeartBeat, Box::new(true)));
+                        let _ = tx.send(Event::EvHeartBeat);
                     });
             self.hb_timer_guard.replace(hb_timer_guard);
         }
@@ -383,10 +383,10 @@ impl Model {
         // In the event loop, thhere might need
         let mut next_event = None;
         loop {
-            let (ev, arg) = if next_event.is_some() {
+            let ev = if next_event.is_some() {
                 next_event.take().unwrap()
-            } else if let Ok((ev, arg)) = self.rx.recv() {
-                (ev, arg)
+            } else if let Ok(ev) = self.rx.recv() {
+                ev
             } else {
                 break; // end of the event stream;
             };
@@ -394,26 +394,20 @@ impl Model {
             match ev {
                 Event::EvHeartBeat => {
                     // consume follwing HeartBeat event
-                    next_event = self.consume_additional_event(Event::EvHeartBeat);
+                    next_event = self.consume_additional_event(&Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
                 }
 
-                Event::EvActIfQueryEmpty => {
+                Event::EvActIfQueryEmpty(ref arg_str) => {
                     if env.query.is_empty() {
-                        next_event = arg
-                            .downcast_ref::<Option<String>>()
-                            .and_then(|os| os.as_ref().cloned())
-                            .and_then(|arg_str| parse_action_arg(&arg_str));
+                        next_event = parse_action_arg(arg_str);
                         continue;
                     }
                 }
 
-                Event::EvActIfQueryNotEmpty => {
+                Event::EvActIfQueryNotEmpty(ref arg_str) => {
                     if !env.query.is_empty() {
-                        next_event = arg
-                            .downcast_ref::<Option<String>>()
-                            .and_then(|os| os.as_ref().cloned())
-                            .and_then(|arg_str| parse_action_arg(&arg_str));
+                        next_event = parse_action_arg(arg_str);
                         continue;
                     }
                 }
@@ -426,9 +420,7 @@ impl Model {
                     self.act_rotate_mode(&mut env);
                 }
 
-                Event::EvActAccept => {
-                    let accept_key = arg.downcast_ref::<Option<String>>().and_then(|os| os.as_ref().cloned());
-
+                Event::EvActAccept(accept_key) => {
                     if let Some(ctrl) = self.reader_control.take() {
                         ctrl.kill();
                     }
@@ -456,37 +448,33 @@ impl Model {
 
                 Event::EvActDeleteCharEOF => {
                     if env.query.is_empty() {
-                        next_event = Some((Event::EvActAbort, Box::new(true)));
+                        next_event = Some(Event::EvActAbort);
                         continue;
                     }
                 }
 
-                Event::EvActExecute => {
-                    let cmd = arg
-                        .downcast_ref::<Option<String>>()
-                        .and_then(|os| os.as_ref().cloned())
-                        .unwrap();
-                    self.act_execute(&cmd);
+                Event::EvActExecute(ref cmd) => {
+                    self.act_execute(cmd);
                 }
 
-                Event::EvActExecuteSilent => {
-                    let cmd = arg
-                        .downcast_ref::<Option<String>>()
-                        .and_then(|os| os.as_ref().cloned())
-                        .unwrap();
-                    self.act_execute_silent(&cmd);
+                Event::EvActExecuteSilent(ref cmd) => {
+                    self.act_execute_silent(cmd);
                 }
 
                 Event::EvActAppendAndSelect => {
                     self.act_append_and_select(&mut env);
                 }
 
-                Event::EvInputKey => {
-                    let key = *arg.downcast_ref::<Key>().unwrap();
+                Event::EvInputKey(key) => {
                     // dispatch key(normally the mouse keys) to sub-widgets
                     self.do_with_widget(|root| {
                         let (width, height) = self.term.term_size().unwrap();
-                        let rect = Rectangle {top: 0, left: 0, width, height};
+                        let rect = Rectangle {
+                            top: 0,
+                            left: 0,
+                            width,
+                            height,
+                        };
                         let messages = root.on_event(TermEvent::Key(key), rect);
                         for message in messages {
                             let _ = self.tx.send(message);
@@ -499,35 +487,27 @@ impl Model {
 
             // dispatch events to sub-components
 
-            if self.header.accept_event(ev) {
-                self.header.handle(ev, &arg);
+            self.header.handle(&ev);
+
+            self.query.handle(&ev);
+            env.cmd_query = self.query.get_cmd_query();
+
+            let new_query = self.query.get_query();
+            let new_cmd = self.query.get_cmd();
+
+            // re-run reader & matcher if needed;
+            if new_cmd != env.cmd {
+                env.cmd = new_cmd;
+                self.on_cmd_query_change(&mut env);
+            } else if new_query != env.query {
+                env.query = new_query;
+                self.on_query_change(&mut env);
             }
 
-            if self.query.accept_event(ev) {
-                self.query.handle(ev, &arg);
-                env.cmd_query = self.query.get_cmd_query();
-
-                let new_query = self.query.get_query();
-                let new_cmd = self.query.get_cmd();
-
-                // re-run reader & matcher if needed;
-                if new_cmd != env.cmd {
-                    env.cmd = new_cmd;
-                    self.on_cmd_query_change(&mut env);
-                } else if new_query != env.query {
-                    env.query = new_query;
-                    self.on_query_change(&mut env);
-                }
-            }
-
-            if self.selection.accept_event(ev) {
-                self.selection.handle(ev, &arg);
-            }
+            self.selection.handle(&ev);
 
             self.previewer.as_mut().map(|previewer| {
-                if previewer.accept_event(ev) {
-                    previewer.handle(ev, &arg);
-                }
+                previewer.handle(&ev);
             });
 
             // re-draw
@@ -545,11 +525,11 @@ impl Model {
         None
     }
 
-    fn consume_additional_event(&self, target_event: Event) -> Option<(Event, EventArg)> {
+    fn consume_additional_event(&self, target_event: &Event) -> Option<Event> {
         // consume additional HeartBeat event
         let mut rx_try_iter = self.rx.try_iter().peekable();
-        while let Some((ev, _)) = rx_try_iter.peek() {
-            if *ev == target_event {
+        while let Some(ev) = rx_try_iter.peek() {
+            if *ev == *target_event {
                 let _ = rx_try_iter.next();
             } else {
                 break;
@@ -577,7 +557,7 @@ impl Model {
         };
 
         // send heart beat (so that heartbeat/refresh is triggered)
-        let _ = self.tx.send((Event::EvHeartBeat, Box::new(true)));
+        let _ = self.tx.send(Event::EvHeartBeat);
 
         let tx = self.tx.clone();
         let new_matcher_control = self.matcher.run(
@@ -587,7 +567,7 @@ impl Model {
             self.fuzzy_algorithm,
             move |_| {
                 // notify refresh immediately
-                let _ = tx.send((Event::EvHeartBeat, Box::new(true)));
+                let _ = tx.send(Event::EvHeartBeat);
             },
         );
 
@@ -597,7 +577,7 @@ impl Model {
     /// construct the widget tree
     fn do_with_widget<'a, R, F>(&'a self, action: F) -> R
     where
-        F: Fn(Box<dyn Widget<(Event, EventArg)> + 'a>) -> R,
+        F: Fn(Box<dyn Widget<Event> + 'a>) -> R,
     {
         let total = self.item_pool.len();
         let matcher_mode = if self.matcher_mode.is_none() {
@@ -670,7 +650,7 @@ impl Model {
                 .split(win_query_status),
         };
 
-        let screen: Box<dyn Widget<(Event, EventArg)>> = if !self.preview_hidden && self.previewer.is_some() {
+        let screen: Box<dyn Widget<Event>> = if !self.preview_hidden && self.previewer.is_some() {
             let previewer = self.previewer.as_ref().unwrap();
             let win = Win::new(previewer)
                 .basis(self.preview_size)
@@ -794,7 +774,7 @@ impl Draw for Status {
     }
 }
 
-impl Widget<(Event, EventArg)> for Status {}
+impl Widget<Event> for Status {}
 
 #[derive(PartialEq, Eq, Clone, Debug, Copy)]
 enum Direction {

@@ -1,5 +1,5 @@
 ///! Handle the selections of items
-use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
+use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::item::{parse_criteria, RankCriteria};
 use crate::item::{Item, MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
@@ -268,23 +268,14 @@ impl Selection {
 }
 
 impl EventHandler for Selection {
-    fn accept_event(&self, event: Event) -> bool {
+    fn handle(&mut self, event: &Event) -> UpdateScreen {
         use crate::event::Event::*;
         match event {
-            EvActUp | EvActDown | EvActToggle | EvActToggleAll | EvActSelectAll | EvActDeselectAll | EvActPageDown
-            | EvActPageUp | EvActScrollLeft | EvActScrollRight => true,
-            _ => false,
-        }
-    }
-
-    fn handle(&mut self, event: Event, arg: &EventArg) -> UpdateScreen {
-        use crate::event::Event::*;
-        match event {
-            EvActUp => {
-                self.act_move_line_cursor(1);
+            EvActUp(diff) => {
+                self.act_move_line_cursor(*diff);
             }
-            EvActDown => {
-                self.act_move_line_cursor(-1);
+            EvActDown(diff) => {
+                self.act_move_line_cursor(-*diff);
             }
             EvActToggle => {
                 self.act_toggle();
@@ -298,21 +289,21 @@ impl EventHandler for Selection {
             EvActDeselectAll => {
                 self.act_deselect_all();
             }
-            EvActPageDown => {
+            EvActPageDown(diff) => {
                 let height = 1 - (self.height.load(Ordering::Relaxed) as i32);
-                self.act_move_line_cursor(height);
+                self.act_move_line_cursor(height * *diff);
             }
-            EvActPageUp => {
+            EvActPageUp(diff) => {
                 let height = (self.height.load(Ordering::Relaxed) as i32) - 1;
-                self.act_move_line_cursor(height);
+                self.act_move_line_cursor(height * *diff);
             }
-            EvActScrollLeft => {
-                self.act_scroll(*arg.downcast_ref::<i32>().unwrap_or(&-1));
+            EvActScrollLeft(diff) => {
+                self.act_scroll(-*diff);
             }
-            EvActScrollRight => {
-                self.act_scroll(*arg.downcast_ref::<i32>().unwrap_or(&1));
+            EvActScrollRight(diff) => {
+                self.act_scroll(*diff);
             }
-            _ => {}
+            _ => return UpdateScreen::DONT_REDRAW,
         }
         UpdateScreen::REDRAW
     }
@@ -458,7 +449,7 @@ impl Draw for Selection {
     }
 }
 
-impl Widget<(Event, EventArg)> for Selection {}
+impl Widget<Event> for Selection {}
 
 fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<MatchedItem> {
     use std::cmp::Ordering as CmpOrd;

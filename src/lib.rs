@@ -72,8 +72,8 @@ impl Skim {
                     break;
                 }
 
-                for (ev, arg) in input.translate_event(key).into_iter() {
-                    let _ = tx_clone.send((ev, arg));
+                for ev in input.translate_event(key).into_iter() {
+                    let _ = tx_clone.send(ev);
                 }
             }
         });
@@ -94,7 +94,7 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // start a timer for notifying refresh
-        let _ = tx.send((EvHeartBeat, Box::new(true)));
+        let _ = tx.send(EvHeartBeat);
 
         //------------------------------------------------------------------------------
         // model + previewer
@@ -172,7 +172,7 @@ impl Skim {
             }
         }
 
-        return if match_count == 0 { 1 } else { 0 };
+        if match_count == 0 { 1 } else { 0 }
     }
 
     // 10 -> TermHeight::Fixed(10)

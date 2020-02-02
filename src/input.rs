@@ -1,33 +1,15 @@
 ///! Input will listens to user input, modify the query string, send special
 ///! keystrokes(such as Enter, Ctrl-p, Ctrl-n, etc) to the controller.
-use crate::event::{parse_action, Event, EventArg};
+use crate::event::{parse_event, Event};
 use regex::Regex;
 use std::collections::HashMap;
 use tuikit::event::Event as TermEvent;
 use tuikit::key::{from_keyname, Key};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ActionArg {
-    Char(char),
-    String(String),
-    None,
-}
-
-pub type Action = (Event, ActionArg);
-pub type ActionChain = Vec<Action>;
+pub type ActionChain = Vec<Event>;
 
 pub struct Input {
     keymap: HashMap<Key, ActionChain>,
-}
-
-impl From<ActionArg> for EventArg {
-    fn from(arg: ActionArg) -> Self {
-        match arg {
-            ActionArg::Char(ch) => Box::new(ch),
-            ActionArg::String(string) => Box::new(Some(string)),
-            ActionArg::None => Box::new(None as Option<String>),
-        }
-    }
 }
 
 impl Input {
@@ -37,27 +19,18 @@ impl Input {
         }
     }
 
-    pub fn translate_event(&self, event: TermEvent) -> Vec<(Event, EventArg)> {
+    pub fn translate_event(&self, event: TermEvent) -> ActionChain {
         match event {
             // search event from keymap
-            TermEvent::Key(key) => self
-                .keymap
-                .get(&key)
-                .map(|chain| {
-                    chain
-                        .iter()
-                        .map(|(action, arg)| (action.clone(), arg.clone().into()))
-                        .collect()
-                })
-                .unwrap_or_else(|| {
-                    if let Key::Char(ch) = key {
-                        vec![(Event::EvActAddChar, Box::new(ch) as EventArg)]
-                    } else {
-                        vec![(Event::EvInputKey, Box::new(key) as EventArg)]
-                    }
-                }),
-            TermEvent::Resize { .. } => vec![(Event::EvActRedraw, Box::new(true))],
-            _ => vec![(Event::EvInputInvalid, Box::new(true))],
+            TermEvent::Key(key) => self.keymap.get(&key).map(|chain| chain.clone()).unwrap_or_else(|| {
+                if let Key::Char(ch) = key {
+                    vec![Event::EvActAddChar(ch)]
+                } else {
+                    vec![Event::EvInputKey(key)]
+                }
+            }),
+            TermEvent::Resize { .. } => vec![Event::EvActRedraw],
+            _ => vec![Event::EvInputInvalid],
         }
     }
 
@@ -87,9 +60,7 @@ impl Input {
             debug!("parsed key_action: {:?}: {:?}", key, action_chain);
             let action_chain = action_chain
                 .into_iter()
-                .filter_map(|(action, arg)| {
-                    parse_action(action).map(|act| (act, arg.map(ActionArg::String).unwrap_or(ActionArg::None)))
-                })
+                .filter_map(|(action, arg)| parse_event(action, arg))
                 .collect();
             self.bind(key, action_chain);
         }
@@ -97,9 +68,9 @@ impl Input {
 
     pub fn parse_expect_keys(&mut self, keys: Option<&str>) {
         if let Some(keys) = keys {
-            self.bind("enter", vec![(Event::EvActAccept, ActionArg::String("".to_string()))]);
+            self.bind("enter", vec![Event::EvActAccept(None)]);
             for key in keys.split(',') {
-                self.bind(key, vec![(Event::EvActAccept, ActionArg::String(key.to_string()))]);
+                self.bind(key, vec![Event::EvActAccept(Some(key.to_string()))]);
             }
         }
     }
@@ -131,9 +102,9 @@ pub fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String
                             // (arg) => arg, :end_arg => arg
                             let action = s.as_str();
                             if action.starts_with(":") {
-                                return action[1..].to_string();
+                                action[1..].to_string()
                             } else {
-                                return action[1..action.len() - 1].to_string();
+                                action[1..action.len() - 1].to_string()
                             }
                         }),
                     )
@@ -145,7 +116,7 @@ pub fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String
 }
 
 /// e.g. execute(...) => Some(Event::EvActExecute, Box::new(Option("...")))
-pub fn parse_action_arg(action_arg: &str) -> Option<(Event, EventArg)> {
+pub fn parse_action_arg(action_arg: &str) -> Option<Event> {
     // construct a fake key_action: `fake_key:action(arg)`
     let fake_key_action = format!("fake_key:{}", action_arg);
     // get keys: [(key, [(action, arg), (action, arg)]), ...]
@@ -156,57 +127,56 @@ pub fn parse_action_arg(action_arg: &str) -> Option<(Event, EventArg)> {
     } else {
         // first action pair of key(keys[0].1) and first action (keys[0].1[0])
         let (action, new_arg) = keys[0].1[0].clone();
-        parse_action(action).map(|act| (act, Box::new(new_arg) as EventArg))
+        parse_event(action, new_arg)
     }
 }
 
 #[rustfmt::skip]
 fn get_default_key_map() -> HashMap<Key, ActionChain> {
-    use self::ActionArg::*;
     let mut ret = HashMap::new();
-    ret.insert(Key::ESC,          vec![(Event::EvActAbort,              None)]);
-    ret.insert(Key::Ctrl('c'),    vec![(Event::EvActAbort,              None)]);
-    ret.insert(Key::Ctrl('g'),    vec![(Event::EvActAbort,              None)]);
-    ret.insert(Key::Enter,        vec![(Event::EvActAccept,             None)]);
-    ret.insert(Key::Left,         vec![(Event::EvActBackwardChar,       None)]);
-    ret.insert(Key::Ctrl('b'),    vec![(Event::EvActBackwardChar,       None)]);
-    ret.insert(Key::Ctrl('h'),    vec![(Event::EvActBackwardDeleteChar, None)]);
-    ret.insert(Key::Backspace,    vec![(Event::EvActBackwardDeleteChar, None)]);
-    ret.insert(Key::AltBackspace, vec![(Event::EvActBackwardKillWord,   None)]);
-    ret.insert(Key::Alt('b'),     vec![(Event::EvActBackwardWord,       None)]);
-    ret.insert(Key::ShiftLeft,    vec![(Event::EvActBackwardWord,       None)]);
-    ret.insert(Key::Ctrl('a'),    vec![(Event::EvActBeginningOfLine,    None)]);
-    ret.insert(Key::Home,         vec![(Event::EvActBeginningOfLine,    None)]);
-    ret.insert(Key::Ctrl('l'),    vec![(Event::EvActClearScreen,        None)]);
-    ret.insert(Key::Delete,       vec![(Event::EvActDeleteChar,         None)]);
-    ret.insert(Key::Ctrl('d'),    vec![(Event::EvActDeleteCharEOF,      None)]);
-    ret.insert(Key::Ctrl('j'),    vec![(Event::EvActDown,               None)]);
-    ret.insert(Key::Ctrl('n'),    vec![(Event::EvActDown,               None)]);
-    ret.insert(Key::Down,         vec![(Event::EvActDown,               None)]);
-    ret.insert(Key::Ctrl('e'),    vec![(Event::EvActEndOfLine,          None)]);
-    ret.insert(Key::End,          vec![(Event::EvActEndOfLine,          None)]);
-    ret.insert(Key::Ctrl('f'),    vec![(Event::EvActForwardChar,        None)]);
-    ret.insert(Key::Right,        vec![(Event::EvActForwardChar,        None)]);
-    ret.insert(Key::Alt('f'),     vec![(Event::EvActForwardWord,        None)]);
-    ret.insert(Key::ShiftRight,   vec![(Event::EvActForwardWord,        None)]);
-    ret.insert(Key::Alt('d'),     vec![(Event::EvActKillWord,           None)]);
-    ret.insert(Key::ShiftUp,      vec![(Event::EvActPreviewPageUp,      None)]);
-    ret.insert(Key::ShiftDown,    vec![(Event::EvActPreviewPageDown,    None)]);
-    ret.insert(Key::PageDown,     vec![(Event::EvActPageDown,           None)]);
-    ret.insert(Key::PageUp,       vec![(Event::EvActPageUp,             None)]);
-    ret.insert(Key::Ctrl('r'),    vec![(Event::EvActRotateMode,         None)]);
-    ret.insert(Key::Alt('h'),     vec![(Event::EvActScrollLeft,         None)]);
-    ret.insert(Key::Alt('l'),     vec![(Event::EvActScrollRight,        None)]);
-    ret.insert(Key::Tab,          vec![(Event::EvActToggle,             None), (Event::EvActDown, None)]);
-    ret.insert(Key::Ctrl('q'),    vec![(Event::EvActToggleInteractive,  None)]);
-    ret.insert(Key::BackTab,      vec![(Event::EvActToggle,             None), (Event::EvActUp,   None)]);
-    ret.insert(Key::Ctrl('u'),    vec![(Event::EvActUnixLineDiscard,    None)]);
-    ret.insert(Key::Ctrl('w'),    vec![(Event::EvActUnixWordRubout,     None)]);
-    ret.insert(Key::Ctrl('p'),    vec![(Event::EvActUp,                 None)]);
-    ret.insert(Key::Ctrl('k'),    vec![(Event::EvActUp,                 None)]);
-    ret.insert(Key::Up,           vec![(Event::EvActUp,                 None)]);
-    ret.insert(Key::Ctrl('y'),    vec![(Event::EvActYank,               None)]);
-    ret.insert(Key::Null,         vec![(Event::EvActAbort,              None)]);
+    ret.insert(Key::ESC,          vec![Event::EvActAbort]);
+    ret.insert(Key::Ctrl('c'),    vec![Event::EvActAbort]);
+    ret.insert(Key::Ctrl('g'),    vec![Event::EvActAbort]);
+    ret.insert(Key::Enter,        vec![Event::EvActAccept(None)]);
+    ret.insert(Key::Left,         vec![Event::EvActBackwardChar]);
+    ret.insert(Key::Ctrl('b'),    vec![Event::EvActBackwardChar]);
+    ret.insert(Key::Ctrl('h'),    vec![Event::EvActBackwardDeleteChar]);
+    ret.insert(Key::Backspace,    vec![Event::EvActBackwardDeleteChar]);
+    ret.insert(Key::AltBackspace, vec![Event::EvActBackwardKillWord]);
+    ret.insert(Key::Alt('b'),     vec![Event::EvActBackwardWord]);
+    ret.insert(Key::ShiftLeft,    vec![Event::EvActBackwardWord]);
+    ret.insert(Key::Ctrl('a'),    vec![Event::EvActBeginningOfLine]);
+    ret.insert(Key::Home,         vec![Event::EvActBeginningOfLine]);
+    ret.insert(Key::Ctrl('l'),    vec![Event::EvActClearScreen]);
+    ret.insert(Key::Delete,       vec![Event::EvActDeleteChar]);
+    ret.insert(Key::Ctrl('d'),    vec![Event::EvActDeleteCharEOF]);
+    ret.insert(Key::Ctrl('j'),    vec![Event::EvActDown(1)]);
+    ret.insert(Key::Ctrl('n'),    vec![Event::EvActDown(1)]);
+    ret.insert(Key::Down,         vec![Event::EvActDown(1)]);
+    ret.insert(Key::Ctrl('e'),    vec![Event::EvActEndOfLine]);
+    ret.insert(Key::End,          vec![Event::EvActEndOfLine]);
+    ret.insert(Key::Ctrl('f'),    vec![Event::EvActForwardChar]);
+    ret.insert(Key::Right,        vec![Event::EvActForwardChar]);
+    ret.insert(Key::Alt('f'),     vec![Event::EvActForwardWord]);
+    ret.insert(Key::ShiftRight,   vec![Event::EvActForwardWord]);
+    ret.insert(Key::Alt('d'),     vec![Event::EvActKillWord]);
+    ret.insert(Key::ShiftUp,      vec![Event::EvActPreviewPageUp(1)]);
+    ret.insert(Key::ShiftDown,    vec![Event::EvActPreviewPageDown(1)]);
+    ret.insert(Key::PageDown,     vec![Event::EvActPageDown(1)]);
+    ret.insert(Key::PageUp,       vec![Event::EvActPageUp(1)]);
+    ret.insert(Key::Ctrl('r'),    vec![Event::EvActRotateMode]);
+    ret.insert(Key::Alt('h'),     vec![Event::EvActScrollLeft(1)]);
+    ret.insert(Key::Alt('l'),     vec![Event::EvActScrollRight(1)]);
+    ret.insert(Key::Tab,          vec![Event::EvActToggle, Event::EvActDown(1)]);
+    ret.insert(Key::Ctrl('q'),    vec![Event::EvActToggleInteractive]);
+    ret.insert(Key::BackTab,      vec![Event::EvActToggle, Event::EvActUp(1)]);
+    ret.insert(Key::Ctrl('u'),    vec![Event::EvActUnixLineDiscard]);
+    ret.insert(Key::Ctrl('w'),    vec![Event::EvActUnixWordRubout]);
+    ret.insert(Key::Ctrl('p'),    vec![Event::EvActUp(1)]);
+    ret.insert(Key::Ctrl('k'),    vec![Event::EvActUp(1)]);
+    ret.insert(Key::Up,           vec![Event::EvActUp(1)]);
+    ret.insert(Key::Ctrl('y'),    vec![Event::EvActYank]);
+    ret.insert(Key::Null,         vec![Event::EvActAbort]);
     ret
 }
 

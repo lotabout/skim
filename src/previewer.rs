@@ -1,5 +1,5 @@
 use crate::ansi::AnsiString;
-use crate::event::{Event, EventArg, EventHandler, UpdateScreen};
+use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::item::Item;
 use crate::spinlock::SpinLock;
 use crate::util::{inject_command, InjectContext};
@@ -20,7 +20,7 @@ const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
 pub struct Previewer {
-    tx_preview: Sender<(Event, PreviewInput)>,
+    tx_preview: Sender<PreviewEvent>,
     content_lines: Arc<SpinLock<Vec<AnsiString>>>,
 
     width: AtomicUsize,
@@ -144,7 +144,7 @@ impl Previewer {
         let columns = self.width.load(Ordering::Relaxed);
         let lines = self.height.load(Ordering::Relaxed);
         let request = PreviewInput { cmd, columns, lines };
-        let _ = self.tx_preview.send((Event::EvPreviewRequest, request));
+        let _ = self.tx_preview.send(PreviewEvent::EvPreviewRequest(request));
 
         self.hscroll_offset = 0;
         self.vscroll_offset = 0;
@@ -175,43 +175,24 @@ impl Previewer {
 
 impl Drop for Previewer {
     fn drop(&mut self) {
-        let request = PreviewInput {
-            cmd: "".to_string(),
-            columns: 0,
-            lines: 0,
-        };
-        let _ = self.tx_preview.send((Event::EvActAbort, request));
+        let _ = self.tx_preview.send(PreviewEvent::EvAbort);
         self.thread_previewer.take().map(|handle| handle.join());
     }
 }
 
 impl EventHandler for Previewer {
-    fn accept_event(&self, event: Event) -> bool {
-        use crate::event::Event::*;
-        match event {
-            EvActTogglePreviewWrap
-            | EvActPreviewUp
-            | EvActPreviewDown
-            | EvActPreviewLeft
-            | EvActPreviewRight
-            | EvActPreviewPageUp
-            | EvActPreviewPageDown => true,
-            _ => false,
-        }
-    }
-
-    fn handle(&mut self, event: Event, _arg: &EventArg) -> UpdateScreen {
+    fn handle(&mut self, event: &Event) -> UpdateScreen {
         use crate::event::Event::*;
         let height = self.height.load(Ordering::Relaxed);
         match event {
             EvActTogglePreviewWrap => self.act_toggle_wrap(),
-            EvActPreviewUp => self.act_scroll_down(-1),
-            EvActPreviewDown => self.act_scroll_down(1),
-            EvActPreviewLeft => self.act_scroll_right(-1),
-            EvActPreviewRight => self.act_scroll_right(1),
-            EvActPreviewPageUp => self.act_scroll_down(-(height as i32)),
-            EvActPreviewPageDown => self.act_scroll_down(height as i32),
-            _ => {}
+            EvActPreviewUp(diff) => self.act_scroll_down(-*diff),
+            EvActPreviewDown(diff) => self.act_scroll_down(*diff),
+            EvActPreviewLeft(diff) => self.act_scroll_right(-*diff),
+            EvActPreviewRight(diff) => self.act_scroll_right(*diff),
+            EvActPreviewPageUp(diff) => self.act_scroll_down(-(height as i32 * *diff)),
+            EvActPreviewPageDown(diff) => self.act_scroll_down(height as i32 * *diff),
+            _ => return UpdateScreen::DONT_REDRAW,
         }
         UpdateScreen::REDRAW
     }
@@ -258,23 +239,29 @@ impl Draw for Previewer {
     }
 }
 
-impl Widget<(Event, EventArg)> for Previewer {
-    fn on_event(&self, event: TermEvent, _rect: Rectangle) -> Vec<(Event, EventArg)> {
+impl Widget<Event> for Previewer {
+    fn on_event(&self, event: TermEvent, _rect: Rectangle) -> Vec<Event> {
         let mut ret = vec![];
         match event {
-            TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push((Event::EvActPreviewUp, Box::new(true) as EventArg)),
-            TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push((Event::EvActPreviewDown, Box::new(true) as EventArg)),
+            TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push(Event::EvActPreviewUp(1)),
+            TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push(Event::EvActPreviewDown(1)),
             _ => {}
         }
-        return ret;
+        ret
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, PartialEq, Eq)]
 pub struct PreviewInput {
     pub cmd: String,
     pub lines: usize,
     pub columns: usize,
+}
+
+#[derive(Debug, Ord, PartialOrd, PartialEq, Eq)]
+enum PreviewEvent {
+    EvPreviewRequest(PreviewInput),
+    EvAbort,
 }
 
 struct PreviewThread {
@@ -292,28 +279,29 @@ impl PreviewThread {
     }
 }
 
-pub fn run<C>(rx_preview: Receiver<(Event, PreviewInput)>, on_return: C)
+fn run<C>(rx_preview: Receiver<PreviewEvent>, on_return: C)
 where
     C: Fn(Vec<AnsiString>) + Send + Sync + 'static,
 {
     let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
-    while let Ok((_ev, mut new_prv)) = rx_preview.recv() {
+    while let Ok(_event) = rx_preview.recv() {
         if preview_thread.is_some() {
             preview_thread.unwrap().kill();
             preview_thread = None;
         }
 
-        if _ev == Event::EvActAbort {
-            return;
-        }
+        let mut new_prv = match _event {
+            PreviewEvent::EvPreviewRequest(preview_input) => preview_input,
+            PreviewEvent::EvAbort => return,
+        };
 
         // Try to empty the channel. Happens when spamming up/down or typing fast.
-        while let Ok((_ev, new_prv1)) = rx_preview.try_recv() {
-            if _ev == Event::EvActAbort {
-                return;
+        while let Ok(_event) = rx_preview.try_recv() {
+            new_prv = match _event {
+                PreviewEvent::EvPreviewRequest(preview_input) => preview_input,
+                PreviewEvent::EvAbort => return,
             }
-            new_prv = new_prv1;
         }
 
         let cmd = &new_prv.cmd;

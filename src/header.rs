@@ -1,7 +1,7 @@
 ///! header of the items
 use crate::ansi::AnsiString;
 use crate::event::UpdateScreen;
-use crate::event::{Event, EventArg, EventHandler};
+use crate::event::{Event, EventHandler};
 use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
@@ -77,8 +77,7 @@ impl Header {
 
     fn lines_of_header(&self) -> usize {
         let fixed = if self.header.is_empty() { 0 } else { 1 };
-        let ret = fixed + self.item_pool.reserved().len();
-        ret
+        fixed + self.item_pool.reserved().len()
     }
 }
 
@@ -140,25 +139,21 @@ impl Draw for Header {
     }
 }
 
-impl Widget<(Event, EventArg)> for Header {
+impl Widget<Event> for Header {
     fn size_hint(&self) -> (Option<usize>, Option<usize>) {
         (None, Some(self.lines_of_header()))
     }
 }
 
 impl EventHandler for Header {
-    fn accept_event(&self, event: Event) -> bool {
-        event == Event::EvActScrollLeft || event == Event::EvActScrollRight
-    }
-
-    fn handle(&mut self, event: Event, arg: &EventArg) -> UpdateScreen {
+    fn handle(&mut self, event: &Event) -> UpdateScreen {
         match event {
-            Event::EvActScrollLeft => {
-                self.act_scroll(*arg.downcast_ref::<i32>().unwrap_or(&-1));
+            Event::EvActScrollLeft(diff) => {
+                self.act_scroll(*diff);
             }
 
-            Event::EvActScrollRight => {
-                self.act_scroll(*arg.downcast_ref::<i32>().unwrap_or(&1));
+            Event::EvActScrollRight(diff) => {
+                self.act_scroll(*diff);
             }
 
             _ => {
