@@ -167,6 +167,18 @@ impl Selection {
         self.line_cursor = line_cursor as usize;
     }
 
+    pub fn act_select_screen_row(&mut self, rows_to_top: usize) {
+        let height = self.height.load(Ordering::Relaxed);
+        self.line_cursor = if self.reverse {
+            // rows from top
+            rows_to_top
+        } else {
+            // rows from bottom
+            let fallback = rows_to_top + 1;
+            max(height, fallback) - rows_to_top - 1
+        };
+    }
+
     #[allow(clippy::map_entry)]
     pub fn act_toggle(&mut self) {
         if !self.multi_selection || self.items.is_empty() {
@@ -298,6 +310,9 @@ impl EventHandler for Selection {
             EvActPageUp(diff) => {
                 let height = (self.height.load(Ordering::Relaxed) as i32) - 1;
                 self.act_move_line_cursor(height * *diff);
+            }
+            EvActSelectRow(row) => {
+                self.act_select_screen_row(*row);
             }
             EvActScrollLeft(diff) => {
                 self.act_scroll(-*diff);
@@ -457,6 +472,7 @@ impl Widget<Event> for Selection {
         match event {
             TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push(Event::EvActUp(1)),
             TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push(Event::EvActDown(1)),
+            TermEvent::Key(Key::MousePress(MouseButton::Left, row, _)) => ret.push(Event::EvActSelectRow(row as usize)),
             _ => {}
         }
         ret

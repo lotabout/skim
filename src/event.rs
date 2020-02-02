@@ -54,6 +54,7 @@ pub enum Event {
     EvActScrollLeft(i32),
     EvActScrollRight(i32),
     EvActSelectAll,
+    EvActSelectRow(usize),
     EvActToggle,
     EvActToggleAll,
     EvActToggleIn,
