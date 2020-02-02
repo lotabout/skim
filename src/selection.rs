@@ -12,7 +12,7 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tuikit::prelude::*;
+use tuikit::prelude::{Event as TermEvent, *};
 
 lazy_static! {
     static ref DEFAULT_CRITERION: Vec<RankCriteria> = vec![
@@ -451,7 +451,17 @@ impl Draw for Selection {
     }
 }
 
-impl Widget<Event> for Selection {}
+impl Widget<Event> for Selection {
+    fn on_event(&self, event: TermEvent, _rect: Rectangle) -> Vec<Event> {
+        let mut ret = vec![];
+        match event {
+            TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push(Event::EvActUp(1)),
+            TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push(Event::EvActDown(1)),
+            _ => {}
+        }
+        ret
+    }
+}
 
 fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<MatchedItem> {
     use std::cmp::Ordering as CmpOrd;
