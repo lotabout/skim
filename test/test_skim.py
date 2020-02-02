@@ -397,7 +397,7 @@ class TestSkim(TestBase):
     def test_print0(self):
         self.tmux.send_keys(f"echo -e 'a\\nb' | {self.sk('-m', '--print0')}", Key('Enter'))
         self.tmux.until(lambda lines: lines.ready_with_lines(2))
-        self.tmux.send_keys(Key('BTab'), Key('Enter'))
+        self.tmux.send_keys(Key('BTab'), Key('BTab'), Key('Enter'))
 
         lines = self.readonce().strip()
         self.assertEqual(lines, 'a\0b\0')
