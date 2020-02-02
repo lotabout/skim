@@ -127,7 +127,7 @@ impl Previewer {
             .prev_item
             .as_ref()
             .map(|item| item.get_output_text())
-            .unwrap_or("".into());
+            .unwrap_or_else(|| "".into());
         let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
         let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
 
@@ -438,11 +438,13 @@ impl Printer {
         if self.wrap {
             // if wrap is enabled, hscroll is discarded
             self.col += self.adjust_scroll_print(canvas, ch, attr)?;
-            if self.col == self.width {
-                let _ = self.move_to_next_line();
-            } else if self.col > self.width {
+
+            if self.col >= self.width {
                 // re-print the wide character
-                let _ = self.move_to_next_line();
+                self.move_to_next_line();
+            }
+
+            if self.col > self.width {
                 self.col += self.adjust_scroll_print(canvas, ch, attr)?;
             }
         } else {

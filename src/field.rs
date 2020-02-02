@@ -24,28 +24,21 @@ impl FieldRange {
             let opt_right = caps.name("right").map(|s| s.as_str().parse().unwrap_or(-1));
             let opt_sep = caps.name("sep").map(|s| s.as_str().to_string());
 
-            if opt_left.is_none() && opt_right.is_none() {
-                // ..
-                Some(RightInf(0))
-            } else if opt_right.is_none() {
-                if opt_sep.is_none() {
-                    // 1
-                    Some(Single(opt_left.unwrap()))
-                } else {
-                    // 1..
-                    Some(RightInf(opt_left.unwrap()))
+            match (opt_left, opt_right) {
+                (None, None) => Some(RightInf(0)),
+                (Some(left), None) => {
+                    match opt_sep {
+                        None => Some(Single(left)),      // 1
+                        Some(_) => Some(RightInf(left)), // 1..
+                    }
                 }
-            } else if opt_left.is_none() {
-                if opt_sep.is_none() {
-                    // 1 (should not happen)
-                    Some(Single(opt_right.unwrap()))
-                } else {
-                    // ..1 (should not happen)
-                    Some(LeftInf(opt_right.unwrap()))
+                (None, Some(right)) => {
+                    match opt_sep {
+                        None => Some(Single(right)),     // 1 (should not happen)
+                        Some(_) => Some(LeftInf(right)), // ..1 (should not happen)
+                    }
                 }
-            } else {
-                // 1..3
-                Some(Both(opt_left.unwrap(), opt_right.unwrap()))
+                (Some(left), Some(right)) => Some(Both(left, right)), // 1..3
             }
         } else {
             None

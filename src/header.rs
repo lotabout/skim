@@ -94,8 +94,6 @@ impl Draw for Header {
 
         canvas.clear()?;
 
-        let mut lines_used = 0;
-
         if !self.is_empty() {
             // print fixed header(specified by --header)
             let mut printer = LinePrinter::builder()
@@ -111,9 +109,9 @@ impl Draw for Header {
             for (ch, _attr) in self.header.iter() {
                 printer.print_char(canvas, ch, self.theme.header(), false);
             }
-
-            lines_used = 1;
         }
+
+        let lines_used = if !self.is_empty() { 1 } else { 0 };
 
         // print "reserved" header lines (--header-lines)
         for (idx, item) in self.item_pool.reserved().iter().enumerate() {

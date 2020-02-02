@@ -167,6 +167,7 @@ impl Selection {
         self.line_cursor = line_cursor as usize;
     }
 
+    #[allow(clippy::map_entry)]
     pub fn act_toggle(&mut self) {
         if !self.multi_selection || self.items.is_empty() {
             return;
@@ -185,6 +186,7 @@ impl Selection {
         }
     }
 
+    #[allow(clippy::map_entry)]
     pub fn act_toggle_all(&mut self) {
         if !self.multi_selection || self.items.is_empty() {
             return;
@@ -243,7 +245,7 @@ impl Selection {
             self.selected.insert(item.get_full_index(), item);
         }
 
-        let mut selected: Vec<Arc<Item>> = self.selected.values().map(|item| item.clone()).collect();
+        let mut selected: Vec<Arc<Item>> = self.selected.values().cloned().collect();
 
         selected.sort_by_key(|item| item.get_full_index());
         selected

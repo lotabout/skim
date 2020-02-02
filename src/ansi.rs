@@ -80,7 +80,7 @@ impl Perform for ANSIParser {
             self.last_attr
         };
 
-        let mut iter = params.into_iter();
+        let mut iter = params.iter();
         while let Some(&code) = iter.next() {
             match code {
                 0 => attr = Attr::default(),

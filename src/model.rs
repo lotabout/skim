@@ -347,6 +347,7 @@ impl Model {
         let _ = Command::new(shell).arg("-c").arg(cmd).status();
     }
 
+    #[allow(clippy::trivial_regex)]
     fn act_append_and_select(&mut self, env: &mut ModelEnv) {
         let query = self.query.get_query();
         if query.is_empty() {
@@ -354,7 +355,7 @@ impl Model {
         }
 
         let item = Arc::new(Item::new(
-            String::from_utf8_lossy(query.to_string().as_bytes()),
+            String::from_utf8_lossy(query.as_bytes()),
             false,
             &Vec::new(),
             &Vec::new(),
@@ -506,9 +507,9 @@ impl Model {
 
             self.selection.handle(&ev);
 
-            self.previewer.as_mut().map(|previewer| {
+            if let Some(previewer) = self.previewer.as_mut() {
                 previewer.handle(&ev);
-            });
+            }
 
             // re-draw
             if !self.preview_hidden {
@@ -536,7 +537,7 @@ impl Model {
             }
         }
         // once the event is peeked, it is removed from the pipe, thus need to be saved.
-        return rx_try_iter.next();
+        rx_try_iter.next()
     }
 
     fn restart_matcher(&mut self) {
@@ -575,9 +576,9 @@ impl Model {
     }
 
     /// construct the widget tree
-    fn do_with_widget<'a, R, F>(&'a self, action: F) -> R
+    fn do_with_widget<R, F>(&'_ self, action: F) -> R
     where
-        F: Fn(Box<dyn Widget<Event> + 'a>) -> R,
+        F: Fn(Box<dyn Widget<Event> + '_>) -> R,
     {
         let total = self.item_pool.len();
         let matcher_mode = if self.matcher_mode.is_none() {

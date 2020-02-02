@@ -22,7 +22,7 @@ impl Input {
     pub fn translate_event(&self, event: TermEvent) -> ActionChain {
         match event {
             // search event from keymap
-            TermEvent::Key(key) => self.keymap.get(&key).map(|chain| chain.clone()).unwrap_or_else(|| {
+            TermEvent::Key(key) => self.keymap.get(&key).cloned().unwrap_or_else(|| {
                 if let Key::Char(ch) = key {
                     vec![Event::EvActAddChar(ch)]
                 } else {
@@ -76,9 +76,11 @@ impl Input {
     }
 }
 
+type KeyActions<'a> = (&'a str, Vec<(&'a str, Option<String>)>);
+
 /// parse key action string to `(key, action, argument)` tuple
 /// key_action is comma separated: 'ctrl-j:accept,ctrl-k:kill-line'
-pub fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String>)>)> {
+pub fn parse_key_action(key_action: &str) -> Vec<KeyActions> {
     lazy_static! {
         // match `key:action` or `key:action:arg` or `key:action(arg)` etc.
         static ref RE: Regex =
@@ -101,7 +103,7 @@ pub fn parse_key_action(key_action: &str) -> Vec<(&str, Vec<(&str, Option<String
                         caps.get(2).map(|s| {
                             // (arg) => arg, :end_arg => arg
                             let action = s.as_str();
-                            if action.starts_with(":") {
+                            if action.starts_with(':') {
                                 action[1..].to_string()
                             } else {
                                 action[1..action.len() - 1].to_string()

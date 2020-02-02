@@ -66,7 +66,7 @@ impl Skim {
         input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
         let tx_clone = tx.clone();
         let term_clone = term.clone();
-        let input_thread = thread::spawn(move || 'outer: loop {
+        let input_thread = thread::spawn(move || loop {
             if let Ok(key) = term_clone.poll_event() {
                 if key == TermEvent::User1 {
                     break;
@@ -172,7 +172,11 @@ impl Skim {
             }
         }
 
-        if match_count == 0 { 1 } else { 0 }
+        if match_count == 0 {
+            1
+        } else {
+            0
+        }
     }
 
     // 10 -> TermHeight::Fixed(10)
