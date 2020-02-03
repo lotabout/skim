@@ -10,15 +10,6 @@ lazy_static! {
     static ref RE_OR: Regex = Regex::new(r" +\| +").unwrap();
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Algorithm {
-    PrefixExact,
-    SuffixExact,
-    Exact,
-    InverseExact,
-    InverseSuffixExact,
-}
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum MatcherMode {
     Regex,
@@ -170,20 +161,58 @@ impl MatchEngine for FuzzyEngine {
 }
 
 //------------------------------------------------------------------------------
+#[derive(Debug)]
+struct MatchAllEngine {}
+
+impl MatchAllEngine {
+    pub fn builder() -> Self {
+        Self {}
+    }
+
+    pub fn build(self) -> Self {
+        self
+    }
+}
+
+impl MatchEngine for MatchAllEngine {
+    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+        let rank = build_rank(0, item.get_index() as i64, 0, 0);
+
+        Some(
+            MatchedItem::builder(item)
+                .rank(rank)
+                .matched_range(MatchedRange::ByteRange(0, 0))
+                .build(),
+        )
+    }
+
+    fn display(&self) -> String {
+        "Noop".to_string()
+    }
+}
+
+//------------------------------------------------------------------------------
 // Exact engine
+#[derive(Debug, Copy, Clone, Default)]
+struct ExactMatchingParam {
+    prefix: bool,
+    postfix: bool,
+    inverse: bool,
+}
+
 #[derive(Debug)]
 struct ExactEngine {
     query: String,
     query_chars: Vec<char>,
-    algorithm: Algorithm,
+    param: ExactMatchingParam,
 }
 
 impl ExactEngine {
-    pub fn builder(query: &str, algo: Algorithm) -> Self {
+    pub fn builder(query: &str, param: ExactMatchingParam) -> Self {
         ExactEngine {
             query: query.to_string(),
             query_chars: query.chars().collect(),
-            algorithm: algo,
+            param,
         }
     }
 
@@ -191,7 +220,12 @@ impl ExactEngine {
         self
     }
 
-    fn match_item_exact(&self, item: Arc<Item>, filter: ExactFilter) -> Option<MatchedItem> {
+    fn match_item_exact(
+        &self,
+        item: Arc<Item>,
+        // filter: <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
+        filter: impl Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>,
+    ) -> Option<MatchedItem> {
         let mut matched_result = None;
         let mut range_start = 0;
         let mut range_end = 0;
@@ -225,54 +259,56 @@ impl ExactEngine {
     }
 }
 
-// <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
-type ExactFilter = Box<dyn Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>>;
-
 impl MatchEngine for ExactEngine {
     fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
-        match self.algorithm {
-            Algorithm::Exact => self.match_item_exact(
-                item,
-                Box::new(|matched_result, _| matched_result.map(|(first, _)| first)),
-            ),
-            Algorithm::InverseExact => self.match_item_exact(
-                item,
-                Box::new(
-                    |matched_result, _| {
-                        if matched_result.is_none() {
-                            Some((0, 0))
+        self.match_item_exact(item, |match_result, len| {
+            let match_range = match *match_result {
+                Some(((s1, e1), (s2, e2))) => {
+                    if self.param.prefix && self.param.postfix {
+                        if s1 == 0 && e2 == len {
+                            Some((s1, e1))
                         } else {
                             None
                         }
-                    },
-                ),
-            ),
-            Algorithm::PrefixExact => self.match_item_exact(
-                item,
-                Box::new(|matched_result, _| match *matched_result {
-                    Some(((s, e), _)) if s == 0 => Some((s, e)),
-                    _ => None,
-                }),
-            ),
-            Algorithm::SuffixExact => self.match_item_exact(
-                item,
-                Box::new(|matched_result, len| match *matched_result {
-                    Some((_, (s, e))) if e == len => Some((s, e)),
-                    _ => None,
-                }),
-            ),
-            Algorithm::InverseSuffixExact => self.match_item_exact(
-                item,
-                Box::new(|matched_result, len| match *matched_result {
-                    Some((_, (_, e))) if e != len => None,
-                    _ => Some((0, 0)),
-                }),
-            ),
-        }
+                    } else if self.param.prefix {
+                        if s1 == 0 {
+                            Some((s1, e1))
+                        } else {
+                            None
+                        }
+                    } else if self.param.postfix {
+                        if e2 == len {
+                            Some((s2, e2))
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some((s1, e1))
+                    }
+                }
+                None => None,
+            };
+
+            if self.param.inverse {
+                if match_range.is_some() {
+                    None
+                } else {
+                    Some((0, 0))
+                }
+            } else {
+                match_range
+            }
+        })
     }
 
     fn display(&self) -> String {
-        format!("({:?}: {})", self.algorithm, self.query)
+        format!(
+            "(Exact|{}{}{}: {})",
+            if self.param.inverse { "!" } else { "" },
+            if self.param.prefix { "^" } else { "" },
+            if self.param.postfix { "$" } else { "" },
+            self.query
+        )
     }
 }
 
@@ -422,24 +458,55 @@ impl EngineFactory {
     }
 
     fn build_single(query: &str, mode: MatcherMode, fuzzy_algorithm: FuzzyAlgorithm) -> Box<dyn MatchEngine> {
+        // 'abc => match exact "abc"
+        // ^abc => starts with "abc"
+        // abc$ => ends with "abc"
+        // ^abc$ => match exact "abc"
+        // !^abc => items not starting with "abc"
+        // !abc$ => items not ending with "abc"
+        // !^abc$ => not "abc"
+
+        let mut query = query;
+        let mut exact = false;
+        let mut param = ExactMatchingParam::default();
+
         if query.starts_with('\'') {
             if mode == MatcherMode::Exact {
-                Box::new(FuzzyEngine::builder(&query[1..]).algorithm(fuzzy_algorithm).build())
+                return Box::new(FuzzyEngine::builder(&query[1..]).algorithm(fuzzy_algorithm).build());
             } else {
-                Box::new(ExactEngine::builder(&query[1..], Algorithm::Exact).build())
+                return Box::new(ExactEngine::builder(&query[1..], param).build());
             }
-        } else if query.starts_with('^') {
-            Box::new(ExactEngine::builder(&query[1..], Algorithm::PrefixExact).build())
-        } else if query.starts_with('!') {
-            if query.ends_with('$') {
-                Box::new(ExactEngine::builder(&query[1..(query.len() - 1)], Algorithm::InverseSuffixExact).build())
-            } else {
-                Box::new(ExactEngine::builder(&query[1..], Algorithm::InverseExact).build())
-            }
-        } else if query.ends_with('$') {
-            Box::new(ExactEngine::builder(&query[..(query.len() - 1)], Algorithm::SuffixExact).build())
-        } else if mode == MatcherMode::Exact {
-            Box::new(ExactEngine::builder(query, Algorithm::Exact).build())
+        }
+
+        if query.starts_with('!') {
+            query = &query[1..];
+            exact = true;
+            param.inverse = true;
+        }
+
+        if query.is_empty() {
+            // if only "!" was provided, will still show all items
+            return Box::new(MatchAllEngine::builder().build());
+        }
+
+        if query.starts_with('^') {
+            query = &query[1..];
+            exact = true;
+            param.prefix = true;
+        }
+
+        if query.ends_with('$') {
+            query = &query[..(query.len() - 1)];
+            exact = true;
+            param.postfix = true;
+        }
+
+        if mode == MatcherMode::Exact {
+            exact = true;
+        }
+
+        if exact {
+            Box::new(ExactEngine::builder(query, param).build())
         } else {
             Box::new(FuzzyEngine::builder(query).algorithm(fuzzy_algorithm).build())
         }
@@ -453,22 +520,47 @@ mod test {
 
     #[test]
     fn test_engine_factory() {
-        let x1 = EngineFactory::build(
+        let x = EngineFactory::build("'abc", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|: abc)");
+
+        let x = EngineFactory::build("^abc", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|^: abc)");
+
+        let x = EngineFactory::build("abc$", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|$: abc)");
+
+        let x = EngineFactory::build("^abc$", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|^$: abc)");
+
+        let x = EngineFactory::build("!abc", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|!: abc)");
+
+        let x = EngineFactory::build("!^abc", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|!^: abc)");
+
+        let x = EngineFactory::build("!abc$", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|!$: abc)");
+
+        let x = EngineFactory::build("!^abc$", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
+        assert_eq!(x.display(), "(Exact|!^$: abc)");
+
+        let x = EngineFactory::build(
             "'abc | def ^gh ij | kl mn",
             MatcherMode::Fuzzy,
             FuzzyAlgorithm::default(),
         );
+
         assert_eq!(
-            x1.display(),
-            "(And: (Or: (Exact: abc), (Fuzzy: def)), (PrefixExact: gh), (Or: (Fuzzy: ij), (Fuzzy: kl)), (Fuzzy: mn))"
+            x.display(),
+            "(And: (Or: (Exact|: abc), (Fuzzy: def)), (Exact|^: gh), (Or: (Fuzzy: ij), (Fuzzy: kl)), (Fuzzy: mn))"
         );
 
-        let x3 = EngineFactory::build(
+        let x = EngineFactory::build(
             "'abc | def ^gh ij | kl mn",
             MatcherMode::Regex,
             FuzzyAlgorithm::default(),
         );
-        assert_eq!(x3.display(), "(Regex: 'abc | def ^gh ij | kl mn)");
+        assert_eq!(x.display(), "(Regex: 'abc | def ^gh ij | kl mn)");
 
         let x = EngineFactory::build("abc ", MatcherMode::Fuzzy, FuzzyAlgorithm::default());
         assert_eq!(x.display(), "(And: (Fuzzy: abc))");
