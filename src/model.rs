@@ -381,20 +381,14 @@ impl Model {
 
         self.reader_control = Some(self.reader.run(&env.cmd));
 
-        // In the event loop, thhere might need
+        // In the event loop, there might need
         let mut next_event = None;
         loop {
-            let ev = if next_event.is_some() {
-                next_event.take().unwrap()
-            } else if let Ok(ev) = self.rx.recv() {
-                ev
-            } else {
-                break; // end of the event stream;
-            };
+            let ev = next_event.take().or_else(|| self.rx.recv().ok())?;
 
             match ev {
                 Event::EvHeartBeat => {
-                    // consume follwing HeartBeat event
+                    // consume following HeartBeat event
                     next_event = self.consume_additional_event(&Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
                 }
@@ -522,8 +516,6 @@ impl Model {
             let _ = self.do_with_widget(|root| self.term.draw(&root));
             let _ = self.term.present();
         }
-
-        None
     }
 
     fn consume_additional_event(&self, target_event: &Event) -> Option<Event> {
