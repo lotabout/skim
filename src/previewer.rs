@@ -120,7 +120,7 @@ impl Previewer {
 
         let selected_items_changed = self.prev_num_selected != num_selected;
 
-        if !item_changed && !query_changed && !cmd_query_changed  && ! selected_items_changed {
+        if !item_changed && !query_changed && !cmd_query_changed && !selected_items_changed {
             return;
         }
 
