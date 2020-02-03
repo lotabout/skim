@@ -4,6 +4,7 @@ use crate::item::{parse_criteria, RankCriteria};
 use crate::item::{Item, MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
+use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::SkimOptions;
@@ -12,7 +13,10 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tuikit::prelude::{Event as TermEvent, *};
+
+const DOUBLE_CLICK_DURATION: u128 = 300;
 
 lazy_static! {
     static ref DEFAULT_CRITERION: Vec<RankCriteria> = vec![
@@ -50,6 +54,10 @@ pub struct Selection {
     reverse: bool,
     no_hscroll: bool,
     theme: Arc<ColorTheme>,
+
+    // used to detect double click(two consecutive press) event.
+    last_click_row: AtomicUsize,
+    last_click_time: SpinLock<Instant>,
 }
 
 impl Selection {
@@ -67,6 +75,9 @@ impl Selection {
             reverse: false,
             no_hscroll: false,
             theme: Arc::new(*DEFAULT_THEME),
+
+            last_click_row: AtomicUsize::new(0),
+            last_click_time: SpinLock::new(Instant::now()),
         }
     }
 
@@ -472,7 +483,20 @@ impl Widget<Event> for Selection {
         match event {
             TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push(Event::EvActUp(1)),
             TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push(Event::EvActDown(1)),
-            TermEvent::Key(Key::MousePress(MouseButton::Left, row, _)) => ret.push(Event::EvActSelectRow(row as usize)),
+            TermEvent::Key(Key::MousePress(MouseButton::Left, row, _)) => {
+                let row = row as usize;
+                if self.last_click_row.load(Ordering::SeqCst) == row
+                    && self.last_click_time.lock().elapsed().as_millis() < DOUBLE_CLICK_DURATION
+                {
+                    // double click
+                    ret.push(Event::EvActAccept(None))
+                } else {
+                    ret.push(Event::EvActSelectRow(row))
+                }
+
+                self.last_click_row.store(row, Ordering::SeqCst);
+                *self.last_click_time.lock() = Instant::now();
+            }
             _ => {}
         }
         ret
