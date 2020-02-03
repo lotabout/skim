@@ -497,6 +497,10 @@ impl Widget<Event> for Selection {
                 self.last_click_row.store(row, Ordering::SeqCst);
                 *self.last_click_time.lock() = Instant::now();
             }
+            TermEvent::Key(Key::MousePress(MouseButton::Right, row, _)) => {
+                ret.push(Event::EvActSelectRow(row as usize));
+                ret.push(Event::EvActToggle);
+            }
             _ => {}
         }
         ret
