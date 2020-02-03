@@ -255,9 +255,11 @@ impl Selection {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn get_selected_items(&mut self) -> Vec<Arc<Item>> {
+    pub fn get_selected_items(&self) -> Vec<Arc<Item>> {
         // select the current one
         let select_cursor = !self.multi_selection || self.selected.is_empty();
+        let mut selected: Vec<Arc<Item>> = self.selected.values().cloned().collect();
+
         if select_cursor && !self.items.is_empty() {
             let cursor = self.item_cursor + self.line_cursor;
             let current_item = self
@@ -265,13 +267,15 @@ impl Selection {
                 .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let item = current_item.item.clone();
-            self.selected.insert(item.get_full_index(), item);
+            selected.push(item);
         }
-
-        let mut selected: Vec<Arc<Item>> = self.selected.values().cloned().collect();
 
         selected.sort_by_key(|item| item.get_full_index());
         selected
+    }
+
+    pub fn get_num_of_selected_exclude_current(&self) -> usize {
+        self.selected.len()
     }
 
     pub fn get_current_item_idx(&self) -> usize {
