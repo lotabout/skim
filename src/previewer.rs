@@ -32,6 +32,8 @@ pub struct Previewer {
     prev_item: Option<Arc<Item>>,
     prev_query: Option<String>,
     prev_cmd_query: Option<String>,
+    prev_num_selected: usize,
+
     preview_cmd: Option<String>,
     delimiter: Regex,
     thread_previewer: Option<JoinHandle<()>>,
@@ -65,6 +67,8 @@ impl Previewer {
             prev_item: None,
             prev_query: None,
             prev_cmd_query: None,
+            prev_num_selected: 0,
+
             preview_cmd,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             thread_previewer: Some(thread_previewer),
@@ -86,12 +90,12 @@ impl Previewer {
         new_item: impl Into<Option<Arc<Item>>>,
         new_query: impl Into<Option<String>>,
         new_cmd_query: impl Into<Option<String>>,
+        num_selected: usize,
+        get_selected_items: impl Fn() -> Vec<Arc<Item>>, // lazy get
     ) {
         let new_item = new_item.into();
         let new_query = new_query.into();
         let new_cmd_query = new_cmd_query.into();
-
-        debug!("b {:?}, c{:?}", new_query, new_cmd_query);
 
         let item_changed = match (self.prev_item.as_ref(), new_item.as_ref()) {
             (None, None) => false,
@@ -114,13 +118,16 @@ impl Previewer {
             (Some(prev), Some(cur)) => prev != cur,
         };
 
-        if !item_changed && !query_changed && !cmd_query_changed {
+        let selected_items_changed = self.prev_num_selected != num_selected;
+
+        if !item_changed && !query_changed && !cmd_query_changed  && ! selected_items_changed {
             return;
         }
 
         self.prev_item = new_item;
         self.prev_query = new_query;
         self.prev_cmd_query = new_cmd_query;
+        self.prev_num_selected = num_selected;
 
         let cmd = self.preview_cmd.as_ref().expect("previewer: invalid preview command");
         let current_selection = self
@@ -130,11 +137,13 @@ impl Previewer {
             .unwrap_or_else(|| "".into());
         let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
         let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
+        let selected_items = get_selected_items();
+        let selected_texts: Vec<&str> = selected_items.iter().map(|item| item.get_text()).collect();
 
         let context = InjectContext {
             delimiter: &self.delimiter,
             current_selection: &current_selection,
-            selections: &[], // not supported for now.
+            selections: &selected_texts,
             query: &query,
             cmd_query: &cmd_query,
         };

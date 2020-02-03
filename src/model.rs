@@ -334,10 +334,13 @@ impl Model {
         let query = self.query.get_query();
         let cmd_query = self.query.get_cmd_query();
 
+        let selected_items = self.selection.get_selected_items();
+        let selected_texts: Vec<&str> = selected_items.iter().map(|item| item.get_text()).collect();
+
         let context = InjectContext {
             delimiter: &self.delimiter,
             current_selection: &current_selection,
-            selections: &[], // not supported for now
+            selections: &selected_texts,
             query: &query,
             cmd_query: &cmd_query,
         };
@@ -509,7 +512,15 @@ impl Model {
             if !self.preview_hidden {
                 let item = self.selection.get_current_item();
                 if let Some(previewer) = self.previewer.as_mut() {
-                    previewer.on_item_change(item, env.query.to_string(), env.cmd_query.to_string());
+                    let selections = &self.selection;
+                    let get_selected_items = || selections.get_selected_items();
+                    previewer.on_item_change(
+                        item,
+                        env.query.to_string(),
+                        env.cmd_query.to_string(),
+                        selections.get_num_of_selected_exclude_current(),
+                        get_selected_items,
+                    );
                 }
             }
 
