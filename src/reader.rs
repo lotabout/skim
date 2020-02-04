@@ -2,8 +2,9 @@
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
 use crate::field::FieldRange;
-use crate::item::Item;
+use crate::item::ItemWrapper;
 use crate::options::SkimOptions;
+use crate::sk::item::SkItem;
 use crate::spinlock::SpinLock;
 use regex::Regex;
 use std::collections::HashMap;
@@ -22,7 +23,7 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 pub struct ReaderControl {
     stopped: Arc<AtomicBool>,
     thread_reader: JoinHandle<()>,
-    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
 }
 
 impl ReaderControl {
@@ -31,7 +32,7 @@ impl ReaderControl {
         let _ = self.thread_reader.join();
     }
 
-    pub fn take(&self) -> Vec<Arc<Item>> {
+    pub fn take(&self) -> Vec<Arc<ItemWrapper>> {
         let mut items = self.items.lock();
         let mut ret = Vec::with_capacity(items.len());
         ret.append(&mut items);
@@ -174,7 +175,7 @@ lazy_static! {
 fn reader(
     cmd: &str,
     stopped: Arc<AtomicBool>,
-    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
     option: Arc<ReaderOption>,
     source_file: Option<Box<dyn BufRead + Send>>,
 ) {
@@ -231,14 +232,15 @@ fn reader(
                     buffer.pop();
                 }
 
-                let item = Item::new(
+                let raw_item = SkItem::new(
                     String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,
                     &opt.transform_fields,
                     &opt.matching_fields,
                     &opt.delimiter,
-                    (run_num, index),
                 );
+
+                let item = ItemWrapper::new(raw_item, (run_num, index));
 
                 {
                     // save item into pool

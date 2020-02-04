@@ -19,10 +19,12 @@ mod query;
 mod reader;
 mod score;
 mod selection;
+mod sk;
 mod spinlock;
 mod theme;
 mod util;
 
+use crate::ansi::AnsiString;
 use crate::event::Event::*;
 use crate::event::{EventReceiver, EventSender};
 use crate::model::Model;
@@ -31,6 +33,7 @@ pub use crate::output::SkimOutput;
 use crate::reader::Reader;
 pub use crate::score::FuzzyAlgorithm;
 use nix::unistd::isatty;
+use std::borrow::Cow;
 use std::env;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -40,6 +43,49 @@ use std::sync::Arc;
 use std::thread;
 use tuikit::prelude::{Event as TermEvent, *};
 
+//------------------------------------------------------------------------------
+pub trait SkimItem: Send + Sync {
+    /// The text to be displayed on the item list, could contain ANSI properties
+    fn display(&self) -> Cow<AnsiString>;
+
+    /// helper function to get pure text presentation(without color) of the item
+    fn get_text(&self) -> Cow<str>;
+
+    /// get output text(after accept), could be override
+    fn output(&self) -> Cow<str> {
+        self.get_text()
+    }
+
+    fn preview(&self) -> ItemPreview {
+        ItemPreview::Global
+    }
+
+    /// we could limit the matching ranges of the `get_text` of the item.
+    /// providing (start_byte, end_byte) of the range
+    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
+        Cow::Owned(vec![(0, self.display().stripped().len())])
+    }
+}
+
+impl<T: AsRef<str> + Send + Sync> SkimItem for T {
+    fn display(&self) -> Cow<AnsiString> {
+        Cow::Owned(AnsiString::new_str(self.as_ref()))
+    }
+
+    fn get_text(&self) -> Cow<str> {
+        Cow::Borrowed(self.as_ref())
+    }
+}
+
+//------------------------------------------------------------------------------
+// Preview
+pub enum ItemPreview<'a> {
+    Command(&'a str),
+    Text(&'a str),
+    Global,
+}
+
+//------------------------------------------------------------------------------
 pub struct Skim {}
 
 impl Skim {
@@ -163,9 +209,9 @@ impl Skim {
             for item in reader_control.take().into_iter() {
                 if let Some(matched) = engine.match_item(item) {
                     if options.print_score {
-                        println!("{}\t{}", -matched.rank.score, matched.item.get_output_text());
+                        println!("{}\t{}", -matched.rank.score, matched.item.output());
                     } else {
-                        println!("{}", matched.item.get_output_text());
+                        println!("{}", matched.item.output());
                     }
                     match_count += 1;
                 }

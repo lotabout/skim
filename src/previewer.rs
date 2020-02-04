@@ -1,11 +1,13 @@
 use crate::ansi::AnsiString;
 use crate::event::{Event, EventHandler, UpdateScreen};
-use crate::item::Item;
+use crate::item::ItemWrapper;
 use crate::spinlock::SpinLock;
 use crate::util::{inject_command, InjectContext};
+use crate::SkimItem;
 use derive_builder::Builder;
 use nix::libc;
 use regex::Regex;
+use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::env;
 use std::process::{Command, Stdio};
@@ -21,7 +23,7 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 pub struct Previewer {
     tx_preview: Sender<PreviewEvent>,
-    content_lines: Arc<SpinLock<Vec<AnsiString>>>,
+    content_lines: Arc<SpinLock<Vec<AnsiString<'static>>>>,
 
     width: AtomicUsize,
     height: AtomicUsize,
@@ -29,7 +31,7 @@ pub struct Previewer {
     vscroll_offset: usize,
     wrap: bool,
 
-    prev_item: Option<Arc<Item>>,
+    prev_item: Option<Arc<ItemWrapper>>,
     prev_query: Option<String>,
     prev_cmd_query: Option<String>,
     prev_num_selected: usize,
@@ -87,11 +89,11 @@ impl Previewer {
 
     pub fn on_item_change(
         &mut self,
-        new_item: impl Into<Option<Arc<Item>>>,
+        new_item: impl Into<Option<Arc<ItemWrapper>>>,
         new_query: impl Into<Option<String>>,
         new_cmd_query: impl Into<Option<String>>,
         num_selected: usize,
-        get_selected_items: impl Fn() -> Vec<Arc<Item>>, // lazy get
+        get_selected_items: impl Fn() -> Vec<Arc<ItemWrapper>>, // lazy get
     ) {
         let new_item = new_item.into();
         let new_query = new_query.into();
@@ -101,7 +103,7 @@ impl Previewer {
             (None, None) => false,
             (None, Some(_)) => true,
             (Some(_), None) => true,
-            (Some(prev), Some(cur)) => prev.get_output_text() != cur.get_output_text(),
+            (Some(prev), Some(cur)) => prev.output() != cur.output(),
         };
 
         let query_changed = match (self.prev_query.as_ref(), new_query.as_ref()) {
@@ -133,12 +135,14 @@ impl Previewer {
         let current_selection = self
             .prev_item
             .as_ref()
-            .map(|item| item.get_output_text())
+            .map(|item| item.output())
             .unwrap_or_else(|| "".into());
         let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
         let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
-        let selected_items = get_selected_items();
-        let selected_texts: Vec<&str> = selected_items.iter().map(|item| item.get_text()).collect();
+
+        let tmp = get_selected_items();
+        let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.get_text()).collect();
+        let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
 
         let context = InjectContext {
             delimiter: &self.delimiter,
@@ -290,7 +294,7 @@ impl PreviewThread {
 
 fn run<C>(rx_preview: Receiver<PreviewEvent>, on_return: C)
 where
-    C: Fn(Vec<AnsiString>) + Send + Sync + 'static,
+    C: Fn(Vec<AnsiString<'static>>) + Send + Sync + 'static,
 {
     let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
@@ -330,7 +334,7 @@ where
 
         match spawned {
             Err(err) => {
-                let astdout = AnsiString::from_str(format!("Failed to spawn: {} / {}", cmd, err).as_str());
+                let astdout = AnsiString::parse(format!("Failed to spawn: {} / {}", cmd, err).as_str());
                 callback(vec![astdout]);
                 preview_thread = None;
             }
@@ -353,7 +357,7 @@ where
 
 fn wait<C>(spawned: std::process::Child, callback: C)
 where
-    C: Fn(Vec<AnsiString>),
+    C: Fn(Vec<AnsiString<'static>>),
 {
     let output = spawned.wait_with_output();
 
@@ -370,7 +374,7 @@ where
         &output.stderr
     });
 
-    let lines = out_str.lines().map(AnsiString::from_str).collect();
+    let lines = out_str.lines().map(AnsiString::parse).collect();
     callback(lines);
 }
 

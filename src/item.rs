@@ -1,9 +1,8 @@
 ///! An item is line of text that read from `find` command or stdin together with
 ///! the internal states, such as selected or not
-use crate::ansi::{ANSIParser, AnsiString};
-use crate::field::*;
+use crate::ansi::AnsiString;
 use crate::spinlock::{SpinLock, SpinLockGuard};
-use regex::Regex;
+use crate::{ItemPreview, SkimItem};
 use std::borrow::Cow;
 use std::cmp::min;
 use std::default::Default;
@@ -11,141 +10,49 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-/// An item will store everything that one line input will need to be operated and displayed.
-///
-/// What's special about an item?
-/// The simplest version of an item is a line of string, but things are getting more complex:
-/// - The conversion of lower/upper case is slow in rust, because it involds unicode.
-/// - We may need to interpret the ANSI codes in the text.
-/// - The text can be transformed and limited while searching.
-///
-/// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
-/// more than one line.
-#[derive(Debug)]
-pub struct Item {
+pub struct ItemWrapper {
     // (num of run, number of index)
-    index: (usize, usize),
-
-    // The text that will be ouptut when user press `enter`
-    orig_text: String,
-
-    // The text that will shown into the screen. Can be transformed.
-    text: AnsiString,
-
-    matching_ranges: Vec<(usize, usize)>,
-
-    // For the transformed ANSI case, the output will need another transform.
-    using_transform_fields: bool,
-    ansi_enabled: bool,
+    id: (usize, usize),
+    inner: Arc<dyn SkimItem>,
 }
 
-impl<'a> Item {
-    pub fn new(
-        orig_text: Cow<str>,
-        ansi_enabled: bool,
-        trans_fields: &[FieldRange],
-        matching_fields: &[FieldRange],
-        delimiter: &Regex,
-        index: (usize, usize),
-    ) -> Self {
-        let using_transform_fields = !trans_fields.is_empty();
-
-        //        transformed | ANSI             | output
-        //------------------------------------------------------
-        //                    +- T -> trans+ANSI | ANSI
-        //                    |                  |
-        //      +- T -> trans +- F -> trans      | orig
-        // orig |                                |
-        //      +- F -> orig  +- T -> ANSI     ==| ANSI
-        //                    |                  |
-        //                    +- F -> orig       | orig
-
-        let mut ansi_parser: ANSIParser = Default::default();
-
-        let text = if using_transform_fields && ansi_enabled {
-            // ansi and transform
-            ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
-        } else if using_transform_fields {
-            // transformed, not ansi
-            AnsiString::new_string(parse_transform_fields(delimiter, &orig_text, trans_fields))
-        } else if ansi_enabled {
-            // not transformed, ansi
-            ansi_parser.parse_ansi(&orig_text)
-        } else {
-            // normal case
-            AnsiString::new_empty()
-        };
-
-        let mut ret = Item {
-            index,
-            orig_text: orig_text.into_owned(),
-            text,
-            using_transform_fields: !trans_fields.is_empty(),
-            matching_ranges: Vec::new(),
-            ansi_enabled,
-        };
-
-        let matching_ranges = if !matching_fields.is_empty() {
-            parse_matching_fields(delimiter, ret.get_text(), matching_fields)
-        } else {
-            vec![(0, ret.get_text().len())]
-        };
-
-        ret.matching_ranges = matching_ranges;
-        ret
-    }
-
-    pub fn get_text(&self) -> &str {
-        if !self.using_transform_fields && !self.ansi_enabled {
-            &self.orig_text
-        } else {
-            &self.text.get_stripped()
+impl ItemWrapper {
+    pub fn new(item: impl SkimItem + 'static, index: (usize, usize)) -> Self {
+        Self {
+            id: index,
+            inner: Arc::new(item),
         }
     }
 
-    pub fn get_text_struct(&self) -> Option<&AnsiString> {
-        if !self.using_transform_fields && !self.ansi_enabled {
-            None
-        } else {
-            Some(&self.text)
-        }
-    }
-
-    pub fn get_output_text(&'a self) -> Cow<'a, str> {
-        if self.using_transform_fields && self.ansi_enabled {
-            let mut ansi_parser: ANSIParser = Default::default();
-            let text = ansi_parser.parse_ansi(&self.orig_text);
-            Cow::Owned(text.into_inner())
-        } else if !self.using_transform_fields && self.ansi_enabled {
-            Cow::Borrowed(self.text.get_stripped())
-        } else {
-            Cow::Borrowed(&self.orig_text)
-        }
+    pub fn get_id(&self) -> (usize, usize) {
+        self.id
     }
 
     pub fn get_index(&self) -> usize {
-        self.index.1
-    }
-
-    pub fn get_full_index(&self) -> (usize, usize) {
-        self.index
-    }
-
-    pub fn get_matching_ranges(&self) -> &[(usize, usize)] {
-        &self.matching_ranges
+        self.id.1
     }
 }
 
-impl Clone for Item {
-    fn clone(&self) -> Item {
-        Item {
-            index: self.index,
-            orig_text: self.orig_text.clone(),
-            text: self.text.clone(),
-            using_transform_fields: self.using_transform_fields,
-            matching_ranges: self.matching_ranges.clone(),
-            ansi_enabled: self.ansi_enabled,
-        }
+/// delegate to inner
+impl SkimItem for ItemWrapper {
+    fn display(&self) -> Cow<AnsiString> {
+        self.inner.display()
+    }
+
+    fn preview(&self) -> ItemPreview {
+        self.inner.preview()
+    }
+
+    fn get_text(&self) -> Cow<str> {
+        self.inner.get_text()
+    }
+
+    fn output(&self) -> Cow<str> {
+        self.inner.output()
+    }
+
+    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
+        self.inner.get_matching_ranges()
     }
 }
 
@@ -164,15 +71,15 @@ pub enum MatchedRange {
     Chars(Vec<usize>),       // individual character indices matched
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MatchedItem {
-    pub item: Arc<Item>,
+    pub item: Arc<ItemWrapper>,
     pub rank: Rank,
     pub matched_range: Option<MatchedRange>, // range of chars that matched the pattern
 }
 
 impl MatchedItem {
-    pub fn builder(item: Arc<Item>) -> Self {
+    pub fn builder(item: Arc<ItemWrapper>) -> Self {
         MatchedItem {
             item,
             rank: Rank::default(),
@@ -194,11 +101,11 @@ impl MatchedItem {
         self
     }
 
-    pub fn to_chars(&self) -> Option<Vec<usize>> {
+    pub fn range_char_indices(&self) -> Option<Vec<usize>> {
         self.matched_range.as_ref().map(|r| match r {
             MatchedRange::ByteRange(start, end) => {
-                let first = self.item.orig_text[..*start].chars().count();
-                let last = first + self.item.orig_text[*start..*end].chars().count();
+                let first = self.item.get_text()[..*start].chars().count();
+                let last = first + self.item.get_text()[*start..*end].chars().count();
                 (first..last).collect()
             }
             MatchedRange::Chars(vec) => vec.clone(),
@@ -210,12 +117,12 @@ const ITEM_POOL_CAPACITY: usize = 1024;
 
 pub struct ItemPool {
     length: AtomicUsize,
-    pool: SpinLock<Vec<Arc<Item>>>,
+    pool: SpinLock<Vec<Arc<ItemWrapper>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
 
     /// reverse first N lines as header
-    reserved_items: SpinLock<Vec<Arc<Item>>>,
+    reserved_items: SpinLock<Vec<Arc<ItemWrapper>>>,
     lines_to_reserve: usize,
 }
 
@@ -258,7 +165,7 @@ impl ItemPool {
         self.taken.store(0, Ordering::SeqCst);
     }
 
-    pub fn append(&self, mut items: Vec<Arc<Item>>) {
+    pub fn append(&self, mut items: Vec<Arc<ItemWrapper>>) {
         let mut pool = self.pool.lock();
         let mut header_items = self.reserved_items.lock();
 
@@ -273,13 +180,13 @@ impl ItemPool {
         self.length.store(pool.len(), Ordering::SeqCst);
     }
 
-    pub fn take(&self) -> ItemPoolGuard<Arc<Item>> {
+    pub fn take(&self) -> ItemPoolGuard<Arc<ItemWrapper>> {
         let guard = self.pool.lock();
         let taken = self.taken.swap(guard.len(), Ordering::SeqCst);
         ItemPoolGuard { guard, start: taken }
     }
 
-    pub fn reserved(&self) -> ItemPoolGuard<Arc<Item>> {
+    pub fn reserved(&self) -> ItemPoolGuard<Arc<ItemWrapper>> {
         let guard = self.reserved_items.lock();
         ItemPoolGuard { guard, start: 0 }
     }

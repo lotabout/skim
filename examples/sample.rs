@@ -1,5 +1,5 @@
 extern crate skim;
-use skim::{Skim, SkimOptions};
+use skim::{Skim, SkimItem, SkimOptions};
 
 pub fn main() {
     let options = SkimOptions::default();
@@ -9,6 +9,6 @@ pub fn main() {
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}{}", item.get_output_text(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 }

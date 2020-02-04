@@ -6,7 +6,7 @@ extern crate skim;
 extern crate time;
 
 use clap::{App, Arg, ArgMatches};
-use skim::{FuzzyAlgorithm, Skim, SkimOptions, SkimOptionsBuilder};
+use skim::{FuzzyAlgorithm, Skim, SkimItem, SkimOptions, SkimOptionsBuilder};
 use std::env;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -249,7 +249,7 @@ fn real_main() -> i32 {
     }
 
     for item in output.selected_items.iter() {
-        print!("{}{}", item.get_output_text(), output_ending);
+        print!("{}{}", item.output(), output_ending);
     }
 
     if output.selected_items.is_empty() {1} else {0}

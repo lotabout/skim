@@ -12,7 +12,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{Item, ItemPool};
+use crate::item::{ItemPool, ItemWrapper};
 use crate::matcher::{Matcher, MatcherControl, MatcherMode};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -23,7 +23,8 @@ use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::FuzzyAlgorithm;
+use crate::{FuzzyAlgorithm, SkimItem};
+use std::borrow::Cow;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -330,12 +331,13 @@ impl Model {
 
     fn act_execute_silent(&mut self, cmd: &str) {
         let item = self.selection.get_current_item();
-        let current_selection = item.as_ref().map(|item| item.get_output_text()).unwrap();
+        let current_selection = item.as_ref().map(|item| item.output()).unwrap();
         let query = self.query.get_query();
         let cmd_query = self.query.get_cmd_query();
 
-        let selected_items = self.selection.get_selected_items();
-        let selected_texts: Vec<&str> = selected_items.iter().map(|item| item.get_text()).collect();
+        let tmp = self.selection.get_selected_items();
+        let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.get_text()).collect();
+        let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
 
         let context = InjectContext {
             delimiter: &self.delimiter,
@@ -356,15 +358,7 @@ impl Model {
         if query.is_empty() {
             return;
         }
-
-        let item = Arc::new(Item::new(
-            String::from_utf8_lossy(query.as_bytes()),
-            false,
-            &Vec::new(),
-            &Vec::new(),
-            &Regex::new("").unwrap(),
-            (std::usize::MAX, self.next_idx_to_append),
-        ));
+        let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(query, (std::usize::MAX, self.next_idx_to_append)));
 
         self.next_idx_to_append += 1;
 
