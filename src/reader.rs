@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
+use bitflags::_core::sync::atomic::AtomicBool;
 
 const CHANNEL_SIZE: usize = 1024;
 
@@ -118,9 +119,12 @@ fn collect_item(
 ) -> Sender<i32> {
     let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);
 
+    let started = Arc::new(AtomicBool::new(false));
+    let started_clone = started.clone();
     thread::spawn(move || {
         debug!("reader: collect_item start");
         components_to_stop.fetch_add(1, Ordering::SeqCst);
+        started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
         let mut index = 0;
         loop {
@@ -141,6 +145,10 @@ fn collect_item(
         components_to_stop.fetch_sub(1, Ordering::SeqCst);
         debug!("reader: collect_item stop");
     });
+
+    while ! started.load(Ordering::SeqCst) {
+        // busy waiting for the thread to start. (components_to_stop is added)
+    }
 
     tx_interrupt
 }

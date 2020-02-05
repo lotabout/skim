@@ -7,7 +7,7 @@ use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
 use std::sync::Arc;
 use std::thread;
 
@@ -96,11 +96,14 @@ pub fn read_and_collect_from_command(
     let (tx_interrupt, rx_interrupt) = bounded(CMD_CHANNEL_SIZE);
     let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(ITEM_CHANNEL_SIZE);
 
+    let started = Arc::new(AtomicBool::new(false));
+    let started_clone = started.clone();
     let components_to_stop_clone = components_to_stop.clone();
     // listening to close signal and kill command if needed
     thread::spawn(move || {
         debug!("collector: command killer start");
         components_to_stop_clone.fetch_add(1, Ordering::SeqCst);
+        started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
         let _ = rx_interrupt.recv(); // block waiting
                                      // clean up resources
@@ -113,10 +116,17 @@ pub fn read_and_collect_from_command(
         debug!("collector: command killer stop");
     });
 
+    while ! started.load(Ordering::SeqCst) {
+        // busy waiting for the thread to start. (components_to_stop is added)
+    }
+
+    let started = Arc::new(AtomicBool::new(false));
+    let started_clone = started.clone();
     let tx_interrupt_clone = tx_interrupt.clone();
     thread::spawn(move || {
         debug!("collector: command collector start");
         components_to_stop.fetch_add(1, Ordering::SeqCst);
+        started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
         let opt = option;
         // set the proper run number
@@ -161,6 +171,10 @@ pub fn read_and_collect_from_command(
         components_to_stop.fetch_sub(1, Ordering::SeqCst);
         debug!("collector: command collector stop");
     });
+
+    while ! started.load(Ordering::SeqCst) {
+        // busy waiting for the thread to start. (components_to_stop is added)
+    }
 
     (rx_item, tx_interrupt)
 }

@@ -26,7 +26,6 @@ mod theme;
 mod util;
 
 pub use crate::ansi::AnsiString;
-use crate::event::Event::*;
 use crate::event::{EventReceiver, EventSender};
 pub use crate::item_collector::*;
 use crate::model::Model;
@@ -129,10 +128,6 @@ impl Skim {
         // reader
 
         let reader = Reader::with_options(&options).source(source);
-
-        //------------------------------------------------------------------------------
-        // start a timer for notifying refresh
-        let _ = tx.send(EvHeartBeat);
 
         //------------------------------------------------------------------------------
         // model + previewer
