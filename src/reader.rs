@@ -2,9 +2,8 @@
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
 use crate::field::FieldRange;
-use crate::item::ItemWrapper;
+use crate::item::{ItemWrapper, DefaultSkimItem};
 use crate::options::SkimOptions;
-use crate::sk::item::SkItem;
 use crate::spinlock::SpinLock;
 use crate::SkimItem;
 use crossbeam::channel::{bounded, select, Receiver, Sender};
@@ -263,7 +262,7 @@ fn read_and_collect_from_command(
                     buffer.pop();
                 }
 
-                let raw_item = SkItem::new(
+                let raw_item = DefaultSkimItem::new(
                     String::from_utf8_lossy(&buffer),
                     opt.use_ansi_color,
                     &opt.transform_fields,
