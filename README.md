@@ -372,10 +372,7 @@ Also you can use `--with-nth` to re-arrange the order of fields.
 
 ## Use as a library
 
-Skim can now be used as a library in your Rust crates. The basic idea is to
-throw anything that is `BufRead`(we can easily turn a `File` for `String` into
-`BufRead`) and skim will do its job and bring us back the user selection
-including the selected items(with their indices), the query, etc.
+Skim can be used as a library in your Rust crates.
 
 First, add skim into your `Cargo.toml`:
 
@@ -388,7 +385,7 @@ Then try to run this simple example:
 
 ```rust
 extern crate skim;
-use skim::{Skim, SkimOptionsBuilder};
+use skim::prelude::*;
 use std::io::Cursor;
 
 pub fn main() {
@@ -400,7 +397,13 @@ pub fn main() {
 
     let input = "aaaaa\nbbbb\nccc".to_string();
 
-    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+    // `SkimItemReader` is a helper to turn any `BufRead` into a stream of `SkimItem`
+    // `SkimItem` was implemented for `AsRef<str>` by default
+    let item_reader = SkimItemReader::default();
+    let items = item_reader.of_bufread(Cursor::new(input));
+
+    // `run_with` would read and show items from the stream
+    let selected_items = Skim::run_with(&options, Some(items))
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
@@ -409,6 +412,21 @@ pub fn main() {
     }
 }
 ```
+
+Given an `Option<SkimItemReceiver>`, skim will read items accordingly, do its
+job and bring us back the user selection including the selected items(with
+their indices), the query, etc. Note that:
+
+- `SkimItemReceiver` is `crossbeam::channel::Receiver<Arc<dyn SkimItem>>`
+- If it is none, it will invoke the given command and read items from command output
+- Otherwise, it will read the items from the (crossbeam) channel.
+
+Trait `SkimItem` is provided to customize how a line could be displayed,
+compared and previewed. It is implemented by default for `AsRef<str>`
+
+Plus, `SkimItemReader` is a helper to convert a `BufRead` into
+`SkimItemReceiver` (we can easily turn a `File` for `String` into `BufRead`).
+So that you could deal with strings or files easily.
 
 Check more examples under [examples/](https://github.com/lotabout/skim/tree/master/examples) directory.
 

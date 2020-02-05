@@ -1,5 +1,5 @@
 extern crate skim;
-use skim::{Skim, SkimOptionsBuilder};
+use skim::prelude::*;
 use std::io::Cursor;
 
 pub fn main() {
@@ -8,28 +8,29 @@ pub fn main() {
         .multi(true)
         .build()
         .unwrap();
+    let item_reader = SkimItemReader::default();
 
     //==================================================
     // first run
     let input = "aaaaa\nbbbb\nccc".to_string();
-
-    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+    let items = item_reader.of_bufread(Cursor::new(input));
+    let selected_items = Skim::run_with(&options, Some(items))
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}: {}{}", item.get_index(), item.get_output_text(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 
     //==================================================
     // second run
     let input = "11111\n22222\n333333333".to_string();
-
-    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+    let items = item_reader.of_bufread(Cursor::new(input));
+    let selected_items = Skim::run_with(&options, Some(items))
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}: {}{}", item.get_index(), item.get_output_text(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 }

@@ -12,7 +12,7 @@ main() {
     cp target/$TARGET/release/sk target/release
 
     case $TARGET in
-        x86_64-unknown-linux-gnu|i686-unknown-linux-gnu)
+        x86_64-unknown-linux-gnu|i686-unknown-linux-gnu|x86_64-unknown-linux-musl)
             # run the integration test
             tmux new "python3 test/test_skim.py &> out && touch ok" && cat out && [ -e ok ]
             ;;

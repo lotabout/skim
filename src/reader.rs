@@ -1,37 +1,39 @@
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
-use crate::field::FieldRange;
-use crate::item::Item;
+use crate::item::ItemWrapper;
+use crate::item_collector::{read_and_collect_from_command, CollectorInput, CollectorOption};
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
-use regex::Regex;
+use crate::SkimItemReceiver;
+use crossbeam::channel::{bounded, select, Sender};
 use std::collections::HashMap;
-use std::env;
-use std::error::Error;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::thread::JoinHandle;
-use std::time::Duration;
 
-const DELIMITER_STR: &str = r"[\t\n ]+";
+const CHANNEL_SIZE: usize = 1024;
 
 pub struct ReaderControl {
-    stopped: Arc<AtomicBool>,
-    thread_reader: JoinHandle<()>,
-    items: Arc<SpinLock<Vec<Arc<Item>>>>,
+    tx_interrupt: Sender<i32>,
+    tx_interrupt_cmd: Option<Sender<i32>>,
+    components_to_stop: Arc<AtomicUsize>,
+    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
 }
 
 impl ReaderControl {
     pub fn kill(self) {
-        self.stopped.store(true, Ordering::SeqCst);
-        let _ = self.thread_reader.join();
+        debug!(
+            "kill reader, components before: {}",
+            self.components_to_stop.load(Ordering::SeqCst)
+        );
+
+        let _ = self.tx_interrupt_cmd.map(|tx| tx.send(1));
+        let _ = self.tx_interrupt.send(1);
+        while self.components_to_stop.load(Ordering::SeqCst) != 0 {}
     }
 
-    pub fn take(&self) -> Vec<Arc<Item>> {
+    pub fn take(&self) -> Vec<Arc<ItemWrapper>> {
         let mut items = self.items.lock();
         let mut ret = Vec::with_capacity(items.len());
         ret.append(&mut items);
@@ -40,223 +42,105 @@ impl ReaderControl {
 
     pub fn is_done(&self) -> bool {
         let items = self.items.lock();
-        self.stopped.load(Ordering::Relaxed) && items.is_empty()
+        self.components_to_stop.load(Ordering::SeqCst) == 0 && items.is_empty()
     }
 }
 
 pub struct Reader {
-    option: Arc<ReaderOption>,
-    source_file: Option<Box<dyn BufRead + Send>>,
+    option: CollectorOption,
+    rx_item: Option<SkimItemReceiver>,
 }
 
 impl Reader {
     pub fn with_options(options: &SkimOptions) -> Self {
         Self {
-            option: Arc::new(ReaderOption::with_options(&options)),
-            source_file: None,
+            option: CollectorOption::with_options(&options),
+            rx_item: None,
         }
     }
 
-    pub fn source(mut self, source_file: Option<Box<dyn BufRead + Send>>) -> Self {
-        self.source_file = source_file;
+    pub fn source(mut self, rx_item: Option<SkimItemReceiver>) -> Self {
+        self.rx_item = rx_item;
         self
     }
 
     pub fn run(&mut self, cmd: &str) -> ReaderControl {
-        let stopped = Arc::new(AtomicBool::new(false));
-        let stopped_clone = stopped.clone();
-        stopped.store(false, Ordering::SeqCst);
+        let components_to_stop: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
         let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
         let option_clone = self.option.clone();
-        let source_file = self.source_file.take();
         let cmd = cmd.to_string();
 
-        // start the new command
-        let thread_reader = thread::spawn(move || {
-            reader(&cmd, stopped_clone, items_clone, option_clone, source_file);
+        let run_num = if self.rx_item.is_some() {
+            RUN_NUM.fetch_add(1, Ordering::SeqCst)
+        } else {
+            *NUM_MAP
+                .write()
+                .expect("reader: failed to lock NUM_MAP")
+                .entry(cmd.to_string())
+                .or_insert_with(|| RUN_NUM.fetch_add(1, Ordering::SeqCst))
+        };
+
+        let (rx_item, tx_interrupt_cmd) = self.rx_item.take().map(|rx| (rx, None)).unwrap_or_else(|| {
+            let components_to_stop_clone = components_to_stop.clone();
+            let (rx_item, tx_interrupt_cmd) =
+                read_and_collect_from_command(components_to_stop_clone, CollectorInput::Command(cmd), option_clone);
+            (rx_item, Some(tx_interrupt_cmd))
         });
 
+        let components_to_stop_clone = components_to_stop.clone();
+        let tx_interrupt = collect_item(components_to_stop_clone, rx_item, run_num, items_clone);
+
         ReaderControl {
-            stopped,
-            thread_reader,
+            tx_interrupt,
+            tx_interrupt_cmd,
+            components_to_stop,
             items,
         }
     }
 }
 
-struct ReaderOption {
-    pub use_ansi_color: bool,
-    pub default_arg: String,
-    pub transform_fields: Vec<FieldRange>,
-    pub matching_fields: Vec<FieldRange>,
-    pub delimiter: Regex,
-    pub replace_str: String,
-    pub line_ending: u8,
-}
-
-impl ReaderOption {
-    pub fn new() -> Self {
-        ReaderOption {
-            use_ansi_color: false,
-            default_arg: String::new(),
-            transform_fields: Vec::new(),
-            matching_fields: Vec::new(),
-            delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            replace_str: "{}".to_string(),
-            line_ending: b'\n',
-        }
-    }
-
-    pub fn with_options(options: &SkimOptions) -> Self {
-        let mut reader_option = Self::new();
-        reader_option.parse_options(&options);
-        reader_option
-    }
-
-    fn parse_options(&mut self, options: &SkimOptions) {
-        if options.ansi {
-            self.use_ansi_color = true;
-        }
-
-        if let Some(delimiter) = options.delimiter {
-            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
-        }
-
-        if let Some(transform_fields) = options.with_nth {
-            self.transform_fields = transform_fields
-                .split(',')
-                .filter_map(|string| FieldRange::from_str(string))
-                .collect();
-        }
-
-        if let Some(matching_fields) = options.nth {
-            self.matching_fields = matching_fields
-                .split(',')
-                .filter_map(|string| FieldRange::from_str(string))
-                .collect();
-        }
-
-        if options.read0 {
-            self.line_ending = b'\0';
-        }
-    }
-}
-
-type CommandOutput = (Option<Child>, Box<dyn BufRead + Send>);
-fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
-    let mut command = Command::new(shell)
-        .arg("-c")
-        .arg(cmd)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-
-    let stdout = command
-        .stdout
-        .take()
-        .ok_or_else(|| "command output: unwrap failed".to_owned())?;
-
-    Ok((Some(command), Box::new(BufReader::new(stdout))))
-}
-
 // Consider that you invoke a command with different arguments several times
-// If you select some items each time, how will skim remeber it?
-// => Well, we'll give each invokation a number, i.e. RUN_NUM
+// If you select some items each time, how will skim remember it?
+// => Well, we'll give each invocation a number, i.e. RUN_NUM
 // What if you invoke the same command and same arguments twice?
 // => We use NUM_MAP to specify the same run number.
 lazy_static! {
-    static ref RUN_NUM: RwLock<usize> = RwLock::new(0);
+    static ref RUN_NUM: AtomicUsize = AtomicUsize::new(0);
     static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
 }
 
-fn reader(
-    cmd: &str,
-    stopped: Arc<AtomicBool>,
-    items: Arc<SpinLock<Vec<Arc<Item>>>>,
-    option: Arc<ReaderOption>,
-    source_file: Option<Box<dyn BufRead + Send>>,
-) {
-    let (command, mut source) = source_file
-        .map(|f| (None, f))
-        .unwrap_or_else(|| get_command_output(cmd).expect("command not found"));
+fn collect_item(
+    components_to_stop: Arc<AtomicUsize>,
+    rx_item: SkimItemReceiver,
+    run_num: usize,
+    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
+) -> Sender<i32> {
+    let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);
 
-    let command_stopped = Arc::new(AtomicBool::new(false));
-
-    let stopped_clone = stopped.clone();
-    let command_stopped_clone = command_stopped.clone();
     thread::spawn(move || {
-        // kill command if it is got
-        while command.is_some() && !stopped_clone.load(Ordering::Relaxed) {
-            thread::sleep(Duration::from_millis(5));
+        debug!("reader: collect_item start");
+        components_to_stop.fetch_add(1, Ordering::SeqCst);
+
+        let mut index = 0;
+        loop {
+            select! {
+                recv(rx_item) -> new_item => match new_item {
+                    Ok(item) => {
+                        let item_wrapped = ItemWrapper::new(item, (run_num, index));
+                        let mut vec = items.lock();
+                        vec.push(Arc::new(item_wrapped));
+                        index += 1;
+                    }
+                    Err(_) => break,
+                },
+                recv(rx_interrupt) -> _msg => break,
+            }
         }
 
-        // clean up resources
-        if let Some(mut x) = command {
-            let _ = x.kill();
-            let _ = x.wait();
-        }
-        command_stopped_clone.store(true, Ordering::Relaxed);
+        components_to_stop.fetch_sub(1, Ordering::SeqCst);
+        debug!("reader: collect_item stop");
     });
 
-    let opt = option;
-
-    // set the proper run number
-    let run_num = { *RUN_NUM.read().expect("reader: failed to lock RUN_NUM") };
-    let run_num = *NUM_MAP
-        .write()
-        .expect("reader: failed to lock NUM_MAP")
-        .entry(cmd.to_string())
-        .or_insert_with(|| {
-            *(RUN_NUM.write().expect("reader: failed to lock RUN_NUM for write")) = run_num + 1;
-            run_num + 1
-        });
-
-    let mut index = 0;
-    let mut buffer = Vec::with_capacity(100);
-    loop {
-        buffer.clear();
-        // start reading
-        match source.read_until(opt.line_ending, &mut buffer) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-
-                if buffer.ends_with(&[b'\r', b'\n']) {
-                    buffer.pop();
-                    buffer.pop();
-                } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
-                    buffer.pop();
-                }
-
-                let item = Item::new(
-                    String::from_utf8_lossy(&buffer),
-                    opt.use_ansi_color,
-                    &opt.transform_fields,
-                    &opt.matching_fields,
-                    &opt.delimiter,
-                    (run_num, index),
-                );
-
-                {
-                    // save item into pool
-                    let mut vec = items.lock();
-                    vec.push(Arc::new(item));
-                    index += 1;
-                }
-
-                if stopped.load(Ordering::SeqCst) {
-                    break;
-                }
-            }
-            Err(_err) => {} // String not UTF8 or other error, skip.
-        }
-    }
-
-    stopped.store(true, Ordering::Relaxed);
-    while !command_stopped.load(Ordering::Relaxed) {
-        thread::sleep(Duration::from_millis(5));
-    }
+    tx_interrupt
 }

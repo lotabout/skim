@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tuikit::prelude::*;
 
 pub struct Header {
-    header: AnsiString,
+    header: AnsiString<'static>,
     tabstop: usize,
     hscroll_offset: usize,
     reverse: bool,
@@ -58,7 +58,7 @@ impl Header {
             None => {}
             Some("") => {}
             Some(header) => {
-                self.header = AnsiString::from_str(header);
+                self.header = AnsiString::parse(header);
             }
         }
         self

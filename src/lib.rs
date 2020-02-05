@@ -9,11 +9,13 @@ mod field;
 mod header;
 mod input;
 mod item;
+mod item_collector;
 mod matcher;
 mod model;
 mod options;
 mod orderedvec;
 mod output;
+pub mod prelude;
 mod previewer;
 mod query;
 mod reader;
@@ -23,27 +25,72 @@ mod spinlock;
 mod theme;
 mod util;
 
+pub use crate::ansi::AnsiString;
 use crate::event::Event::*;
 use crate::event::{EventReceiver, EventSender};
+pub use crate::item_collector::*;
 use crate::model::Model;
 pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
 use crate::reader::Reader;
 pub use crate::score::FuzzyAlgorithm;
-use nix::unistd::isatty;
+use crossbeam::channel::{Receiver, Sender};
+use std::borrow::Cow;
 use std::env;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 use tuikit::prelude::{Event as TermEvent, *};
 
-pub struct Skim {}
+//------------------------------------------------------------------------------
+pub trait SkimItem: Send + Sync {
+    /// The text to be displayed on the item list, could contain ANSI properties
+    fn display(&self) -> Cow<AnsiString>;
 
+    /// helper function to get pure text presentation(without color) of the item
+    fn get_text(&self) -> Cow<str>;
+
+    /// get output text(after accept), could be override
+    fn output(&self) -> Cow<str> {
+        self.get_text()
+    }
+
+    fn preview(&self) -> ItemPreview {
+        ItemPreview::Global
+    }
+
+    /// we could limit the matching ranges of the `get_text` of the item.
+    /// providing (start_byte, end_byte) of the range
+    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
+        Cow::Owned(vec![(0, self.display().stripped().len())])
+    }
+}
+
+impl<T: AsRef<str> + Send + Sync> SkimItem for T {
+    fn display(&self) -> Cow<AnsiString> {
+        Cow::Owned(AnsiString::new_str(self.as_ref()))
+    }
+
+    fn get_text(&self) -> Cow<str> {
+        Cow::Borrowed(self.as_ref())
+    }
+}
+
+//------------------------------------------------------------------------------
+// Preview
+pub enum ItemPreview {
+    Command(String),
+    Text(String),
+    Global,
+}
+
+//------------------------------------------------------------------------------
+pub type SkimItemSender = Sender<Arc<dyn SkimItem>>;
+pub type SkimItemReceiver = Receiver<Arc<dyn SkimItem>>;
+
+pub struct Skim {}
 impl Skim {
-    pub fn run_with(options: &SkimOptions, source: Option<Box<dyn BufRead + Send>>) -> Option<SkimOutput> {
+    pub fn run_with(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Option<SkimOutput> {
         let min_height = options
             .min_height
             .map(Skim::parse_height_string)
@@ -81,15 +128,6 @@ impl Skim {
         //------------------------------------------------------------------------------
         // reader
 
-        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
-        let source = source.or_else(|| {
-            let stdin = std::io::stdin();
-            match isatty(stdin.as_raw_fd()) {
-                Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
-                Ok(true) | Err(_) => None,
-            }
-        });
-
         let reader = Reader::with_options(&options).source(source);
 
         //------------------------------------------------------------------------------
@@ -106,7 +144,7 @@ impl Skim {
         ret
     }
 
-    pub fn filter(options: &SkimOptions, source: Option<Box<dyn BufRead + Send>>) -> i32 {
+    pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
         use crate::engine::{EngineFactory, MatcherMode};
 
         let output_ending = if options.print0 { "\0" } else { "\n" };
@@ -129,16 +167,6 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // reader
-
-        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
-        let source = source.or_else(|| {
-            let stdin = std::io::stdin();
-            if !isatty(stdin.as_raw_fd()).unwrap_or(true) {
-                Some(Box::new(BufReader::new(stdin)))
-            } else {
-                None
-            }
-        });
 
         let mut reader = Reader::with_options(&options).source(source);
 
@@ -163,9 +191,9 @@ impl Skim {
             for item in reader_control.take().into_iter() {
                 if let Some(matched) = engine.match_item(item) {
                     if options.print_score {
-                        println!("{}\t{}", -matched.rank.score, matched.item.get_output_text());
+                        println!("{}\t{}", -matched.rank.score, matched.item.output());
                     } else {
-                        println!("{}", matched.item.get_output_text());
+                        println!("{}", matched.item.output());
                     }
                     match_count += 1;
                 }

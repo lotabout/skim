@@ -195,7 +195,7 @@ impl ANSIParser {
         self.last_attr = new_attr;
     }
 
-    pub fn parse_ansi(&mut self, text: &str) -> AnsiString {
+    pub fn parse_ansi(&mut self, text: &str) -> AnsiString<'static> {
         let mut statemachine = vte::Parser::new();
 
         for byte in text.as_bytes() {
@@ -213,12 +213,12 @@ impl ANSIParser {
 /// A String that contains ANSI state (e.g. colors)
 ///
 /// It is internally represented as Vec<(attr, string)>
-pub struct AnsiString {
-    stripped: Cow<'static, str>,
-    fragments: Vec<(Attr, Cow<'static, str>)>,
+pub struct AnsiString<'a> {
+    stripped: Cow<'a, str>,
+    fragments: Vec<(Attr, Cow<'a, str>)>,
 }
 
-impl AnsiString {
+impl<'a> AnsiString<'a> {
     pub fn new_empty() -> Self {
         Self {
             stripped: Cow::Owned(String::new()),
@@ -234,11 +234,23 @@ impl AnsiString {
         }
     }
 
+    pub fn new_str(str_ref: &'a str) -> Self {
+        let stripped: Cow<'a, str> = Cow::Borrowed(str_ref);
+        Self {
+            stripped: stripped.clone(),
+            fragments: vec![(Attr::default(), stripped.clone())],
+        }
+    }
+
     pub fn new(stripped: String, fragments: Vec<(Attr, Cow<'static, str>)>) -> Self {
         Self {
             stripped: Cow::Owned(stripped),
             fragments,
         }
+    }
+
+    pub fn parse(raw: &'a str) -> AnsiString<'static> {
+        ANSIParser::default().parse_ansi(raw)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -258,11 +270,7 @@ impl AnsiString {
         self.fragments.len() > 1 || (!self.fragments.is_empty() && self.fragments[0].0 != Attr::default())
     }
 
-    pub fn from_str(raw: &str) -> AnsiString {
-        ANSIParser::default().parse_ansi(raw)
-    }
-
-    pub fn get_stripped(&self) -> &str {
+    pub fn stripped(&self) -> &str {
         &self.stripped
     }
 }

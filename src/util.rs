@@ -7,7 +7,8 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
-use crate::item::Item;
+use crate::item::ItemWrapper;
+use crate::SkimItem;
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
@@ -172,15 +173,9 @@ impl LinePrinter {
     }
 }
 
-pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &Item, default_attr: Attr) {
-    if item.get_text_struct().is_some() && item.get_text_struct().as_ref().unwrap().has_attrs() {
-        for (ch, attr) in item.get_text_struct().as_ref().unwrap().iter() {
-            printer.print_char(canvas, ch, default_attr.extend(attr), false);
-        }
-    } else {
-        for ch in item.get_text().chars() {
-            printer.print_char(canvas, ch, default_attr, false);
-        }
+pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &ItemWrapper, default_attr: Attr) {
+    for (ch, attr) in item.display().iter() {
+        printer.print_char(canvas, ch, default_attr.extend(attr), false);
     }
 }
 

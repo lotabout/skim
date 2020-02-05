@@ -1,7 +1,7 @@
 ///! matcher engine
-use crate::item::{Item, MatchedItem, MatchedRange, Rank};
-use crate::score;
+use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
 use crate::score::FuzzyAlgorithm;
+use crate::{score, SkimItem};
 use regex::Regex;
 use std::sync::Arc;
 
@@ -19,7 +19,7 @@ pub enum MatcherMode {
 
 // A match engine will execute the matching algorithm
 pub trait MatchEngine: Sync + Send {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem>;
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem>;
     fn display(&self) -> String;
 }
 
@@ -52,9 +52,9 @@ impl RegexEngine {
 }
 
 impl MatchEngine for RegexEngine {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         let mut matched_result = None;
-        for &(start, end) in item.get_matching_ranges() {
+        for &(start, end) in item.get_matching_ranges().as_ref() {
             if self.query_regex.is_none() {
                 matched_result = Some((0, 0));
                 break;
@@ -117,10 +117,10 @@ impl FuzzyEngine {
 }
 
 impl MatchEngine for FuzzyEngine {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         // iterate over all matching fields:
         let mut matched_result = None;
-        for &(start, end) in item.get_matching_ranges() {
+        for &(start, end) in item.get_matching_ranges().as_ref() {
             matched_result =
                 score::fuzzy_match(&item.get_text()[start..end], &self.query, self.algorithm).map(|(s, vec)| {
                     if start != 0 {
@@ -175,7 +175,7 @@ impl MatchAllEngine {
 }
 
 impl MatchEngine for MatchAllEngine {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         let rank = build_rank(0, item.get_index() as i64, 0, 0);
 
         Some(
@@ -222,14 +222,14 @@ impl ExactEngine {
 
     fn match_item_exact(
         &self,
-        item: Arc<Item>,
+        item: Arc<ItemWrapper>,
         // filter: <Option<(start, end), (start, end)>, item_length> -> Option<(start, end)>
         filter: impl Fn(&Option<((usize, usize), (usize, usize))>, usize) -> Option<(usize, usize)>,
     ) -> Option<MatchedItem> {
         let mut matched_result = None;
         let mut range_start = 0;
         let mut range_end = 0;
-        for &(start, end) in item.get_matching_ranges() {
+        for &(start, end) in item.get_matching_ranges().as_ref() {
             if self.query == "" {
                 matched_result = Some(((0, 0), (0, 0)));
                 break;
@@ -260,7 +260,7 @@ impl ExactEngine {
 }
 
 impl MatchEngine for ExactEngine {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         self.match_item_exact(item, |match_result, len| {
             let match_range = match *match_result {
                 Some(((s1, e1), (s2, e2))) => {
@@ -335,7 +335,7 @@ impl OrEngine {
 }
 
 impl MatchEngine for OrEngine {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         for engine in &self.engines {
             let result = engine.match_item(Arc::clone(&item));
             if result.is_some() {
@@ -399,7 +399,7 @@ impl AndEngine {
         for item in items {
             match item.matched_range {
                 Some(MatchedRange::ByteRange(..)) => {
-                    ranges.extend(item.to_chars().unwrap());
+                    ranges.extend(item.range_char_indices().unwrap());
                 }
                 Some(MatchedRange::Chars(vec)) => {
                     ranges.extend(vec.iter());
@@ -418,7 +418,7 @@ impl AndEngine {
 }
 
 impl MatchEngine for AndEngine {
-    fn match_item(&self, item: Arc<Item>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         // mock
         let mut results = vec![];
         for engine in &self.engines {

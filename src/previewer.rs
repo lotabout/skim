@@ -1,11 +1,13 @@
 use crate::ansi::AnsiString;
 use crate::event::{Event, EventHandler, UpdateScreen};
-use crate::item::Item;
+use crate::item::ItemWrapper;
 use crate::spinlock::SpinLock;
 use crate::util::{inject_command, InjectContext};
+use crate::{ItemPreview, SkimItem};
 use derive_builder::Builder;
 use nix::libc;
 use regex::Regex;
+use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::env;
 use std::process::{Command, Stdio};
@@ -21,7 +23,7 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 pub struct Previewer {
     tx_preview: Sender<PreviewEvent>,
-    content_lines: Arc<SpinLock<Vec<AnsiString>>>,
+    content_lines: Arc<SpinLock<Vec<AnsiString<'static>>>>,
 
     width: AtomicUsize,
     height: AtomicUsize,
@@ -29,7 +31,7 @@ pub struct Previewer {
     vscroll_offset: usize,
     wrap: bool,
 
-    prev_item: Option<Arc<Item>>,
+    prev_item: Option<Arc<ItemWrapper>>,
     prev_query: Option<String>,
     prev_cmd_query: Option<String>,
     prev_num_selected: usize,
@@ -87,11 +89,11 @@ impl Previewer {
 
     pub fn on_item_change(
         &mut self,
-        new_item: impl Into<Option<Arc<Item>>>,
+        new_item: impl Into<Option<Arc<ItemWrapper>>>,
         new_query: impl Into<Option<String>>,
         new_cmd_query: impl Into<Option<String>>,
         num_selected: usize,
-        get_selected_items: impl Fn() -> Vec<Arc<Item>>, // lazy get
+        get_selected_items: impl Fn() -> Vec<Arc<dyn SkimItem>>, // lazy get
     ) {
         let new_item = new_item.into();
         let new_query = new_query.into();
@@ -101,7 +103,7 @@ impl Previewer {
             (None, None) => false,
             (None, Some(_)) => true,
             (Some(_), None) => true,
-            (Some(prev), Some(cur)) => prev.get_output_text() != cur.get_output_text(),
+            (Some(prev), Some(cur)) => prev.get_id() != cur.get_id(),
         };
 
         let query_changed = match (self.prev_query.as_ref(), new_query.as_ref()) {
@@ -124,36 +126,54 @@ impl Previewer {
             return;
         }
 
-        self.prev_item = new_item;
+        self.prev_item = new_item.clone();
         self.prev_query = new_query;
         self.prev_cmd_query = new_cmd_query;
         self.prev_num_selected = num_selected;
 
-        let cmd = self.preview_cmd.as_ref().expect("previewer: invalid preview command");
-        let current_selection = self
-            .prev_item
-            .as_ref()
-            .map(|item| item.get_output_text())
-            .unwrap_or_else(|| "".into());
-        let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
-        let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
-        let selected_items = get_selected_items();
-        let selected_texts: Vec<&str> = selected_items.iter().map(|item| item.get_text()).collect();
+        let preview_event = match new_item {
+            Some(item) => match item.preview() {
+                ItemPreview::Text(text) => PreviewEvent::PreviewPrepared(text),
+                preview => {
+                    let cmd = match preview {
+                        ItemPreview::Command(cmd) => cmd,
+                        ItemPreview::Global => self.preview_cmd.clone().expect("previewer: not provided"),
+                        ItemPreview::Text(_) => unreachable!(),
+                    };
 
-        let context = InjectContext {
-            delimiter: &self.delimiter,
-            current_selection: &current_selection,
-            selections: &selected_texts,
-            query: &query,
-            cmd_query: &cmd_query,
+                    let current_selection = self
+                        .prev_item
+                        .as_ref()
+                        .map(|item| item.output())
+                        .unwrap_or_else(|| "".into());
+                    let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
+                    let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
+
+                    let tmp = get_selected_items();
+                    let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.get_text()).collect();
+                    let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
+
+                    let context = InjectContext {
+                        delimiter: &self.delimiter,
+                        current_selection: &current_selection,
+                        selections: &selected_texts,
+                        query: &query,
+                        cmd_query: &cmd_query,
+                    };
+
+                    let cmd = inject_command(&cmd, context).to_string();
+
+                    let columns = self.width.load(Ordering::Relaxed);
+                    let lines = self.height.load(Ordering::Relaxed);
+                    let preview_command = PreviewCommand { cmd, columns, lines };
+
+                    PreviewEvent::PreviewCommand(preview_command)
+                }
+            },
+            None => PreviewEvent::PreviewPrepared("".to_string()),
         };
 
-        let cmd = inject_command(cmd, context).to_string();
-
-        let columns = self.width.load(Ordering::Relaxed);
-        let lines = self.height.load(Ordering::Relaxed);
-        let request = PreviewInput { cmd, columns, lines };
-        let _ = self.tx_preview.send(PreviewEvent::EvPreviewRequest(request));
+        let _ = self.tx_preview.send(preview_event);
 
         self.hscroll_offset = 0;
         self.vscroll_offset = 0;
@@ -184,7 +204,7 @@ impl Previewer {
 
 impl Drop for Previewer {
     fn drop(&mut self) {
-        let _ = self.tx_preview.send(PreviewEvent::EvAbort);
+        let _ = self.tx_preview.send(PreviewEvent::Abort);
         self.thread_previewer.take().map(|handle| handle.join());
     }
 }
@@ -261,7 +281,7 @@ impl Widget<Event> for Previewer {
 }
 
 #[derive(Debug, Ord, PartialOrd, PartialEq, Eq)]
-pub struct PreviewInput {
+pub struct PreviewCommand {
     pub cmd: String,
     pub lines: usize,
     pub columns: usize,
@@ -269,8 +289,9 @@ pub struct PreviewInput {
 
 #[derive(Debug, Ord, PartialOrd, PartialEq, Eq)]
 enum PreviewEvent {
-    EvPreviewRequest(PreviewInput),
-    EvAbort,
+    PreviewCommand(PreviewCommand),
+    PreviewPrepared(String),
+    Abort,
 }
 
 struct PreviewThread {
@@ -290,7 +311,7 @@ impl PreviewThread {
 
 fn run<C>(rx_preview: Receiver<PreviewEvent>, on_return: C)
 where
-    C: Fn(Vec<AnsiString>) + Send + Sync + 'static,
+    C: Fn(Vec<AnsiString<'static>>) + Send + Sync + 'static,
 {
     let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
@@ -300,60 +321,69 @@ where
             preview_thread = None;
         }
 
-        let mut new_prv = match _event {
-            PreviewEvent::EvPreviewRequest(preview_input) => preview_input,
-            PreviewEvent::EvAbort => return,
+        let mut event = match _event {
+            PreviewEvent::PreviewCommand(_) | PreviewEvent::PreviewPrepared(_) => _event,
+            PreviewEvent::Abort => return,
         };
 
         // Try to empty the channel. Happens when spamming up/down or typing fast.
         while let Ok(_event) = rx_preview.try_recv() {
-            new_prv = match _event {
-                PreviewEvent::EvPreviewRequest(preview_input) => preview_input,
-                PreviewEvent::EvAbort => return,
+            event = match _event {
+                PreviewEvent::PreviewCommand(_) | PreviewEvent::PreviewPrepared(_) => _event,
+                PreviewEvent::Abort => return,
             }
         }
 
-        let cmd = &new_prv.cmd;
-        if cmd == "" {
-            continue;
-        }
+        match event {
+            PreviewEvent::PreviewCommand(preview_cmd) => {
+                let cmd = &preview_cmd.cmd;
+                if cmd == "" {
+                    continue;
+                }
 
-        let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
-        let spawned = Command::new(shell)
-            .env("LINES", new_prv.lines.to_string())
-            .env("COLUMNS", new_prv.columns.to_string())
-            .arg("-c")
-            .arg(&cmd)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
+                let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+                let spawned = Command::new(shell)
+                    .env("LINES", preview_cmd.lines.to_string())
+                    .env("COLUMNS", preview_cmd.columns.to_string())
+                    .arg("-c")
+                    .arg(&cmd)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn();
 
-        match spawned {
-            Err(err) => {
-                let astdout = AnsiString::from_str(format!("Failed to spawn: {} / {}", cmd, err).as_str());
+                match spawned {
+                    Err(err) => {
+                        let astdout = AnsiString::parse(format!("Failed to spawn: {} / {}", cmd, err).as_str());
+                        callback(vec![astdout]);
+                        preview_thread = None;
+                    }
+                    Ok(spawned) => {
+                        let pid = spawned.id();
+                        let stopped = Arc::new(AtomicBool::new(false));
+                        let stopped_clone = stopped.clone();
+                        let callback_clone = callback.clone();
+                        let thread = thread::spawn(move || {
+                            wait(spawned, move |lines| {
+                                stopped_clone.store(true, Ordering::SeqCst);
+                                callback_clone(lines);
+                            })
+                        });
+                        preview_thread = Some(PreviewThread { pid, thread, stopped });
+                    }
+                }
+            }
+            PreviewEvent::PreviewPrepared(text) => {
+                let astdout = AnsiString::parse(&text);
                 callback(vec![astdout]);
-                preview_thread = None;
             }
-            Ok(spawned) => {
-                let pid = spawned.id();
-                let stopped = Arc::new(AtomicBool::new(false));
-                let stopped_clone = stopped.clone();
-                let callback_clone = callback.clone();
-                let thread = thread::spawn(move || {
-                    wait(spawned, move |lines| {
-                        stopped_clone.store(true, Ordering::SeqCst);
-                        callback_clone(lines);
-                    })
-                });
-                preview_thread = Some(PreviewThread { pid, thread, stopped });
-            }
-        }
+            PreviewEvent::Abort => return,
+        };
     }
 }
 
 fn wait<C>(spawned: std::process::Child, callback: C)
 where
-    C: Fn(Vec<AnsiString>),
+    C: Fn(Vec<AnsiString<'static>>),
 {
     let output = spawned.wait_with_output();
 
@@ -370,7 +400,7 @@ where
         &output.stderr
     });
 
-    let lines = out_str.lines().map(AnsiString::from_str).collect();
+    let lines = out_str.lines().map(AnsiString::parse).collect();
     callback(lines);
 }
 
