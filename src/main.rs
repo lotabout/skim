@@ -6,8 +6,16 @@ extern crate skim;
 extern crate time;
 
 use clap::{App, Arg, ArgMatches};
-use skim::{FuzzyAlgorithm, Skim, SkimItem, SkimOptions, SkimOptionsBuilder};
+use nix::unistd::isatty;
+use skim::{
+    read_and_collect_from_command, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimItem, SkimOptions,
+    SkimOptionsBuilder,
+};
 use std::env;
+use std::io::BufReader;
+use std::os::unix::io::AsRawFd;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -222,14 +230,29 @@ fn real_main() -> i32 {
 
     let options = parse_options(&opts);
 
+//    let stdin = std::io::stdin();
+//    let source = match isatty(stdin.as_raw_fd()) {
+//        Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
+//        Ok(true) | Err(_) => None,
+//    }
+    let stdin = std::io::stdin();
+    let components_to_stop = Arc::new(AtomicUsize::new(0));
+    let rx_item = match isatty(stdin.as_raw_fd()) {
+        Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => {
+            let collector_option = CollectorOption::with_options(&options);
+            let (rx_item, _) = read_and_collect_from_command(components_to_stop.clone(), CollectorInput::Pipe(Box::new(BufReader::new(stdin))), collector_option);
+            Some(rx_item)
+        },
+        Ok(true) | Err(_) => None,
+    };
+
     if opts.is_present("filter") {
-        return Skim::filter(&options, None);
+        return Skim::filter(&options, rx_item);
     }
 
     let output_ending = if options.print0 {"\0"} else {"\n"};
 
-
-    let output = Skim::run_with(&options, None);
+    let output = Skim::run_with(&options, rx_item);
     if output.is_none() {
         return 130;
     }

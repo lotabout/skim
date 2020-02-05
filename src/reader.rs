@@ -1,27 +1,22 @@
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
-use crate::field::FieldRange;
-use crate::item::{ItemWrapper, DefaultSkimItem};
+use crate::item::ItemWrapper;
+use crate::item_collector::{read_and_collect_from_command, CollectorInput, CollectorOption};
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
-use crate::SkimItem;
-use crossbeam::channel::{bounded, select, Receiver, Sender};
-use regex::Regex;
+use crate::SkimItemReceiver;
+use crossbeam::channel::{bounded, select, Sender};
 use std::collections::HashMap;
-use std::env;
-use std::error::Error;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 
-const DELIMITER_STR: &str = r"[\t\n ]+";
 const CHANNEL_SIZE: usize = 1024;
 
 pub struct ReaderControl {
     tx_interrupt: Sender<i32>,
+    tx_interrupt_cmd: Option<Sender<i32>>,
     components_to_stop: Arc<AtomicUsize>,
     items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
 }
@@ -32,10 +27,10 @@ impl ReaderControl {
             "kill reader, components before: {}",
             self.components_to_stop.load(Ordering::SeqCst)
         );
+
+        let _ = self.tx_interrupt_cmd.map(|tx| tx.send(1));
         let _ = self.tx_interrupt.send(1);
-        while self.components_to_stop.load(Ordering::SeqCst) != 0 {
-            //
-        }
+        while self.components_to_stop.load(Ordering::SeqCst) != 0 {}
     }
 
     pub fn take(&self) -> Vec<Arc<ItemWrapper>> {
@@ -52,118 +47,55 @@ impl ReaderControl {
 }
 
 pub struct Reader {
-    option: Arc<ReaderOption>,
-    rx_item: Option<Receiver<Arc<dyn SkimItem>>>,
+    option: CollectorOption,
+    rx_item: Option<SkimItemReceiver>,
 }
 
 impl Reader {
     pub fn with_options(options: &SkimOptions) -> Self {
         Self {
-            option: Arc::new(ReaderOption::with_options(&options)),
+            option: CollectorOption::with_options(&options),
             rx_item: None,
         }
     }
 
-    pub fn source(mut self, rx_item: Option<Receiver<Arc<dyn SkimItem>>>) -> Self {
+    pub fn source(mut self, rx_item: Option<SkimItemReceiver>) -> Self {
         self.rx_item = rx_item;
         self
     }
 
     pub fn run(&mut self, cmd: &str) -> ReaderControl {
         let components_to_stop: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
-        let components_to_stop_clone = components_to_stop.clone();
         let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
         let option_clone = self.option.clone();
         let cmd = cmd.to_string();
 
-        let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);
+        let run_num = if self.rx_item.is_some() {
+            RUN_NUM.fetch_add(1, Ordering::SeqCst)
+        } else {
+            *NUM_MAP
+                .write()
+                .expect("reader: failed to lock NUM_MAP")
+                .entry(cmd.to_string())
+                .or_insert_with(|| RUN_NUM.fetch_add(1, Ordering::SeqCst))
+        };
 
-        match self.rx_item.take() {
-            Some(rx_item) => {
-                // read item from the channel
-                thread::spawn(move || {
-                    collect_item(components_to_stop_clone, rx_interrupt, rx_item, items_clone);
-                });
-            }
-            None => {
-                // invoke command and read from its output
-                let tx_interrupt_clone = tx_interrupt.clone();
-                thread::spawn(move || {
-                    read_and_collect_from_command(
-                        components_to_stop_clone,
-                        tx_interrupt_clone,
-                        rx_interrupt,
-                        &cmd,
-                        option_clone,
-                        items_clone,
-                    );
-                });
-            }
-        }
+        let (rx_item, tx_interrupt_cmd) = self.rx_item.take().map(|rx| (rx, None)).unwrap_or_else(|| {
+            let components_to_stop_clone = components_to_stop.clone();
+            let (rx_item, tx_interrupt_cmd) =
+                read_and_collect_from_command(components_to_stop_clone, CollectorInput::Command(cmd), option_clone);
+            (rx_item, Some(tx_interrupt_cmd))
+        });
+
+        let components_to_stop_clone = components_to_stop.clone();
+        let tx_interrupt = collect_item(components_to_stop_clone, rx_item, run_num, items_clone);
 
         ReaderControl {
             tx_interrupt,
+            tx_interrupt_cmd,
             components_to_stop,
             items,
-        }
-    }
-}
-
-struct ReaderOption {
-    pub use_ansi_color: bool,
-    pub default_arg: String,
-    pub transform_fields: Vec<FieldRange>,
-    pub matching_fields: Vec<FieldRange>,
-    pub delimiter: Regex,
-    pub replace_str: String,
-    pub line_ending: u8,
-}
-
-impl ReaderOption {
-    pub fn new() -> Self {
-        ReaderOption {
-            use_ansi_color: false,
-            default_arg: String::new(),
-            transform_fields: Vec::new(),
-            matching_fields: Vec::new(),
-            delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            replace_str: "{}".to_string(),
-            line_ending: b'\n',
-        }
-    }
-
-    pub fn with_options(options: &SkimOptions) -> Self {
-        let mut reader_option = Self::new();
-        reader_option.parse_options(&options);
-        reader_option
-    }
-
-    fn parse_options(&mut self, options: &SkimOptions) {
-        if options.ansi {
-            self.use_ansi_color = true;
-        }
-
-        if let Some(delimiter) = options.delimiter {
-            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
-        }
-
-        if let Some(transform_fields) = options.with_nth {
-            self.transform_fields = transform_fields
-                .split(',')
-                .filter_map(|string| FieldRange::from_str(string))
-                .collect();
-        }
-
-        if let Some(matching_fields) = options.nth {
-            self.matching_fields = matching_fields
-                .split(',')
-                .filter_map(|string| FieldRange::from_str(string))
-                .collect();
-        }
-
-        if options.read0 {
-            self.line_ending = b'\0';
         }
     }
 }
@@ -180,128 +112,35 @@ lazy_static! {
 
 fn collect_item(
     components_to_stop: Arc<AtomicUsize>,
-    rx_interrupt: Receiver<i32>,
-    rx_item: Receiver<Arc<dyn SkimItem>>,
+    rx_item: SkimItemReceiver,
+    run_num: usize,
     items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
-) {
-    debug!("reader: collect_item start");
-    components_to_stop.fetch_add(1, Ordering::SeqCst);
+) -> Sender<i32> {
+    let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);
 
-    let run_num = RUN_NUM.load(Ordering::SeqCst);
-    let mut index = 0;
-    loop {
-        select! {
-            recv(rx_item) -> new_item => match new_item {
-                Ok(item) => {
-                    let item_wrapped = ItemWrapper::new(item, (run_num, index));
-                    let mut vec = items.lock();
-                    vec.push(Arc::new(item_wrapped));
-                    index += 1;
-                }
-                Err(_) => break,
-            },
-            recv(rx_interrupt) -> _msg => break,
-        }
-    }
-
-    components_to_stop.fetch_sub(1, Ordering::SeqCst);
-    debug!("reader: collect_item stop");
-}
-
-fn read_and_collect_from_command(
-    components_to_stop: Arc<AtomicUsize>,
-    tx_interrupt: Sender<i32>,
-    rx_interrupt: Receiver<i32>,
-
-    cmd: &str,
-    option: Arc<ReaderOption>,
-    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
-) {
-    let (mut command, mut source) = get_command_output(cmd).expect("command not found");
-
-    let components_to_stop_clone = components_to_stop.clone();
-    // listening to close signal and kill command if needed
     thread::spawn(move || {
-        debug!("reader: command killer start");
-        components_to_stop_clone.fetch_add(1, Ordering::SeqCst);
+        debug!("reader: collect_item start");
+        components_to_stop.fetch_add(1, Ordering::SeqCst);
 
-        let _ = rx_interrupt.recv(); // block waiting
-        let _ = command.kill();
-        let _ = command.wait();
+        let mut index = 0;
+        loop {
+            select! {
+                recv(rx_item) -> new_item => match new_item {
+                    Ok(item) => {
+                        let item_wrapped = ItemWrapper::new(item, (run_num, index));
+                        let mut vec = items.lock();
+                        vec.push(Arc::new(item_wrapped));
+                        index += 1;
+                    }
+                    Err(_) => break,
+                },
+                recv(rx_interrupt) -> _msg => break,
+            }
+        }
 
-        components_to_stop_clone.fetch_sub(1, Ordering::SeqCst);
-        debug!("reader: command killer stop");
+        components_to_stop.fetch_sub(1, Ordering::SeqCst);
+        debug!("reader: collect_item stop");
     });
 
-    debug!("reader: command reader start");
-    components_to_stop.fetch_add(1, Ordering::SeqCst);
-
-    let opt = option;
-    // set the proper run number
-    let run_num = *NUM_MAP
-        .write()
-        .expect("reader: failed to lock NUM_MAP")
-        .entry(cmd.to_string())
-        .or_insert_with(|| RUN_NUM.fetch_add(1, Ordering::SeqCst));
-
-    let mut index = 0;
-    let mut buffer = Vec::with_capacity(1024);
-    loop {
-        buffer.clear();
-        // start reading
-        match source.read_until(opt.line_ending, &mut buffer) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-
-                if buffer.ends_with(&[b'\r', b'\n']) {
-                    buffer.pop();
-                    buffer.pop();
-                } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
-                    buffer.pop();
-                }
-
-                let raw_item = DefaultSkimItem::new(
-                    String::from_utf8_lossy(&buffer),
-                    opt.use_ansi_color,
-                    &opt.transform_fields,
-                    &opt.matching_fields,
-                    &opt.delimiter,
-                );
-
-                let item = ItemWrapper::new(Arc::new(raw_item), (run_num, index));
-
-                {
-                    // save item into pool
-                    let mut vec = items.lock();
-                    vec.push(Arc::new(item));
-                    index += 1;
-                }
-            }
-            Err(_err) => {} // String not UTF8 or other error, skip.
-        }
-    }
-
-    let _ = tx_interrupt.send(1); // ensure the waiting thread will exit
-    components_to_stop.fetch_sub(1, Ordering::SeqCst);
-    debug!("reader: command reader stop");
-}
-
-type CommandOutput = (Child, Box<dyn BufRead + Send>);
-fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
-    let mut command = Command::new(shell)
-        .arg("-c")
-        .arg(cmd)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-
-    let stdout = command
-        .stdout
-        .take()
-        .ok_or_else(|| "command output: unwrap failed".to_owned())?;
-
-    Ok((command, Box::new(BufReader::new(stdout))))
+    tx_interrupt
 }

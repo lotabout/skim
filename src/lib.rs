@@ -9,6 +9,7 @@ mod field;
 mod header;
 mod input;
 mod item;
+mod item_collector;
 mod matcher;
 mod model;
 mod options;
@@ -19,7 +20,6 @@ mod query;
 mod reader;
 mod score;
 mod selection;
-mod sk;
 mod spinlock;
 mod theme;
 mod util;
@@ -27,12 +27,13 @@ mod util;
 use crate::ansi::AnsiString;
 use crate::event::Event::*;
 use crate::event::{EventReceiver, EventSender};
+pub use crate::item_collector::*;
 use crate::model::Model;
 pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
 use crate::reader::Reader;
 pub use crate::score::FuzzyAlgorithm;
-use crossbeam::channel::Receiver;
+use crossbeam::channel::{Receiver, Sender};
 use std::borrow::Cow;
 use std::env;
 use std::sync::mpsc::channel;
@@ -83,10 +84,12 @@ pub enum ItemPreview<'a> {
 }
 
 //------------------------------------------------------------------------------
-pub struct Skim {}
+pub type SkimItemSender = Sender<Arc<dyn SkimItem>>;
+pub type SkimItemReceiver = Receiver<Arc<dyn SkimItem>>;
 
+pub struct Skim {}
 impl Skim {
-    pub fn run_with(options: &SkimOptions, source: Option<Receiver<Arc<dyn SkimItem>>>) -> Option<SkimOutput> {
+    pub fn run_with(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Option<SkimOutput> {
         let min_height = options
             .min_height
             .map(Skim::parse_height_string)
@@ -124,15 +127,6 @@ impl Skim {
         //------------------------------------------------------------------------------
         // reader
 
-        //        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
-        //        let source = source.or_else(|| {
-        //            let stdin = std::io::stdin();
-        //            match isatty(stdin.as_raw_fd()) {
-        //                Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => Some(Box::new(BufReader::new(stdin))),
-        //                Ok(true) | Err(_) => None,
-        //            }
-        //        });
-
         let reader = Reader::with_options(&options).source(source);
 
         //------------------------------------------------------------------------------
@@ -149,7 +143,7 @@ impl Skim {
         ret
     }
 
-    pub fn filter(options: &SkimOptions, source: Option<Receiver<Arc<dyn SkimItem>>>) -> i32 {
+    pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
         use crate::engine::{EngineFactory, MatcherMode};
 
         let output_ending = if options.print0 { "\0" } else { "\n" };
