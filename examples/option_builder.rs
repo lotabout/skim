@@ -1,7 +1,6 @@
 extern crate skim;
-use crossbeam::channel::unbounded;
 use skim::prelude::*;
-use std::sync::Arc;
+use std::io::Cursor;
 
 pub fn main() {
     let options = SkimOptionsBuilder::default()
@@ -9,16 +8,13 @@ pub fn main() {
         .multi(true)
         .build()
         .unwrap();
+    let item_reader = SkimItemReader::default();
 
     //==================================================
     // first run
-    let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = unbounded();
-    let _ = tx_item.send(Arc::new("aaaaa"));
-    let _ = tx_item.send(Arc::new("bbbb"));
-    let _ = tx_item.send(Arc::new("ccc"));
-    drop(tx_item);
-
-    let selected_items = Skim::run_with(&options, Some(rx_item))
+    let input = "aaaaa\nbbbb\nccc".to_string();
+    let items = item_reader.of_bufread(Cursor::new(input));
+    let selected_items = Skim::run_with(&options, Some(items))
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
@@ -28,13 +24,9 @@ pub fn main() {
 
     //==================================================
     // second run
-    let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = unbounded();
-    let _ = tx_item.send(Arc::new("11111"));
-    let _ = tx_item.send(Arc::new("22222"));
-    let _ = tx_item.send(Arc::new("333333333"));
-    drop(tx_item);
-
-    let selected_items = Skim::run_with(&options, Some(rx_item))
+    let input = "11111\n22222\n333333333".to_string();
+    let items = item_reader.of_bufread(Cursor::new(input));
+    let selected_items = Skim::run_with(&options, Some(items))
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
