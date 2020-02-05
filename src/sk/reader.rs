@@ -6,37 +6,30 @@ use crate::item::ItemWrapper;
 use crate::options::SkimOptions;
 use crate::sk::item::SkItem;
 use crate::spinlock::SpinLock;
-use crate::SkimItem;
-use crossbeam::channel::{bounded, select, Receiver, Sender};
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 const DELIMITER_STR: &str = r"[\t\n ]+";
-const CHANNEL_SIZE: usize = 1024;
 
 pub struct ReaderControl {
-    tx_interrupt: Sender<i32>,
-    components_to_stop: Arc<AtomicUsize>,
+    stopped: Arc<AtomicBool>,
+    thread_reader: JoinHandle<()>,
     items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
 }
 
 impl ReaderControl {
     pub fn kill(self) {
-        debug!(
-            "kill reader, components before: {}",
-            self.components_to_stop.load(Ordering::SeqCst)
-        );
-        let _ = self.tx_interrupt.send(1);
-        while self.components_to_stop.load(Ordering::SeqCst) != 0 {
-            //
-        }
+        self.stopped.store(true, Ordering::SeqCst);
+        let _ = self.thread_reader.join();
     }
 
     pub fn take(&self) -> Vec<Arc<ItemWrapper>> {
@@ -48,64 +41,46 @@ impl ReaderControl {
 
     pub fn is_done(&self) -> bool {
         let items = self.items.lock();
-        self.components_to_stop.load(Ordering::SeqCst) == 0 && items.is_empty()
+        self.stopped.load(Ordering::Relaxed) && items.is_empty()
     }
 }
 
 pub struct Reader {
     option: Arc<ReaderOption>,
-    rx_item: Option<Receiver<Arc<dyn SkimItem>>>,
+    source_file: Option<Box<dyn BufRead + Send>>,
 }
 
 impl Reader {
     pub fn with_options(options: &SkimOptions) -> Self {
         Self {
             option: Arc::new(ReaderOption::with_options(&options)),
-            rx_item: None,
+            source_file: None,
         }
     }
 
-    pub fn source(mut self, rx_item: Option<Receiver<Arc<dyn SkimItem>>>) -> Self {
-        self.rx_item = rx_item;
+    pub fn source(mut self, source_file: Option<Box<dyn BufRead + Send>>) -> Self {
+        self.source_file = source_file;
         self
     }
 
     pub fn run(&mut self, cmd: &str) -> ReaderControl {
-        let components_to_stop: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
-        let components_to_stop_clone = components_to_stop.clone();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stopped_clone = stopped.clone();
+        stopped.store(false, Ordering::SeqCst);
         let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
         let option_clone = self.option.clone();
+        let source_file = self.source_file.take();
         let cmd = cmd.to_string();
 
-        let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);
-
-        match self.rx_item.take() {
-            Some(rx_item) => {
-                // read item from the channel
-                thread::spawn(move || {
-                    collect_item(components_to_stop_clone, rx_interrupt, rx_item, items_clone);
-                });
-            }
-            None => {
-                // invoke command and read from its output
-                let tx_interrupt_clone = tx_interrupt.clone();
-                thread::spawn(move || {
-                    read_and_collect_from_command(
-                        components_to_stop_clone,
-                        tx_interrupt_clone,
-                        rx_interrupt,
-                        &cmd,
-                        option_clone,
-                        items_clone,
-                    );
-                });
-            }
-        }
+        // start the new command
+        let thread_reader = thread::spawn(move || {
+            reader(&cmd, stopped_clone, items_clone, option_clone, source_file);
+        });
 
         ReaderControl {
-            tx_interrupt,
-            components_to_stop,
+            stopped,
+            thread_reader,
             items,
         }
     }
@@ -169,84 +144,78 @@ impl ReaderOption {
     }
 }
 
+type CommandOutput = (Option<Child>, Box<dyn BufRead + Send>);
+fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
+    let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+    let mut command = Command::new(shell)
+        .arg("-c")
+        .arg(cmd)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+
+    let stdout = command
+        .stdout
+        .take()
+        .ok_or_else(|| "command output: unwrap failed".to_owned())?;
+
+    Ok((Some(command), Box::new(BufReader::new(stdout))))
+}
+
 // Consider that you invoke a command with different arguments several times
-// If you select some items each time, how will skim remember it?
-// => Well, we'll give each invocation a number, i.e. RUN_NUM
+// If you select some items each time, how will skim remeber it?
+// => Well, we'll give each invokation a number, i.e. RUN_NUM
 // What if you invoke the same command and same arguments twice?
 // => We use NUM_MAP to specify the same run number.
 lazy_static! {
-    static ref RUN_NUM: AtomicUsize = AtomicUsize::new(0);
+    static ref RUN_NUM: RwLock<usize> = RwLock::new(0);
     static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
 }
 
-fn collect_item(
-    components_to_stop: Arc<AtomicUsize>,
-    rx_interrupt: Receiver<i32>,
-    rx_item: Receiver<Arc<dyn SkimItem>>,
-    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
-) {
-    debug!("reader: collect_item start");
-    components_to_stop.fetch_add(1, Ordering::SeqCst);
-
-    let run_num = RUN_NUM.load(Ordering::SeqCst);
-    let mut index = 0;
-    loop {
-        select! {
-            recv(rx_item) -> new_item => match new_item {
-                Ok(item) => {
-                    let item_wrapped = ItemWrapper::new(item, (run_num, index));
-                    let mut vec = items.lock();
-                    vec.push(Arc::new(item_wrapped));
-                    index += 1;
-                }
-                Err(_) => break,
-            },
-            recv(rx_interrupt) -> _msg => break,
-        }
-    }
-
-    components_to_stop.fetch_sub(1, Ordering::SeqCst);
-    debug!("reader: collect_item stop");
-}
-
-fn read_and_collect_from_command(
-    components_to_stop: Arc<AtomicUsize>,
-    tx_interrupt: Sender<i32>,
-    rx_interrupt: Receiver<i32>,
-
+fn reader(
     cmd: &str,
-    option: Arc<ReaderOption>,
+    stopped: Arc<AtomicBool>,
     items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
+    option: Arc<ReaderOption>,
+    source_file: Option<Box<dyn BufRead + Send>>,
 ) {
-    let (mut command, mut source) = get_command_output(cmd).expect("command not found");
+    let (command, mut source) = source_file
+        .map(|f| (None, f))
+        .unwrap_or_else(|| get_command_output(cmd).expect("command not found"));
 
-    let components_to_stop_clone = components_to_stop.clone();
-    // listening to close signal and kill command if needed
+    let command_stopped = Arc::new(AtomicBool::new(false));
+
+    let stopped_clone = stopped.clone();
+    let command_stopped_clone = command_stopped.clone();
     thread::spawn(move || {
-        debug!("reader: command killer start");
-        components_to_stop_clone.fetch_add(1, Ordering::SeqCst);
+        // kill command if it is got
+        while command.is_some() && !stopped_clone.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(5));
+        }
 
-        let _ = rx_interrupt.recv(); // block waiting
-        let _ = command.kill();
-        let _ = command.wait();
-
-        components_to_stop_clone.fetch_sub(1, Ordering::SeqCst);
-        debug!("reader: command killer stop");
+        // clean up resources
+        if let Some(mut x) = command {
+            let _ = x.kill();
+            let _ = x.wait();
+        }
+        command_stopped_clone.store(true, Ordering::Relaxed);
     });
 
-    debug!("reader: command reader start");
-    components_to_stop.fetch_add(1, Ordering::SeqCst);
-
     let opt = option;
+
     // set the proper run number
+    let run_num = { *RUN_NUM.read().expect("reader: failed to lock RUN_NUM") };
     let run_num = *NUM_MAP
         .write()
         .expect("reader: failed to lock NUM_MAP")
         .entry(cmd.to_string())
-        .or_insert_with(|| RUN_NUM.fetch_add(1, Ordering::SeqCst));
+        .or_insert_with(|| {
+            *(RUN_NUM.write().expect("reader: failed to lock RUN_NUM for write")) = run_num + 1;
+            run_num + 1
+        });
 
     let mut index = 0;
-    let mut buffer = Vec::with_capacity(1024);
+    let mut buffer = Vec::with_capacity(100);
     loop {
         buffer.clear();
         // start reading
@@ -271,7 +240,7 @@ fn read_and_collect_from_command(
                     &opt.delimiter,
                 );
 
-                let item = ItemWrapper::new(Arc::new(raw_item), (run_num, index));
+                let item = ItemWrapper::new(raw_item, (run_num, index));
 
                 {
                     // save item into pool
@@ -279,30 +248,17 @@ fn read_and_collect_from_command(
                     vec.push(Arc::new(item));
                     index += 1;
                 }
+
+                if stopped.load(Ordering::SeqCst) {
+                    break;
+                }
             }
             Err(_err) => {} // String not UTF8 or other error, skip.
         }
     }
 
-    let _ = tx_interrupt.send(1); // ensure the waiting thread will exit
-    components_to_stop.fetch_sub(1, Ordering::SeqCst);
-    debug!("reader: command reader stop");
-}
-
-type CommandOutput = (Child, Box<dyn BufRead + Send>);
-fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
-    let mut command = Command::new(shell)
-        .arg("-c")
-        .arg(cmd)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-
-    let stdout = command
-        .stdout
-        .take()
-        .ok_or_else(|| "command output: unwrap failed".to_owned())?;
-
-    Ok((command, Box::new(BufReader::new(stdout))))
+    stopped.store(true, Ordering::Relaxed);
+    while !command_stopped.load(Ordering::Relaxed) {
+        thread::sleep(Duration::from_millis(5));
+    }
 }

@@ -38,6 +38,7 @@ derive_builder = "0.9"
 bitflags = "1.0.4"
 timer = "0.2.0"
 chrono = "0.4"
+crossbeam = "0.7.3"
 
 [features]
 default = []

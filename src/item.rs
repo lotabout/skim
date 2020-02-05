@@ -17,11 +17,8 @@ pub struct ItemWrapper {
 }
 
 impl ItemWrapper {
-    pub fn new(item: impl SkimItem + 'static, index: (usize, usize)) -> Self {
-        Self {
-            id: index,
-            inner: Arc::new(item),
-        }
+    pub fn new(item: Arc<dyn SkimItem>, index: (usize, usize)) -> Self {
+        Self { id: index, inner: item }
     }
 
     pub fn get_id(&self) -> (usize, usize) {

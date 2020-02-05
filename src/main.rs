@@ -228,6 +228,7 @@ fn real_main() -> i32 {
 
     let output_ending = if options.print0 {"\0"} else {"\n"};
 
+
     let output = Skim::run_with(&options, None);
     if output.is_none() {
         return 130;

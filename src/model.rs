@@ -358,7 +358,10 @@ impl Model {
         if query.is_empty() {
             return;
         }
-        let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(query, (std::usize::MAX, self.next_idx_to_append)));
+        let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(
+            Arc::new(query),
+            (std::usize::MAX, self.next_idx_to_append),
+        ));
 
         self.next_idx_to_append += 1;
 
