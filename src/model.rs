@@ -382,7 +382,7 @@ impl Model {
         self.reader_control = Some(self.reader.run(&env.cmd));
 
         // In the event loop, there might need
-        let mut next_event = None;
+        let mut next_event = Some(Event::EvHeartBeat);
         loop {
             let ev = next_event.take().or_else(|| self.rx.recv().ok())?;
 
