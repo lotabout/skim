@@ -1,6 +1,6 @@
 extern crate skim;
 use crossbeam::channel::unbounded;
-use skim::{Skim, SkimItem, SkimItemReceiver, SkimItemSender, SkimOptionsBuilder};
+use skim::prelude::*;
 use std::sync::Arc;
 
 pub fn main() {
@@ -23,7 +23,7 @@ pub fn main() {
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}: {}{}", item.get_index(), item.output(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 
     //==================================================
@@ -39,6 +39,6 @@ pub fn main() {
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}: {}{}", item.get_index(), item.output(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 }

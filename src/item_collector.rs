@@ -1,6 +1,6 @@
 use crate::field::FieldRange;
 use crate::item::DefaultSkimItem;
-use crate::{SkimItem, SkimOptions};
+use crate::{SkimItem, SkimItemReceiver, SkimItemSender, SkimOptions};
 use crossbeam::channel::{bounded, Receiver, Sender};
 use regex::Regex;
 use std::env;
@@ -94,7 +94,7 @@ pub fn read_and_collect_from_command(
     };
 
     let (tx_interrupt, rx_interrupt) = bounded(CMD_CHANNEL_SIZE);
-    let (tx_item, rx_item): (Sender<Arc<dyn SkimItem>>, Receiver<Arc<dyn SkimItem>>) = bounded(ITEM_CHANNEL_SIZE);
+    let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(ITEM_CHANNEL_SIZE);
 
     let components_to_stop_clone = components_to_stop.clone();
     // listening to close signal and kill command if needed

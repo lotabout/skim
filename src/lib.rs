@@ -15,6 +15,7 @@ mod model;
 mod options;
 mod orderedvec;
 mod output;
+pub mod prelude;
 mod previewer;
 mod query;
 mod reader;
@@ -24,7 +25,7 @@ mod spinlock;
 mod theme;
 mod util;
 
-use crate::ansi::AnsiString;
+pub use crate::ansi::AnsiString;
 use crate::event::Event::*;
 use crate::event::{EventReceiver, EventSender};
 pub use crate::item_collector::*;
@@ -77,9 +78,9 @@ impl<T: AsRef<str> + Send + Sync> SkimItem for T {
 
 //------------------------------------------------------------------------------
 // Preview
-pub enum ItemPreview<'a> {
-    Command(&'a str),
-    Text(&'a str),
+pub enum ItemPreview {
+    Command(String),
+    Text(String),
     Global,
 }
 
@@ -166,16 +167,6 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // reader
-
-        //        // in piped situation(e.g. `echo "a" | sk`) set source to the pipe
-        //        let source = source.or_else(|| {
-        //            let stdin = std::io::stdin();
-        //            if !isatty(stdin.as_raw_fd()).unwrap_or(true) {
-        //                Some(Box::new(BufReader::new(stdin)))
-        //            } else {
-        //                None
-        //            }
-        //        });
 
         let mut reader = Reader::with_options(&options).source(source);
 

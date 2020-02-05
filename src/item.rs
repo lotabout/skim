@@ -145,6 +145,10 @@ impl ItemWrapper {
     pub fn get_index(&self) -> usize {
         self.id.1
     }
+
+    pub fn get_inner(&self) -> Arc<dyn SkimItem> {
+        self.inner.clone()
+    }
 }
 
 /// delegate to inner

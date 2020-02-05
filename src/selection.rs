@@ -255,7 +255,7 @@ impl Selection {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn get_selected_items(&self) -> Vec<Arc<ItemWrapper>> {
+    pub fn get_selected_items(&self) -> Vec<Arc<dyn SkimItem>> {
         // select the current one
         let select_cursor = !self.multi_selection || self.selected.is_empty();
         let mut selected: Vec<Arc<ItemWrapper>> = self.selected.values().cloned().collect();
@@ -271,7 +271,7 @@ impl Selection {
         }
 
         selected.sort_by_key(|item| item.get_id());
-        selected
+        selected.into_iter().map(|wrapped| wrapped.get_inner()).collect()
     }
 
     pub fn get_num_of_selected_exclude_current(&self) -> usize {
