@@ -226,7 +226,7 @@ impl<'a> AnsiString<'a> {
         }
     }
 
-    pub fn new_string(string: String) -> Self {
+    fn new_string(string: String) -> Self {
         let stripped: Cow<'static, str> = Cow::Owned(string);
         Self {
             stripped: stripped.clone(),
@@ -234,7 +234,7 @@ impl<'a> AnsiString<'a> {
         }
     }
 
-    pub fn new_str(str_ref: &'a str) -> Self {
+    fn new_str(str_ref: &'a str) -> Self {
         let stripped: Cow<'a, str> = Cow::Borrowed(str_ref);
         Self {
             stripped: stripped.clone(),
@@ -242,7 +242,7 @@ impl<'a> AnsiString<'a> {
         }
     }
 
-    pub fn new(stripped: String, fragments: Vec<(Attr, Cow<'static, str>)>) -> Self {
+    fn new(stripped: String, fragments: Vec<(Attr, Cow<'static, str>)>) -> Self {
         Self {
             stripped: Cow::Owned(stripped),
             fragments,
@@ -272,6 +272,18 @@ impl<'a> AnsiString<'a> {
 
     pub fn stripped(&self) -> &str {
         &self.stripped
+    }
+}
+
+impl<'a> From<&'a str> for AnsiString<'a> {
+    fn from(s: &'a str) -> AnsiString<'a> {
+        AnsiString::new_str(s)
+    }
+}
+
+impl From<String> for AnsiString<'static> {
+    fn from(s: String) -> Self {
+        AnsiString::new_string(s)
     }
 }
 

@@ -25,7 +25,7 @@ use std::sync::Arc;
 /// more than one line.
 #[derive(Debug)]
 pub struct DefaultSkimItem {
-    // The text that will be ouptut when user press `enter`
+    // The text that will be output when user press `enter`
     orig_text: String,
 
     // The text that will shown into the screen. Can be transformed.
@@ -65,7 +65,7 @@ impl<'a> DefaultSkimItem {
             ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
         } else if using_transform_fields {
             // transformed, not ansi
-            AnsiString::new_string(parse_transform_fields(delimiter, &orig_text, trans_fields))
+            parse_transform_fields(delimiter, &orig_text, trans_fields).into()
         } else if ansi_enabled {
             // not transformed, ansi
             ansi_parser.parse_ansi(&orig_text)
@@ -98,7 +98,7 @@ impl SkimItem for DefaultSkimItem {
         if self.using_transform_fields || self.ansi_enabled {
             Cow::Borrowed(&self.text)
         } else {
-            Cow::Owned(AnsiString::new_str(&self.orig_text))
+            Cow::Owned(self.orig_text.as_str().into())
         }
     }
 

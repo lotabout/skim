@@ -10,7 +10,7 @@ struct MyItem {
 
 impl SkimItem for MyItem {
     fn display(&self) -> Cow<AnsiString> {
-        Cow::Owned(AnsiString::new_str(&self.inner))
+        Cow::Owned(self.inner.as_str().into())
     }
 
     fn get_text(&self) -> Cow<str> {

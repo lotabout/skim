@@ -67,7 +67,7 @@ pub trait SkimItem: Send + Sync {
 
 impl<T: AsRef<str> + Send + Sync> SkimItem for T {
     fn display(&self) -> Cow<AnsiString> {
-        Cow::Owned(AnsiString::new_str(self.as_ref()))
+        Cow::Owned(self.as_ref().into())
     }
 
     fn get_text(&self) -> Cow<str> {
