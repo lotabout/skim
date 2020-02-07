@@ -380,7 +380,7 @@ impl Selection {
         }
 
         let item = &matched_item.item;
-        let text = item.get_text();
+        let text = item.text();
         let (match_start_char, match_end_char) = match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indices)) => {
                 if !matched_indices.is_empty() {

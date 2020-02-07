@@ -1,4 +1,4 @@
-use crate::ansi::AnsiString;
+use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::item::ItemWrapper;
 use crate::spinlock::SpinLock;
@@ -133,12 +133,13 @@ impl Previewer {
 
         let preview_event = match new_item {
             Some(item) => match item.preview() {
-                ItemPreview::Text(text) => PreviewEvent::PreviewPrepared(text),
+                ItemPreview::Text(text) => PreviewEvent::PreviewPlainText(text),
+                ItemPreview::AnsiText(text) => PreviewEvent::PreviewAnsiText(text),
                 preview => {
                     let cmd = match preview {
                         ItemPreview::Command(cmd) => cmd,
                         ItemPreview::Global => self.preview_cmd.clone().expect("previewer: not provided"),
-                        ItemPreview::Text(_) => unreachable!(),
+                        ItemPreview::Text(_) | ItemPreview::AnsiText(_) => unreachable!(),
                     };
 
                     let current_selection = self
@@ -150,7 +151,7 @@ impl Previewer {
                     let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
 
                     let tmp = get_selected_items();
-                    let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.get_text()).collect();
+                    let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.text()).collect();
                     let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
 
                     let context = InjectContext {
@@ -170,7 +171,7 @@ impl Previewer {
                     PreviewEvent::PreviewCommand(preview_command)
                 }
             },
-            None => PreviewEvent::PreviewPrepared("".to_string()),
+            None => PreviewEvent::PreviewPlainText("".to_string()),
         };
 
         let _ = self.tx_preview.send(preview_event);
@@ -287,10 +288,11 @@ pub struct PreviewCommand {
     pub columns: usize,
 }
 
-#[derive(Debug, Ord, PartialOrd, PartialEq, Eq)]
+#[derive(Debug)]
 enum PreviewEvent {
     PreviewCommand(PreviewCommand),
-    PreviewPrepared(String),
+    PreviewPlainText(String),
+    PreviewAnsiText(String),
     Abort,
 }
 
@@ -322,15 +324,15 @@ where
         }
 
         let mut event = match _event {
-            PreviewEvent::PreviewCommand(_) | PreviewEvent::PreviewPrepared(_) => _event,
             PreviewEvent::Abort => return,
+            _ => _event,
         };
 
         // Try to empty the channel. Happens when spamming up/down or typing fast.
         while let Ok(_event) = rx_preview.try_recv() {
             event = match _event {
-                PreviewEvent::PreviewCommand(_) | PreviewEvent::PreviewPrepared(_) => _event,
                 PreviewEvent::Abort => return,
+                _ => _event,
             }
         }
 
@@ -372,9 +374,13 @@ where
                     }
                 }
             }
-            PreviewEvent::PreviewPrepared(text) => {
-                let astdout = AnsiString::parse(&text);
-                callback(vec![astdout]);
+            PreviewEvent::PreviewPlainText(text) => {
+                callback(text.lines().map(|line| line.to_string().into()).collect());
+            }
+            PreviewEvent::PreviewAnsiText(text) => {
+                let mut parser = ANSIParser::default();
+                let color_lines = text.lines().map(|line| parser.parse_ansi(line)).collect();
+                callback(color_lines);
             }
             PreviewEvent::Abort => return,
         };

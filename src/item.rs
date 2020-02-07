@@ -83,9 +83,9 @@ impl<'a> DefaultSkimItem {
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
-            parse_matching_fields(delimiter, &ret.get_text(), matching_fields)
+            parse_matching_fields(delimiter, &ret.text(), matching_fields)
         } else {
-            vec![(0, ret.get_text().len())]
+            vec![(0, ret.text().len())]
         };
 
         ret.matching_ranges = matching_ranges;
@@ -102,7 +102,7 @@ impl SkimItem for DefaultSkimItem {
         }
     }
 
-    fn get_text(&self) -> Cow<str> {
+    fn text(&self) -> Cow<str> {
         if !self.using_transform_fields && !self.ansi_enabled {
             Cow::Borrowed(&self.orig_text)
         } else {
@@ -157,8 +157,8 @@ impl SkimItem for ItemWrapper {
         self.inner.display()
     }
 
-    fn get_text(&self) -> Cow<str> {
-        self.inner.get_text()
+    fn text(&self) -> Cow<str> {
+        self.inner.text()
     }
 
     fn output(&self) -> Cow<str> {
@@ -223,8 +223,8 @@ impl MatchedItem {
     pub fn range_char_indices(&self) -> Option<Vec<usize>> {
         self.matched_range.as_ref().map(|r| match r {
             MatchedRange::ByteRange(start, end) => {
-                let first = self.item.get_text()[..*start].chars().count();
-                let last = first + self.item.get_text()[*start..*end].chars().count();
+                let first = self.item.text()[..*start].chars().count();
+                let last = first + self.item.text()[*start..*end].chars().count();
                 (first..last).collect()
             }
             MatchedRange::Chars(vec) => vec.clone(),
