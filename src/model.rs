@@ -336,7 +336,7 @@ impl Model {
         let cmd_query = self.query.get_cmd_query();
 
         let tmp = self.selection.get_selected_items();
-        let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.get_text()).collect();
+        let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.text()).collect();
         let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
 
         let context = InjectContext {

@@ -7,7 +7,7 @@ use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 
@@ -116,7 +116,7 @@ pub fn read_and_collect_from_command(
         debug!("collector: command killer stop");
     });
 
-    while ! started.load(Ordering::SeqCst) {
+    while !started.load(Ordering::SeqCst) {
         // busy waiting for the thread to start. (components_to_stop is added)
     }
 
@@ -172,7 +172,7 @@ pub fn read_and_collect_from_command(
         debug!("collector: command collector stop");
     });
 
-    while ! started.load(Ordering::SeqCst) {
+    while !started.load(Ordering::SeqCst) {
         // busy waiting for the thread to start. (components_to_stop is added)
     }
 

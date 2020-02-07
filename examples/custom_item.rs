@@ -1,8 +1,5 @@
 extern crate skim;
-use crossbeam::channel::unbounded;
 use skim::prelude::*;
-use std::borrow::Cow;
-use std::sync::Arc;
 
 struct MyItem {
     inner: String,
@@ -10,15 +7,19 @@ struct MyItem {
 
 impl SkimItem for MyItem {
     fn display(&self) -> Cow<AnsiString> {
-        Cow::Owned(AnsiString::new_str(&self.inner))
+        Cow::Owned(self.inner.as_str().into())
     }
 
-    fn get_text(&self) -> Cow<str> {
+    fn text(&self) -> Cow<str> {
         Cow::Borrowed(&self.inner)
     }
 
     fn preview(&self) -> ItemPreview {
-        ItemPreview::Text(format!("hello, {}", self.inner))
+        if self.inner.starts_with("color") {
+            ItemPreview::AnsiText(format!("\x1b[31mhello:\x1b[m\n{}", self.inner))
+        } else {
+            ItemPreview::Text(format!("hello:\n{}", self.inner))
+        }
     }
 }
 
@@ -32,7 +33,7 @@ pub fn main() {
 
     let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = unbounded();
     let _ = tx_item.send(Arc::new(MyItem {
-        inner: "aaaaa".to_string(),
+        inner: "color aaaa".to_string(),
     }));
     let _ = tx_item.send(Arc::new(MyItem {
         inner: "bbbb".to_string(),

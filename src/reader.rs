@@ -8,10 +8,9 @@ use crate::spinlock::SpinLock;
 use crate::SkimItemReceiver;
 use crossbeam::channel::{bounded, select, Sender};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use bitflags::_core::sync::atomic::AtomicBool;
 
 const CHANNEL_SIZE: usize = 1024;
 
@@ -146,7 +145,7 @@ fn collect_item(
         debug!("reader: collect_item stop");
     });
 
-    while ! started.load(Ordering::SeqCst) {
+    while !started.load(Ordering::SeqCst) {
         // busy waiting for the thread to start. (components_to_stop is added)
     }
 

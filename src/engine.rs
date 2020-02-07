@@ -60,8 +60,8 @@ impl MatchEngine for RegexEngine {
                 break;
             }
 
-            matched_result = score::regex_match(&item.get_text()[start..end], &self.query_regex)
-                .map(|(s, e)| (s + start, e + start));
+            matched_result =
+                score::regex_match(&item.text()[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
 
             if matched_result.is_some() {
                 break;
@@ -122,9 +122,9 @@ impl MatchEngine for FuzzyEngine {
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges().as_ref() {
             matched_result =
-                score::fuzzy_match(&item.get_text()[start..end], &self.query, self.algorithm).map(|(s, vec)| {
+                score::fuzzy_match(&item.text()[start..end], &self.query, self.algorithm).map(|(s, vec)| {
                     if start != 0 {
-                        let start_char = &item.get_text()[..start].chars().count();
+                        let start_char = &item.text()[..start].chars().count();
                         (s, vec.iter().map(|x| x + start_char).collect())
                     } else {
                         (s, vec)
@@ -235,7 +235,7 @@ impl ExactEngine {
                 break;
             }
 
-            matched_result = score::exact_match(&item.get_text()[start..end], &self.query);
+            matched_result = score::exact_match(&item.text()[start..end], &self.query);
 
             if matched_result.is_some() {
                 range_start = start;
