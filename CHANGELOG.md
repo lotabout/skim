@@ -1,5 +1,30 @@
 # Change Log
 
+## 0.8.0: 2020-02-23
+
+**Breaking Changes in API**
+
+- `Skim::run_with` now accept a stream of `SkimItem` instead of a `BufRead`.
+
+Feature:
+- [#233](https://github.com/lotabout/skim/issues/233) support mouse
+    scroll/click event
+- [#254](https://github.com/lotabout/skim/issues/254) support `{+}` in preview
+    and execute command
+- [#226](https://github.com/lotabout/skim/issues/226) support exact match
+    combination(e.g. `^abc$`)
+- [#216](https://github.com/lotabout/skim/issues/216) support item specific
+    preview hook method
+- [#219](https://github.com/lotabout/skim/issues/219) support case insensitive
+    match
+
+Bug fixes:
+- [#252](https://github.com/lotabout/skim/issues/252) Deal with `\b` correctly
+- [#210](https://github.com/lotabout/skim/issues/210) exclude current item in
+    multi-selection
+- [#225](https://github.com/lotabout/skim/issues/225) disable score in filter
+    output
+
 ## 0.7.0: 2020-01-15
 
 Feature:
