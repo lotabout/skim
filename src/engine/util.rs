@@ -1,4 +1,3 @@
-use crate::item::Rank;
 use regex::Regex;
 
 pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usize)> {

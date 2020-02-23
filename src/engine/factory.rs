@@ -182,10 +182,9 @@ impl MatchEngineFactory for RegexEngineFactory {
 }
 
 mod test {
-    use super::*;
-
     #[test]
     fn test_engine_factory() {
+        use super::*;
         let exact_or_fuzzy = ExactOrFuzzyEngineFactory::builder().build();
         let x = exact_or_fuzzy.create_engine("'abc");
         assert_eq!(format!("{}", x), "(Exact|(?i)abc)");

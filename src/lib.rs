@@ -29,10 +29,8 @@ pub use crate::engine::fuzzy::FuzzyAlgorithm;
 pub use crate::ansi::AnsiString;
 use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, RegexEngineFactory};
 use crate::event::{EventReceiver, EventSender};
-use crate::input::Input;
 use crate::item::{ItemWrapper, MatchedItem};
 pub use crate::item_collector::*;
-use crate::matcher::Matcher;
 use crate::model::Model;
 pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
@@ -190,9 +188,7 @@ pub trait MatchEngineFactory {
 pub type SkimItemSender = Sender<Arc<dyn SkimItem>>;
 pub type SkimItemReceiver = Receiver<Arc<dyn SkimItem>>;
 
-pub struct Skim {
-    input: Input,
-}
+pub struct Skim {}
 
 impl Skim {
     pub fn run_with(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Option<SkimOutput> {

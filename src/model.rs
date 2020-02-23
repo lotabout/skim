@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::env;
 use std::mem;
 use std::process::Command;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -25,7 +26,7 @@ use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{FuzzyAlgorithm, SkimItem};
+use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -97,10 +98,18 @@ impl Model {
             .build();
 
         let selection = Selection::with_options(options).theme(theme.clone());
-        let regex_engine = RegexEngineFactory::new();
+        let regex_engine: Rc<dyn MatchEngineFactory> = Rc::new(RegexEngineFactory::new());
         let regex_matcher = Matcher::builder(regex_engine).build();
-        let fuzzy_engine = ExactOrFuzzyEngineFactory::builder().build();
-        let matcher = Matcher::builder(AndOrEngineFactory::new(fuzzy_engine)).build();
+
+        let matcher = if let Some(engine_factory) = options.engine_factory.as_ref() {
+            // use provided engine
+            Matcher::builder(engine_factory.clone()).case(options.case).build()
+        } else {
+            let fuzzy_engine_factory: Rc<dyn MatchEngineFactory> = Rc::new(AndOrEngineFactory::new(
+                ExactOrFuzzyEngineFactory::builder().exact_mode(options.exact).build(),
+            ));
+            Matcher::builder(fuzzy_engine_factory).case(options.case).build()
+        };
 
         let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
         let header = Header::empty()

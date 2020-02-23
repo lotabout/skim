@@ -1,7 +1,7 @@
 use crate::engine::util::{contains_upper, regex_match};
 use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
 use crate::SkimItem;
-use crate::{CaseMatching, MatchEngine, MatchEngineFactory};
+use crate::{CaseMatching, MatchEngine};
 use regex::{escape, Regex};
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;

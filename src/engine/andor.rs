@@ -2,7 +2,7 @@ use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
 
 use crate::item::{ItemWrapper, MatchedItem, MatchedRange};
-use crate::{MatchEngine, MatchEngineFactory};
+use crate::MatchEngine;
 
 //------------------------------------------------------------------------------
 // OrEngine, a combinator
@@ -13,11 +13,6 @@ pub struct OrEngine {
 impl OrEngine {
     pub fn builder() -> Self {
         Self { engines: vec![] }
-    }
-
-    pub fn engine(mut self, engine: Box<dyn MatchEngine>) -> Self {
-        self.engines.push(engine);
-        self
     }
 
     pub fn engines(mut self, mut engines: Vec<Box<dyn MatchEngine>>) -> Self {
@@ -66,11 +61,6 @@ pub struct AndEngine {
 impl AndEngine {
     pub fn builder() -> Self {
         Self { engines: vec![] }
-    }
-
-    pub fn engine(mut self, engine: Box<dyn MatchEngine>) -> Self {
-        self.engines.push(engine);
-        self
     }
 
     pub fn engines(mut self, mut engines: Vec<Box<dyn MatchEngine>>) -> Self {

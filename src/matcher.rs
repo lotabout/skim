@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -6,11 +5,10 @@ use std::thread::JoinHandle;
 
 use rayon::prelude::*;
 
-use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory};
-use crate::item::{ItemPool, ItemWrapper, MatchedItem};
-use crate::options::SkimOptions;
+use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
+use std::rc::Rc;
 
 //==============================================================================
 pub struct MatcherControl {
@@ -47,14 +45,14 @@ impl MatcherControl {
 
 //==============================================================================
 pub struct Matcher {
-    engine_factory: Box<dyn MatchEngineFactory>,
+    engine_factory: Rc<dyn MatchEngineFactory>,
     case_matching: CaseMatching,
 }
 
 impl Matcher {
-    pub fn builder(engine_factory: impl MatchEngineFactory + 'static) -> Self {
+    pub fn builder(engine_factory: Rc<dyn MatchEngineFactory>) -> Self {
         Self {
-            engine_factory: Box::new(engine_factory),
+            engine_factory,
             case_matching: CaseMatching::default(),
         }
     }

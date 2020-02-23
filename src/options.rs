@@ -1,7 +1,10 @@
-use crate::FuzzyAlgorithm;
+use std::rc::Rc;
+
 use derive_builder::Builder;
 
-#[derive(Debug, Builder)]
+use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory};
+
+#[derive(Builder)]
 #[builder(build_fn(name = "final_build"))]
 #[builder(default)]
 pub struct SkimOptions<'a> {
@@ -45,6 +48,8 @@ pub struct SkimOptions<'a> {
     pub layout: &'a str,
     pub filter: &'a str,
     pub algorithm: FuzzyAlgorithm,
+    pub case: CaseMatching,
+    pub engine_factory: Option<Rc<dyn MatchEngineFactory>>,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -90,6 +95,8 @@ impl<'a> Default for SkimOptions<'a> {
             layout: "",
             filter: "",
             algorithm: FuzzyAlgorithm::default(),
+            case: CaseMatching::default(),
+            engine_factory: None,
         }
     }
 }

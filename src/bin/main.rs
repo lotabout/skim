@@ -8,7 +8,7 @@ extern crate time;
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
 use skim::{
-    read_and_collect_from_command, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimOptions,
+    read_and_collect_from_command, CaseMatching, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimOptions,
     SkimOptionsBuilder,
 };
 use std::env;
@@ -37,6 +37,8 @@ Usage: sk [options]
     --regex              use regex instead of fuzzy match
     --algo=TYPE          Fuzzy matching algorithm:
                          [skim_v1|skim_v2|clangd] (default: skim_v2)
+    --case [respect,ignore,smart] (default: smart)
+                         case sensitive or not
 
   Interface
     -b, --bind KEYBINDS  comma seperated keybindings, in KEY:ACTION
@@ -190,6 +192,7 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("reverse").long("reverse").multiple(true))
 
         .arg(Arg::with_name("algorithm").long("algo").multiple(true).takes_value(true).default_value("skim_v2"))
+        .arg(Arg::with_name("case").long("case").multiple(true).takes_value(true).default_value("smart"))
         .arg(Arg::with_name("literal").long("literal").multiple(true))
         .arg(Arg::with_name("cycle").long("cycle").multiple(true))
         .arg(Arg::with_name("no-hscroll").long("no-hscroll").multiple(true))
@@ -334,6 +337,11 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .algorithm(FuzzyAlgorithm::of(
             options.values_of("algorithm").and_then(|vals| vals.last()).unwrap(),
         ))
+        .case(match options.value_of("case") {
+            Some("smart") => CaseMatching::Smart,
+            Some("ignore") => CaseMatching::Ignore,
+            _ => CaseMatching::Respect,
+        })
         .build()
         .unwrap()
 }
