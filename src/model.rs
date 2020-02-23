@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::env;
 use std::mem;
 use std::process::Command;
@@ -9,11 +10,12 @@ use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
 use tuikit::prelude::{Event as TermEvent, *};
 
+use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, RegexEngineFactory};
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
 use crate::item::{ItemPool, ItemWrapper};
-use crate::matcher::{Matcher, MatcherControl, MatcherMode};
+use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
 use crate::previewer::Previewer;
@@ -24,7 +26,6 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, SkimItem};
-use std::borrow::Cow;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -40,7 +41,11 @@ pub struct Model {
     query: Query,
     selection: Selection,
     num_options: usize,
+
+    use_regex: bool,
+    regex_matcher: Matcher,
     matcher: Matcher,
+
     term: Arc<Term>,
 
     item_pool: Arc<ItemPool>,
@@ -48,7 +53,6 @@ pub struct Model {
     rx: EventReceiver,
     tx: EventSender,
 
-    matcher_mode: Option<MatcherMode>,
     fuzzy_algorithm: FuzzyAlgorithm,
     reader_timer: Instant,
     matcher_timer: Instant,
@@ -93,7 +97,11 @@ impl Model {
             .build();
 
         let selection = Selection::with_options(options).theme(theme.clone());
-        let matcher = Matcher::with_options(options);
+        let regex_engine = RegexEngineFactory::new();
+        let regex_matcher = Matcher::builder(regex_engine).build();
+        let fuzzy_engine = ExactOrFuzzyEngineFactory::builder().build();
+        let matcher = Matcher::builder(AndOrEngineFactory::new(fuzzy_engine)).build();
+
         let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
         let header = Header::empty()
             .with_options(options)
@@ -111,6 +119,8 @@ impl Model {
             query,
             selection,
             num_options: 0,
+            use_regex: options.regex,
+            regex_matcher,
             matcher,
             term,
             item_pool,
@@ -121,7 +131,6 @@ impl Model {
             matcher_timer: Instant::now(),
             reader_control: None,
             matcher_control: None,
-            matcher_mode: None,
             fuzzy_algorithm: FuzzyAlgorithm::default(),
 
             header,
@@ -160,7 +169,7 @@ impl Model {
         }
 
         if options.regex {
-            self.matcher_mode = Some(MatcherMode::Regex);
+            self.use_regex = true;
         }
 
         self.fuzzy_algorithm = options.algorithm;
@@ -276,11 +285,7 @@ impl Model {
     }
 
     fn act_rotate_mode(&mut self, env: &mut ModelEnv) {
-        if self.matcher_mode.is_none() {
-            self.matcher_mode = Some(MatcherMode::Regex);
-        } else {
-            self.matcher_mode = None;
-        }
+        self.use_regex = !self.use_regex;
 
         // restart matcher
         if let Some(ctrl) = self.matcher_control.take() {
@@ -560,17 +565,17 @@ impl Model {
         // send heart beat (so that heartbeat/refresh is triggered)
         let _ = self.tx.send(Event::EvHeartBeat);
 
+        let matcher = if self.use_regex {
+            &self.regex_matcher
+        } else {
+            &self.matcher
+        };
+
         let tx = self.tx.clone();
-        let new_matcher_control = self.matcher.run(
-            &query,
-            self.item_pool.clone(),
-            self.matcher_mode,
-            self.fuzzy_algorithm,
-            move |_| {
-                // notify refresh immediately
-                let _ = tx.send(Event::EvHeartBeat);
-            },
-        );
+        let new_matcher_control = matcher.run(&query, self.item_pool.clone(), move |_| {
+            // notify refresh immediately
+            let _ = tx.send(Event::EvHeartBeat);
+        });
 
         self.matcher_control.replace(new_matcher_control);
     }
@@ -581,10 +586,10 @@ impl Model {
         F: Fn(Box<dyn Widget<Event> + '_>) -> R,
     {
         let total = self.item_pool.len();
-        let matcher_mode = if self.matcher_mode.is_none() {
-            "".to_string()
-        } else {
+        let matcher_mode = if self.use_regex {
             "RE".to_string()
+        } else {
+            "".to_string()
         };
 
         let matched = self.num_options + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);

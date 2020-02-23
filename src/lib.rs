@@ -2,6 +2,7 @@
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
+
 mod ansi;
 mod engine;
 mod event;
@@ -19,24 +20,28 @@ pub mod prelude;
 mod previewer;
 mod query;
 mod reader;
-mod score;
 mod selection;
 mod spinlock;
 mod theme;
 mod util;
+pub use crate::engine::fuzzy::FuzzyAlgorithm;
 
 pub use crate::ansi::AnsiString;
+use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, RegexEngineFactory};
 use crate::event::{EventReceiver, EventSender};
+use crate::input::Input;
+use crate::item::{ItemWrapper, MatchedItem};
 pub use crate::item_collector::*;
+use crate::matcher::Matcher;
 use crate::model::Model;
 pub use crate::options::{SkimOptions, SkimOptionsBuilder};
 pub use crate::output::SkimOutput;
 use crate::reader::Reader;
-pub use crate::score::FuzzyAlgorithm;
 use crossbeam::channel::{Receiver, Sender};
 use std::any::Any;
 use std::borrow::Cow;
 use std::env;
+use std::fmt::Display;
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
@@ -47,6 +52,7 @@ pub trait AsAny {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
+
 impl<T: Any> AsAny for T {
     fn as_any(&self) -> &dyn Any {
         self
@@ -153,11 +159,41 @@ pub enum ItemPreview {
     Global,
 }
 
+//==============================================================================
+// A match engine will execute the matching algorithm
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub enum CaseMatching {
+    Respect,
+    Ignore,
+    Smart,
+}
+
+impl Default for CaseMatching {
+    fn default() -> Self {
+        CaseMatching::Smart
+    }
+}
+
+pub trait MatchEngine: Sync + Send + Display {
+    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem>;
+}
+
+pub trait MatchEngineFactory {
+    fn create_engine_with_case(&self, query: &str, case: CaseMatching) -> Box<dyn MatchEngine>;
+    fn create_engine(&self, query: &str) -> Box<dyn MatchEngine> {
+        self.create_engine_with_case(query, CaseMatching::default())
+    }
+}
+
 //------------------------------------------------------------------------------
 pub type SkimItemSender = Sender<Arc<dyn SkimItem>>;
 pub type SkimItemReceiver = Receiver<Arc<dyn SkimItem>>;
 
-pub struct Skim {}
+pub struct Skim {
+    input: Input,
+}
+
 impl Skim {
     pub fn run_with(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Option<SkimOutput> {
         let min_height = options
@@ -180,6 +216,7 @@ impl Skim {
         let mut input = input::Input::new();
         input.parse_keymaps(&options.bind);
         input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
+
         let tx_clone = tx.clone();
         let term_clone = term.clone();
         let input_thread = thread::spawn(move || loop {
@@ -210,8 +247,6 @@ impl Skim {
     }
 
     pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
-        use crate::engine::{EngineFactory, MatcherMode};
-
         let output_ending = if options.print0 { "\0" } else { "\n" };
         let query = options.filter;
         let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
@@ -237,15 +272,16 @@ impl Skim {
 
         //------------------------------------------------------------------------------
         // matcher
-        let matcher_mode = if options.regex {
-            MatcherMode::Regex
-        } else if options.exact {
-            MatcherMode::Exact
+        let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
+            Box::new(RegexEngineFactory::new())
         } else {
-            MatcherMode::Fuzzy
+            let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
+                .fuzzy_algorithm(options.algorithm)
+                .exact_mode(options.exact)
+                .build();
+            Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
         };
-
-        let engine = EngineFactory::build(query, matcher_mode, options.algorithm);
+        let engine = engine_factory.create_engine_with_case(query, CaseMatching::default());
 
         //------------------------------------------------------------------------------
         // start

@@ -161,12 +161,12 @@ impl SkimItem for ItemWrapper {
         self.inner.text()
     }
 
-    fn output(&self) -> Cow<str> {
-        self.inner.output()
-    }
-
     fn preview(&self) -> ItemPreview {
         self.inner.preview()
+    }
+
+    fn output(&self) -> Cow<str> {
+        self.inner.output()
     }
 
     fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
