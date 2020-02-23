@@ -17,8 +17,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "sk"
-path = "src/main.rs"
-
+path = "src/bin/main.rs"
 
 [dependencies]
 nix = "0.14.0"
@@ -32,7 +31,7 @@ time = "0.1.38"
 clap = "2.26.2"
 tuikit = "0.3.1"
 vte = "0.3.3"
-fuzzy-matcher = "0.3.3"
+fuzzy-matcher = "0.3.4"
 rayon = "1.0.3"
 derive_builder = "0.9"
 bitflags = "1.0.4"

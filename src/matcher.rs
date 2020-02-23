@@ -1,15 +1,16 @@
-use crate::engine::EngineFactory;
-pub use crate::engine::MatcherMode;
-use crate::item::{ItemPool, MatchedItem};
-use crate::options::SkimOptions;
-use crate::spinlock::SpinLock;
-use crate::FuzzyAlgorithm;
-use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
+use rayon::prelude::*;
+
+use crate::item::{ItemPool, MatchedItem};
+use crate::spinlock::SpinLock;
+use crate::{CaseMatching, MatchEngineFactory};
+use std::rc::Rc;
+
+//==============================================================================
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
     processed: Arc<AtomicUsize>,
@@ -42,45 +43,35 @@ impl MatcherControl {
     }
 }
 
+//==============================================================================
 pub struct Matcher {
-    mode: MatcherMode,
+    engine_factory: Rc<dyn MatchEngineFactory>,
+    case_matching: CaseMatching,
 }
 
 impl Matcher {
-    pub fn new() -> Self {
-        Matcher {
-            mode: MatcherMode::Fuzzy,
+    pub fn builder(engine_factory: Rc<dyn MatchEngineFactory>) -> Self {
+        Self {
+            engine_factory,
+            case_matching: CaseMatching::default(),
         }
     }
 
-    pub fn with_options(options: &SkimOptions) -> Self {
-        let mut matcher = Self::new();
-        matcher.parse_options(&options);
-        matcher
+    pub fn case(mut self, case_matching: CaseMatching) -> Self {
+        self.case_matching = case_matching;
+        self
     }
 
-    fn parse_options(&mut self, options: &SkimOptions) {
-        if options.exact {
-            self.mode = MatcherMode::Exact;
-        }
-
-        if options.regex {
-            self.mode = MatcherMode::Regex;
-        }
+    pub fn build(self) -> Self {
+        self
     }
 
-    pub fn run<C>(
-        &self,
-        query: &str,
-        item_pool: Arc<ItemPool>,
-        mode: Option<MatcherMode>,
-        fuzzy_algorithm: FuzzyAlgorithm,
-        callback: C,
-    ) -> MatcherControl
+    pub fn run<C>(&self, query: &str, item_pool: Arc<ItemPool>, callback: C) -> MatcherControl
     where
         C: Fn(Arc<SpinLock<Vec<MatchedItem>>>) + Send + 'static,
     {
-        let matcher_engine = EngineFactory::build(&query, mode.unwrap_or(self.mode), fuzzy_algorithm);
+        let matcher_engine = self.engine_factory.create_engine_with_case(query, self.case_matching);
+        debug!("engine: {}", matcher_engine);
         let stopped = Arc::new(AtomicBool::new(false));
         let stopped_clone = stopped.clone();
         let processed = Arc::new(AtomicUsize::new(0));
