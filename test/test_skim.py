@@ -705,6 +705,86 @@ class TestSkim(TestBase):
         output = ":".join("{:02x}".format(ord(c)) for c in self.readonce())
         self.assertTrue(output.find("61:00:62:0a") >= 0)
 
+    def test_smart_case_fuzzy(self):
+        """should behave correctly on case, #219"""
+
+        # smart case
+        self.tmux.send_keys(f"echo -e 'aBcXyZ' | {self.sk('')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('abc'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key('aBc'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key('ABc'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('', self.readonce().strip())
+
+    def test_smart_case_exact(self):
+        """should behave correctly on case, #219"""
+
+        # smart case
+        self.tmux.send_keys(f"echo -e 'aBcXyZ' | {self.sk('')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key("'abc"))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key("'aBc"))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key("'ABc"))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('', self.readonce().strip())
+
+    def test_ignore_case_fuzzy(self):
+        """should behave correctly on case, #219"""
+
+        # ignore case
+        self.tmux.send_keys(f"echo -e 'aBcXyZ' | {self.sk('--case ignore')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('abc'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key('aBc'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key('ABc'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Key('Enter'))
+
+    def test_ignore_case_exact(self):
+        """should behave correctly on case, #219"""
+
+        # ignore case
+        self.tmux.send_keys(f"echo -e 'aBcXyZ' | {self.sk('--case ignore')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key("'abc"))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key("'aBc"))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Ctrl('u'), Key("'ABc"))
+        self.tmux.until(lambda lines: lines[-3].startswith('> aBcXyZ'))
+        self.tmux.send_keys(Key('Enter'))
+
+    def test_respect_case_fuzzy(self):
+        """should behave correctly on case, #219"""
+
+        # respect case
+        self.tmux.send_keys(f"echo -e 'aBcXyZ' | {self.sk('--case respect')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('abc'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('', self.readonce().strip())
+
+    def test_respect_case_exact(self):
+        """should behave correctly on case, #219"""
+
+        # respect case
+        self.tmux.send_keys(f"echo -e 'aBcXyZ' | {self.sk('--case respect')}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key("'abc"))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('', self.readonce().strip())
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"
