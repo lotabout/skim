@@ -60,13 +60,3 @@ pub fn regex_match(choice: &str, pattern: &Option<Regex>) -> Option<(usize, usiz
         None => None,
     }
 }
-
-// Pattern may appear in several places, return the first and last occurrence
-pub fn exact_match(choice: &str, pattern: &str) -> Option<((usize, usize), (usize, usize))> {
-    // search from the start
-    let start_pos = choice.find(pattern)?;
-    let first_occur = (start_pos, start_pos + pattern.len());
-    let last_pos = choice.rfind(pattern)?;
-    let last_occur = (last_pos, last_pos + pattern.len());
-    Some((first_occur, last_occur))
-}
