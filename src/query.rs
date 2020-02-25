@@ -1,10 +1,12 @@
+use std::mem;
+use std::sync::Arc;
+
+use tuikit::prelude::*;
+use unicode_width::UnicodeWidthStr;
+
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
-use std::mem;
-use std::sync::Arc;
-use tuikit::prelude::*;
-use unicode_width::UnicodeWidthStr;
 
 #[derive(Clone, Copy, PartialEq)]
 enum QueryMode {
@@ -15,8 +17,8 @@ enum QueryMode {
 pub struct Query {
     cmd_before: Vec<char>,
     cmd_after: Vec<char>,
-    query_before: Vec<char>,
-    query_after: Vec<char>,
+    fz_query_before: Vec<char>,
+    fz_query_after: Vec<char>,
     yank: Vec<char>,
 
     mode: QueryMode,
@@ -24,6 +26,11 @@ pub struct Query {
     replstr: String,
     query_prompt: String,
     cmd_prompt: String,
+
+    cmd_history_before: Vec<String>,
+    cmd_history_after: Vec<String>,
+    fz_query_history_before: Vec<String>,
+    fz_query_history_after: Vec<String>,
 
     theme: Arc<ColorTheme>,
 }
@@ -34,14 +41,20 @@ impl Query {
         Query {
             cmd_before: Vec::new(),
             cmd_after: Vec::new(),
-            query_before: Vec::new(),
-            query_after: Vec::new(),
+            fz_query_before: Vec::new(),
+            fz_query_after: Vec::new(),
             yank: Vec::new(),
             mode: QueryMode::QUERY,
             base_cmd: String::new(),
             replstr: "{}".to_string(),
             query_prompt: "> ".to_string(),
             cmd_prompt: "c> ".to_string(),
+
+            cmd_history_before: Vec::new(),
+            cmd_history_after: Vec::new(),
+            fz_query_history_before: Vec::new(),
+            fz_query_history_after: Vec::new(),
+
             theme: Arc::new(*DEFAULT_THEME),
         }
     }
@@ -59,13 +72,23 @@ impl Query {
         self
     }
 
-    pub fn query(mut self, query: &str) -> Self {
-        self.query_before = query.chars().collect();
+    pub fn fz_query(mut self, query: &str) -> Self {
+        self.fz_query_before = query.chars().collect();
         self
     }
 
     pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
         self.theme = theme;
+        self
+    }
+
+    pub fn cmd_history(mut self, mut history: Vec<String>) -> Self {
+        self.cmd_history_before.append(&mut history);
+        self
+    }
+
+    pub fn fz_query_history(mut self, mut history: Vec<String>) -> Self {
+        self.fz_query_history_before.append(&mut history);
         self
     }
 
@@ -81,7 +104,7 @@ impl Query {
         }
 
         if let Some(query) = options.query {
-            self.query_before = query.chars().collect();
+            self.fz_query_before = query.chars().collect();
         }
 
         if let Some(cmd_query) = options.cmd_query {
@@ -103,13 +126,16 @@ impl Query {
         if let Some(cmd_prompt) = options.cmd_prompt {
             self.cmd_prompt = cmd_prompt.to_string();
         }
+
+        self.fz_query_history_before = options.query_history.to_vec();
+        self.cmd_history_before = options.cmd_history.to_vec();
     }
 
-    pub fn get_query(&self) -> String {
-        self.query_before
+    pub fn get_fz_query(&self) -> String {
+        self.fz_query_before
             .iter()
             .cloned()
-            .chain(self.query_after.iter().cloned().rev())
+            .chain(self.fz_query_after.iter().cloned().rev())
             .collect()
     }
 
@@ -131,17 +157,24 @@ impl Query {
             .collect()
     }
 
+    fn get_query(&mut self) -> String {
+        match self.mode {
+            QueryMode::QUERY => self.get_fz_query(),
+            QueryMode::CMD => self.get_cmd_query(),
+        }
+    }
+
     fn get_before(&self) -> String {
         match self.mode {
             QueryMode::CMD => self.cmd_before.iter().cloned().collect(),
-            QueryMode::QUERY => self.query_before.iter().cloned().collect(),
+            QueryMode::QUERY => self.fz_query_before.iter().cloned().collect(),
         }
     }
 
     fn get_after(&self) -> String {
         match self.mode {
             QueryMode::CMD => self.cmd_after.iter().cloned().rev().collect(),
-            QueryMode::QUERY => self.query_after.iter().cloned().rev().collect(),
+            QueryMode::QUERY => self.fz_query_after.iter().cloned().rev().collect(),
         }
     }
 
@@ -152,10 +185,17 @@ impl Query {
         }
     }
 
-    fn get_ref(&mut self) -> (&mut Vec<char>, &mut Vec<char>) {
+    fn get_query_ref(&mut self) -> (&mut Vec<char>, &mut Vec<char>) {
         match self.mode {
-            QueryMode::QUERY => (&mut self.query_before, &mut self.query_after),
+            QueryMode::QUERY => (&mut self.fz_query_before, &mut self.fz_query_after),
             QueryMode::CMD => (&mut self.cmd_before, &mut self.cmd_after),
+        }
+    }
+
+    fn get_history_ref(&mut self) -> (&mut Vec<String>, &mut Vec<String>) {
+        match self.mode {
+            QueryMode::QUERY => (&mut self.fz_query_history_before, &mut self.fz_query_history_after),
+            QueryMode::CMD => (&mut self.cmd_history_before, &mut self.cmd_history_after),
         }
     }
 
@@ -184,30 +224,30 @@ impl Query {
     }
 
     pub fn act_add_char(&mut self, ch: char) {
-        let (before, _) = self.get_ref();
+        let (before, _) = self.get_query_ref();
         before.push(ch);
     }
 
     pub fn act_backward_delete_char(&mut self) {
-        let (before, _) = self.get_ref();
+        let (before, _) = self.get_query_ref();
         let _ = before.pop();
     }
 
     // delete char foraward
     pub fn act_delete_char(&mut self) {
-        let (_, after) = self.get_ref();
+        let (_, after) = self.get_query_ref();
         let _ = after.pop();
     }
 
     pub fn act_backward_char(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, after) = self.get_query_ref();
         if let Some(ch) = before.pop() {
             after.push(ch);
         }
     }
 
     pub fn act_forward_char(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, after) = self.get_query_ref();
         if let Some(ch) = after.pop() {
             before.push(ch);
         }
@@ -217,7 +257,7 @@ impl Query {
         let mut yank = Vec::new();
 
         {
-            let (before, _) = self.get_ref();
+            let (before, _) = self.get_query_ref();
             // kill things other than whitespace
             while !before.is_empty() && before[before.len() - 1].is_whitespace() {
                 yank.push(before.pop().unwrap());
@@ -236,7 +276,7 @@ impl Query {
         let mut yank = Vec::new();
 
         {
-            let (before, _) = self.get_ref();
+            let (before, _) = self.get_query_ref();
             // kill things other than alphanumeric
             while !before.is_empty() && !before[before.len() - 1].is_alphanumeric() {
                 yank.push(before.pop().unwrap());
@@ -255,7 +295,7 @@ impl Query {
         let mut yank = Vec::new();
 
         {
-            let (_, after) = self.get_ref();
+            let (_, after) = self.get_query_ref();
 
             // kill non alphanumeric
             while !after.is_empty() && !after[after.len() - 1].is_alphanumeric() {
@@ -270,7 +310,7 @@ impl Query {
     }
 
     pub fn act_backward_word(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, after) = self.get_query_ref();
         // skip whitespace
         while !before.is_empty() && !before[before.len() - 1].is_alphanumeric() {
             if let Some(ch) = before.pop() {
@@ -287,7 +327,7 @@ impl Query {
     }
 
     pub fn act_forward_word(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, after) = self.get_query_ref();
         // backword char until whitespace
         // skip whitespace
         while !after.is_empty() && after[after.len() - 1].is_whitespace() {
@@ -304,7 +344,7 @@ impl Query {
     }
 
     pub fn act_beginning_of_line(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, after) = self.get_query_ref();
         while !before.is_empty() {
             if let Some(ch) = before.pop() {
                 after.push(ch);
@@ -313,7 +353,7 @@ impl Query {
     }
 
     pub fn act_end_of_line(&mut self) {
-        let (before, after) = self.get_ref();
+        let (before, after) = self.get_query_ref();
         while !after.is_empty() {
             if let Some(ch) = after.pop() {
                 before.push(ch);
@@ -322,13 +362,13 @@ impl Query {
     }
 
     pub fn act_kill_line(&mut self) {
-        let after = mem::replace(&mut self.query_after, Vec::new());
+        let after = mem::replace(&mut self.fz_query_after, Vec::new());
         self.save_yank(after, false);
     }
 
     pub fn act_line_discard(&mut self) {
-        let before = mem::replace(&mut self.query_before, Vec::new());
-        self.query_before = Vec::new();
+        let before = mem::replace(&mut self.fz_query_before, Vec::new());
+        self.fz_query_before = Vec::new();
         self.save_yank(before, false);
     }
 
@@ -340,6 +380,34 @@ impl Query {
         let _ = mem::replace(&mut self.yank, yank);
     }
 
+    pub fn previous_history(&mut self) {
+        let current_query = self.get_query();
+        let (history_before, history_after) = self.get_history_ref();
+        if let Some(history) = history_before.pop() {
+            history_after.push(current_query);
+
+            // store history into current query
+            let (query_before, _) = self.get_query_ref();
+            query_before.clear();
+            let mut new_query_chars = history.chars().collect();
+            query_before.append(&mut new_query_chars);
+        }
+    }
+
+    pub fn next_history(&mut self) {
+        let current_query = self.get_query();
+        let (history_before, history_after) = self.get_history_ref();
+        if let Some(history) = history_after.pop() {
+            history_before.push(current_query);
+
+            // store history into current query
+            let (query_before, _) = self.get_query_ref();
+            query_before.clear();
+            let mut new_query_chars = history.chars().collect();
+            query_before.append(&mut new_query_chars);
+        }
+    }
+
     fn query_changed(
         &self,
         mode: QueryMode,
@@ -349,8 +417,8 @@ impl Query {
         cmd_after_len: usize,
     ) -> bool {
         self.mode != mode
-            || self.query_before.len() != query_before_len
-            || self.query_after.len() != query_after_len
+            || self.fz_query_before.len() != query_before_len
+            || self.fz_query_after.len() != query_after_len
             || self.cmd_before.len() != cmd_before_len
             || self.cmd_after.len() != cmd_after_len
     }
@@ -361,8 +429,8 @@ impl EventHandler for Query {
         use crate::event::Event::*;
 
         let mode = self.mode;
-        let query_before_len = self.query_before.len();
-        let query_after_len = self.query_after.len();
+        let query_before_len = self.fz_query_before.len();
+        let query_after_len = self.fz_query_after.len();
         let cmd_before_len = self.cmd_before.len();
         let cmd_after_len = self.cmd_after.len();
 
@@ -415,8 +483,10 @@ impl EventHandler for Query {
                 self.act_kill_word();
             }
 
-            EvActNextHistory | EvActPreviousHistory => {
-                unimplemented!();
+            EvActPreviousHistory => self.previous_history(),
+
+            EvActNextHistory => {
+                self.next_history();
             }
 
             EvActUnixLineDiscard => {
@@ -478,42 +548,42 @@ mod test {
 
     #[test]
     fn test_new_query() {
-        let query1 = Query::builder().query("").build();
-        assert_eq!(query1.get_query(), "");
+        let query1 = Query::builder().fz_query("").build();
+        assert_eq!(query1.get_fz_query(), "");
 
-        let query2 = Query::builder().query("abc").build();
-        assert_eq!(query2.get_query(), "abc");
+        let query2 = Query::builder().fz_query("abc").build();
+        assert_eq!(query2.get_fz_query(), "abc");
     }
 
     #[test]
     fn test_add_char() {
-        let mut query1 = Query::builder().query("").build();
+        let mut query1 = Query::builder().fz_query("").build();
         query1.act_add_char('a');
-        assert_eq!(query1.get_query(), "a");
+        assert_eq!(query1.get_fz_query(), "a");
         query1.act_add_char('b');
-        assert_eq!(query1.get_query(), "ab");
+        assert_eq!(query1.get_fz_query(), "ab");
         query1.act_add_char('中');
-        assert_eq!(query1.get_query(), "ab中");
+        assert_eq!(query1.get_fz_query(), "ab中");
     }
 
     #[test]
     fn test_backward_delete_char() {
-        let mut query = Query::builder().query("AB中c").build();
-        assert_eq!(query.get_query(), "AB中c");
+        let mut query = Query::builder().fz_query("AB中c").build();
+        assert_eq!(query.get_fz_query(), "AB中c");
 
         query.act_backward_delete_char();
-        assert_eq!(query.get_query(), "AB中");
+        assert_eq!(query.get_fz_query(), "AB中");
 
         query.act_backward_delete_char();
-        assert_eq!(query.get_query(), "AB");
+        assert_eq!(query.get_fz_query(), "AB");
 
         query.act_backward_delete_char();
-        assert_eq!(query.get_query(), "A");
+        assert_eq!(query.get_fz_query(), "A");
 
         query.act_backward_delete_char();
-        assert_eq!(query.get_query(), "");
+        assert_eq!(query.get_fz_query(), "");
 
         query.act_backward_delete_char();
-        assert_eq!(query.get_query(), "");
+        assert_eq!(query.get_fz_query(), "");
     }
 }

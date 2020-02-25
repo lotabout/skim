@@ -778,6 +778,70 @@ class TestSkim(TestBase):
         self.tmux.send_keys(Key("'abc"))
         self.tmux.until(lambda lines: lines.ready_with_matches(0))
 
+    def test_query_history(self):
+        """query history should work"""
+
+        history_file = f'{self.tempname()}.history'
+
+        self.tmux.send_keys(f"echo -e 'a\nb\nc' > {history_file}", Key('Enter'))
+        self.tmux.send_keys(f"echo -e 'a\nb\nc' | {self.sk('--history', history_file)}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(3))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> c'))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> b'))
+        self.tmux.send_keys('b')
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.until(lambda lines: lines[-1].startswith('> bb'))
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('> c'))
+
+        self.tmux.send_keys('d', Key('Enter'))
+
+        with open(history_file) as fp:
+            self.assertEqual('a\nb\nc\ncd', fp.read())
+
+    def test_cmd_history(self):
+        """query history should work"""
+
+        history_file = f'{self.tempname()}.history'
+
+        self.tmux.send_keys(f"echo -e 'a\nb\nc' > {history_file}", Key('Enter'))
+        self.tmux.send_keys(f"""{self.sk("-i -c 'echo {}'", '--cmd-history', history_file)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> c'))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> b'))
+        self.tmux.send_keys('b')
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> a'))
+
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> bb'))
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> c'))
+
+        self.tmux.send_keys('d', Key('Enter'))
+
+        with open(history_file) as fp:
+            self.assertEqual('a\nb\nc\ncd', fp.read())
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"

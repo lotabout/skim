@@ -1,21 +1,25 @@
 extern crate clap;
 extern crate env_logger;
+#[macro_use]
 extern crate log;
 extern crate shlex;
 extern crate skim;
 extern crate time;
 
+use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::os::unix::io::AsRawFd;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
+
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
+
 use skim::{
     read_and_collect_from_command, CaseMatching, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimOptions,
     SkimOptionsBuilder,
 };
-use std::env;
-use std::io::BufReader;
-use std::os::unix::io::AsRawFd;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -71,6 +75,12 @@ Usage: sk [options]
     --header=STR         Display STR next to info
     --header-lines=N     The first N lines of the input are treated as header
 
+  History
+    --history=FILE       History file
+    --history-size=N     Maximum number of query history entries (default: 1000)
+    --cmd-history=FILE   command History file
+    --cmd-history-size=N Maximum number of command history entries (default: 1000)
+
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
                          We can specify the fields. e.g. ({1}, {..3}, {0..})
@@ -111,11 +121,12 @@ Usage: sk [options]
     --exit-0
 ";
 
+const DEFAULT_HISTORY_SIZE: usize = 1000;
+
 fn main() {
     use env_logger::fmt::Formatter;
     use env_logger::Builder;
     use log::{LevelFilter, Record};
-    use std::io::Write;
 
     let format = |buf: &mut Formatter, record: &Record| {
         let t = time::now();
@@ -148,9 +159,9 @@ fn real_main() -> i32 {
 
     args.push(env::args().next().expect("there should be at least one arg: the application name"));
     args.extend(env::var("SKIM_DEFAULT_OPTIONS")
-                .ok()
-                .and_then(|val| shlex::split(&val))
-                .unwrap_or_default());
+        .ok()
+        .and_then(|val| shlex::split(&val))
+        .unwrap_or_default());
     for arg in env::args().skip(1) {
         args.push(arg);
     }
@@ -205,8 +216,10 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("header-lines").long("header-lines").multiple(true).takes_value(true).default_value("0"))
         .arg(Arg::with_name("tabstop").long("tabstop").multiple(true).takes_value(true).default_value("8"))
         .arg(Arg::with_name("no-bold").long("no-bold").multiple(true))
-        .arg(Arg::with_name("history").long("history").multiple(true).takes_value(true).default_value(""))
-        .arg(Arg::with_name("history-size").long("history-size").multiple(true).takes_value(true).default_value("500"))
+        .arg(Arg::with_name("history").long("history").multiple(true).takes_value(true))
+        .arg(Arg::with_name("cmd-history").long("cmd-history").multiple(true).takes_value(true))
+        .arg(Arg::with_name("history-size").long("history-size").multiple(true).takes_value(true).default_value("1000"))
+        .arg(Arg::with_name("cmd-history-size").long("cmd-history-size").multiple(true).takes_value(true).default_value("1000"))
         .arg(Arg::with_name("print-query").long("print-query").multiple(true))
         .arg(Arg::with_name("print-cmd").long("print-cmd").multiple(true))
         .arg(Arg::with_name("print-score").long("print-score").multiple(true))
@@ -231,8 +244,29 @@ fn real_main() -> i32 {
         return 0;
     }
 
-    let options = parse_options(&opts);
+    //------------------------------------------------------------------------------
+    // read in the history file
+    let fz_query_histories = opts.values_of("history").and_then(|vals| vals.last());
+    let cmd_query_histories = opts.values_of("cmd-history").and_then(|vals| vals.last());
+    debug!("query_history_file: {:?}", fz_query_histories);
+    debug!("cmd_history_file: {:?}", cmd_query_histories);
+    let query_history = fz_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+    let cmd_history = cmd_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+    debug!("query_history: {:?}", query_history);
+    debug!("cmd_history: {:?}", query_history);
 
+    let mut options = parse_options(&opts);
+    if fz_query_histories.is_some() || cmd_query_histories.is_some() {
+        options.query_history = &query_history;
+        options.cmd_history = &cmd_history;
+        // bind ctrl-n and ctrl-p to handle history
+        options.bind.insert(0, "ctrl-p:previous-history,ctrl-n:next-history");
+    }
+
+    let options = options;
+
+    //------------------------------------------------------------------------------
+    // read from pipe or command
     let stdin = std::io::stdin();
     let components_to_stop = Arc::new(AtomicUsize::new(0));
     let rx_item = match isatty(stdin.as_raw_fd()) {
@@ -240,21 +274,26 @@ fn real_main() -> i32 {
             let collector_option = CollectorOption::with_options(&options);
             let (rx_item, _) = read_and_collect_from_command(components_to_stop, CollectorInput::Pipe(Box::new(BufReader::new(stdin))), collector_option);
             Some(rx_item)
-        },
+        }
         Ok(true) | Err(_) => None,
     };
 
+    //------------------------------------------------------------------------------
+    // filter mode
     if opts.is_present("filter") {
         return Skim::filter(&options, rx_item);
     }
 
-    let output_ending = if options.print0 {"\0"} else {"\n"};
+    //------------------------------------------------------------------------------
+    let output_ending = if options.print0 { "\0" } else { "\n" };
 
     let output = Skim::run_with(&options, rx_item);
     if output.is_none() {
         return 130;
     }
 
+    //------------------------------------------------------------------------------
+    // output
     let output = output.unwrap();
 
     // output query
@@ -274,7 +313,23 @@ fn real_main() -> i32 {
         print!("{}{}", item.output(), output_ending);
     }
 
-    if output.selected_items.is_empty() {1} else {0}
+    //------------------------------------------------------------------------------
+    // write the history with latest item
+    if let Some(file) = fz_query_histories {
+        let limit = opts.values_of("history-size").and_then(|vals| vals.last())
+            .and_then(|size| size.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_HISTORY_SIZE);
+        let _ = write_history_to_file(&query_history, &output.query, limit, file);
+    }
+
+    if let Some(file) = cmd_query_histories {
+        let limit = opts.values_of("cmd-history-size").and_then(|vals| vals.last())
+            .and_then(|size| size.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_HISTORY_SIZE);
+        let _ = write_history_to_file(&cmd_history, &output.cmd, limit, file);
+    }
+
+    if output.selected_items.is_empty() { 1 } else { 0 }
 }
 
 fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
@@ -344,4 +399,33 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         })
         .build()
         .unwrap()
+}
+
+fn read_file_lines(filename: &str) -> Result<Vec<String>, std::io::Error> {
+    let file = File::open(filename)?;
+    let ret = BufReader::new(file).lines().collect();
+    debug!("file content: {:?}", ret);
+    ret
+}
+
+fn write_history_to_file(
+    orig_history: &[String],
+    latest: &str,
+    limit: usize,
+    filename: &str,
+) -> Result<(), std::io::Error> {
+    let additional_lines = if latest.trim().is_empty() { 0 } else { 1 };
+    let start_index = if orig_history.len() + additional_lines > limit {
+        orig_history.len() + additional_lines - limit
+    } else {
+        0
+    };
+
+    let mut history = orig_history[start_index..].to_vec();
+    history.push(latest.to_string());
+
+    let file = File::create(filename)?;
+    let mut file = BufWriter::new(file);
+    file.write_all(history.join("\n").as_bytes())?;
+    Ok(())
 }

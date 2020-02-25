@@ -50,6 +50,8 @@ pub struct SkimOptions<'a> {
     pub algorithm: FuzzyAlgorithm,
     pub case: CaseMatching,
     pub engine_factory: Option<Rc<dyn MatchEngineFactory>>,
+    pub query_history: &'a [String],
+    pub cmd_history: &'a [String],
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -97,6 +99,8 @@ impl<'a> Default for SkimOptions<'a> {
             algorithm: FuzzyAlgorithm::default(),
             case: CaseMatching::default(),
             engine_factory: None,
+            query_history: &[],
+            cmd_history: &[],
         }
     }
 }
