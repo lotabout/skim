@@ -346,7 +346,7 @@ impl Model {
     fn act_execute_silent(&mut self, cmd: &str) {
         let item = self.selection.get_current_item();
         let current_selection = item.as_ref().map(|item| item.output()).unwrap();
-        let query = self.query.get_query();
+        let query = self.query.get_fz_query();
         let cmd_query = self.query.get_cmd_query();
 
         let tmp = self.selection.get_selected_items();
@@ -368,7 +368,7 @@ impl Model {
 
     #[allow(clippy::trivial_regex)]
     fn act_append_and_select(&mut self, env: &mut ModelEnv) {
-        let query = self.query.get_query();
+        let query = self.query.get_fz_query();
         if query.is_empty() {
             return;
         }
@@ -388,7 +388,7 @@ impl Model {
     pub fn start(&mut self) -> Option<SkimOutput> {
         let mut env = ModelEnv {
             cmd: self.query.get_cmd(),
-            query: self.query.get_query(),
+            query: self.query.get_fz_query(),
             cmd_query: self.query.get_cmd_query(),
             clear_selection: ClearStrategy::DontClear,
         };
@@ -399,6 +399,8 @@ impl Model {
         let mut next_event = Some(Event::EvHeartBeat);
         loop {
             let ev = next_event.take().or_else(|| self.rx.recv().ok())?;
+
+            debug!("handle event: {:?}", ev);
 
             match ev {
                 Event::EvHeartBeat => {
@@ -439,7 +441,7 @@ impl Model {
 
                     return Some(SkimOutput {
                         accept_key,
-                        query: self.query.get_query(),
+                        query: self.query.get_fz_query(),
                         cmd: self.query.get_cmd_query(),
                         selected_items: self.selection.get_selected_items(),
                     });
@@ -501,7 +503,7 @@ impl Model {
             self.query.handle(&ev);
             env.cmd_query = self.query.get_cmd_query();
 
-            let new_query = self.query.get_query();
+            let new_query = self.query.get_fz_query();
             let new_cmd = self.query.get_cmd();
 
             // re-run reader & matcher if needed;
@@ -556,7 +558,7 @@ impl Model {
 
     fn restart_matcher(&mut self) {
         self.matcher_timer = Instant::now();
-        let query = self.query.get_query();
+        let query = self.query.get_fz_query();
 
         // kill existing matcher if exits
         if let Some(ctrl) = self.matcher_control.take() {
