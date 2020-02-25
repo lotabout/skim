@@ -42,6 +42,23 @@ Enable exact-match
 .B "--regex"
 Search with regular expression instead of fuzzy match
 .TP
+.BI "--algo=" TYPE
+Fuzzy matching algorithm (default: skim_v2)
+
+.br
+.BR skim_v2 " Almost always the one to choose
+.br
+.BR skim_v1 " The legacy algorithm
+.br
+.BR clangd "  the one used by clangd for keyword completion
+.br
+
+.TP
+.BI "--case=" "[smart,respect,ignore]"
+To ignore case on matching or not. (default smart)
+.br
+
+.TP
 .BI "-n, --nth=" "N[,..]"
 Comma-separated list of field index expressions for limiting search scope.
 See \fBFIELD INDEX EXPRESSION\fR for the details.
