@@ -31,6 +31,7 @@ use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+const SPINNERS_INLINE: [char; 2] = ['-', '<'];
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
@@ -729,6 +730,16 @@ struct Status {
 #[allow(unused_assignments)]
 impl Draw for Status {
     fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
+        // example:
+        //    /--num_matched/num_read        /-- current_item_index
+        // [| 869580/869580                  0.]
+        //  `-spinner                         `-- still matching
+
+        // example(inline):
+        //        /--num_matched/num_read    /-- current_item_index
+        // [>   - 549334/549334              0.]
+        //      `-spinner                     `-- still matching
+
         canvas.clear()?;
         let (screen_width, _) = canvas.size()?;
 
@@ -742,18 +753,22 @@ impl Draw for Status {
         let a_while_since_match = self.time_since_match > Duration::from_millis(50);
 
         let mut col = 0;
+        let spinner_set: &[char] = if self.inline_info { &SPINNERS_INLINE } else { &SPINNERS };
+
         if self.inline_info {
-            col += canvas.print_with_attr(0, col, " <", self.theme.prompt())?;
+            col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
+        }
+
+        // draw the spinner
+        if self.reading && a_while_since_read {
+            let mills = (self.time_since_read.as_secs() * 1000) as u32 + self.time_since_read.subsec_millis();
+            let index = (mills / SPINNER_DURATION) % (spinner_set.len() as u32);
+            let ch = spinner_set[index as usize];
+            col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
+        } else if self.inline_info {
+            col += canvas.put_char_with_attr(0, col, '<', self.theme.prompt())?;
         } else {
-            // draw the spinner
-            if self.reading && a_while_since_read {
-                let mills = (self.time_since_read.as_secs() * 1000) as u32 + self.time_since_read.subsec_millis();
-                let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-                let ch = SPINNERS[index as usize];
-                col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
-            } else {
-                col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
-            }
+            col += canvas.put_char_with_attr(0, col, ' ', self.theme.prompt())?;
         }
 
         // display matched/total number
