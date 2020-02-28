@@ -69,7 +69,10 @@ class Alt(Key):
 
 class TmuxOutput(list):
     """A list that contains the output of tmux"""
-    RE = re.compile(r'(?:^|[^<]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?$')
+    # match the status line
+    # normal: `| 10/219 [2]               8.`
+    # inline: `> query < 10/219 [2]       8.`
+    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?$')
     def __init__(self, iteratable=[]):
         super(TmuxOutput, self).__init__(iteratable)
         self._counts = None
@@ -614,7 +617,6 @@ class TestSkim(TestBase):
             '--header=STR',
             '--header-lines=N',
             '--no-bold',
-            '--history=FILE',
             '--history-size=10',
             '--sync',
             '--no-sort',
