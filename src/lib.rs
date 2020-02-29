@@ -243,6 +243,8 @@ impl Skim {
     }
 
     pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
+        reset_sigpipe();
+
         let output_ending = if options.print0 { "\0" } else { "\n" };
         let query = options.filter;
         let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
@@ -313,4 +315,27 @@ impl Skim {
             TermHeight::Fixed(string.parse().unwrap_or(0))
         }
     }
+}
+
+// Following is quoted from ripgrep's commit history:
+// @ https://github.com/BurntSushi/ripgrep/commit/3065a8c9c839f7e722a73e8375f2e41c7e084737
+// """
+// The Rust standard library suppresses the default SIGPIPE behavior, so that
+// writing to a closed pipe doesn't kill the process. The goal is to instead
+// handle errors through the normal result mechanism. Ripgrep needs some
+// refactoring before it will be able to do that, however, so we re-enable the
+// standard SIGPIPE behavior as a workaround. See
+// https://github.com/BurntSushi/ripgrep/issues/200.
+// """
+#[cfg(unix)]
+fn reset_sigpipe() {
+    extern crate libc;
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn reset_sigpipe() {
+    // no-op
 }

@@ -38,6 +38,7 @@ bitflags = "1.0.4"
 timer = "0.2.0"
 chrono = "0.4"
 crossbeam = "0.7.3"
+libc = "0.2"
 
 [features]
 default = []
