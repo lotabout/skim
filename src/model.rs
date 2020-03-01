@@ -426,6 +426,15 @@ impl Model {
                     self.act_heart_beat(&mut env);
                 }
 
+                Event::EvActIfNonMatched(ref arg_str) => {
+                    let matched =
+                        self.num_options + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
+                    if matched == 0 {
+                        next_event = parse_action_arg(arg_str);
+                        continue;
+                    }
+                }
+
                 Event::EvActIfQueryEmpty(ref arg_str) => {
                     if env.query.is_empty() {
                         next_event = parse_action_arg(arg_str);

@@ -863,6 +863,15 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_lines(0))
         self.tmux.send_keys(Ctrl('g'))
 
+    def test_if_non_matched(self):
+        """commands only effect if no item is matched"""
+        self.tmux.send_keys(f"""echo "a\nb" | {self.sk("--bind 'enter:if-non-matched(backward-delete-char)'", "-q ab")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.send_keys(Key('Enter')) # not triggered anymore
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"
