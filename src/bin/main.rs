@@ -10,16 +10,10 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::io::AsRawFd;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
 
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
-
-use skim::{
-    read_and_collect_from_command, CaseMatching, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimOptions,
-    SkimOptionsBuilder,
-};
+use skim::prelude::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -123,6 +117,7 @@ Usage: sk [options]
 
 const DEFAULT_HISTORY_SIZE: usize = 1000;
 
+//------------------------------------------------------------------------------
 fn main() {
     use env_logger::fmt::Formatter;
     use env_logger::Builder;
@@ -149,12 +144,22 @@ fn main() {
 
     builder.try_init().expect("failed to initialize logger builder");
 
-    let exit_code = real_main();
-    std::process::exit(exit_code);
+    match real_main() {
+        Ok(exit_code) => std::process::exit(exit_code),
+        Err(err) => {
+            // if downstream pipe is closed, exit silently, see PR#279
+            if err.kind() == std::io::ErrorKind::BrokenPipe {
+                std::process::exit(0)
+            }
+            std::process::exit(2)
+        },
+    }
 }
 
 #[rustfmt::skip]
-fn real_main() -> i32 {
+fn real_main() -> Result<i32, std::io::Error> {
+    let mut stdout = std::io::stdout();
+
     let mut args = Vec::new();
 
     args.push(env::args().next().expect("there should be at least one arg: the application name"));
@@ -235,13 +240,13 @@ fn real_main() -> i32 {
         .get_matches_from(args);
 
     if opts.is_present("help") {
-        print!("{}", USAGE);
-        return 0;
+        write!(stdout, "{}", USAGE)?;
+        return Ok(0);
     }
 
     if opts.is_present("version") {
-        println!("{}", VERSION);
-        return 0;
+        writeln!(stdout, "{}", VERSION)?;
+        return Ok(0);
     }
 
     //------------------------------------------------------------------------------
@@ -281,7 +286,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // filter mode
     if opts.is_present("filter") {
-        return Skim::filter(&options, rx_item);
+        return filter(&options, rx_item);
     }
 
     //------------------------------------------------------------------------------
@@ -289,7 +294,7 @@ fn real_main() -> i32 {
 
     let output = Skim::run_with(&options, rx_item);
     if output.is_none() {
-        return 130;
+        return Ok(130);
     }
 
     //------------------------------------------------------------------------------
@@ -298,19 +303,19 @@ fn real_main() -> i32 {
 
     // output query
     if options.print_query {
-        print!("{}{}", output.query, output_ending);
+        write!(stdout, "{}{}", output.query, output_ending)?;
     }
 
     if options.print_cmd {
-        print!("{}{}", output.cmd, output_ending);
+        write!(stdout, "{}{}", output.cmd, output_ending)?;
     }
 
     if let Some(key) = output.accept_key {
-        print!("{}{}", key, output_ending);
+        write!(stdout, "{}{}", key, output_ending)?;
     }
 
     for item in output.selected_items.iter() {
-        print!("{}{}", item.output(), output_ending);
+        write!(stdout, "{}{}", item.output(), output_ending)?;
     }
 
     //------------------------------------------------------------------------------
@@ -319,17 +324,17 @@ fn real_main() -> i32 {
         let limit = opts.values_of("history-size").and_then(|vals| vals.last())
             .and_then(|size| size.parse::<usize>().ok())
             .unwrap_or(DEFAULT_HISTORY_SIZE);
-        let _ = write_history_to_file(&query_history, &output.query, limit, file);
+        write_history_to_file(&query_history, &output.query, limit, file)?;
     }
 
     if let Some(file) = cmd_query_histories {
         let limit = opts.values_of("cmd-history-size").and_then(|vals| vals.last())
             .and_then(|size| size.parse::<usize>().ok())
             .unwrap_or(DEFAULT_HISTORY_SIZE);
-        let _ = write_history_to_file(&cmd_history, &output.cmd, limit, file);
+        write_history_to_file(&cmd_history, &output.cmd, limit, file)?;
     }
 
-    if output.selected_items.is_empty() { 1 } else { 0 }
+    Ok(if output.selected_items.is_empty() { 1 } else { 0 })
 }
 
 fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
@@ -428,4 +433,67 @@ fn write_history_to_file(
     let mut file = BufWriter::new(file);
     file.write_all(history.join("\n").as_bytes())?;
     Ok(())
+}
+
+pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result<i32, std::io::Error> {
+    let mut stdout = std::io::stdout();
+
+    let output_ending = if options.print0 { "\0" } else { "\n" };
+    let query = options.filter;
+    let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
+        Ok("") | Err(_) => "find .".to_owned(),
+        Ok(val) => val.to_owned(),
+    };
+    let cmd = options.cmd.unwrap_or(&default_command);
+
+    // output query
+    if options.print_query {
+        write!(stdout, "{}{}", query, output_ending)?;
+    }
+
+    if options.print_cmd {
+        write!(stdout, "{}{}", cmd, output_ending)?;
+    }
+
+    //------------------------------------------------------------------------------
+    // matcher
+    let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
+        Box::new(RegexEngineFactory::new())
+    } else {
+        let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
+            .fuzzy_algorithm(options.algorithm)
+            .exact_mode(options.exact)
+            .build();
+        Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
+    };
+
+    let engine = engine_factory.create_engine_with_case(query, options.case);
+
+    //------------------------------------------------------------------------------
+    // start
+    let item_index = AtomicUsize::new(0);
+    let components_to_stop = Arc::new(AtomicUsize::new(0));
+    let collector_option = CollectorOption::with_options(&options);
+
+    let stream_of_item = source.unwrap_or_else(|| {
+        let collector_input = CollectorInput::Command(cmd.to_string());
+        let (ret, _control) = read_and_collect_from_command(components_to_stop, collector_input, collector_option);
+        ret
+    });
+
+    let mut num_matched = 0;
+    stream_of_item
+        .into_iter()
+        .map(|item| ItemWrapper::new(item, (0, item_index.fetch_add(0, Ordering::SeqCst))))
+        .filter_map(|wrapped| engine.match_item(Arc::new(wrapped)))
+        .try_for_each(|matched| {
+            num_matched += 1;
+            if options.print_score {
+                writeln!(stdout, "{}\t{}", -matched.rank.score, matched.item.output())
+            } else {
+                writeln!(stdout, "{}", matched.item.output())
+            }
+        })?;
+
+    Ok(if num_matched == 0 { 1 } else { 0 })
 }
