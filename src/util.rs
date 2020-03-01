@@ -10,8 +10,18 @@ use crate::field::get_string_by_range;
 use crate::item::ItemWrapper;
 use crate::SkimItem;
 
+lazy_static! {
+    static ref RE_ESCAPE: Regex = Regex::new(r"['\U{00}]").unwrap();
+}
+
 pub fn escape_single_quote(text: &str) -> String {
-    text.replace("'", "'\\''")
+    RE_ESCAPE
+        .replace_all(text, |x: &Captures| match x.get(0).unwrap().as_str() {
+            "'" => "'\\''".to_string(),
+            "\0" => "\\0".to_string(),
+            _ => "".to_string(),
+        })
+        .to_string()
 }
 
 /// use to print a single line, properly handle the tabsteop and shift of a string
@@ -412,5 +422,10 @@ mod tests {
         assert_eq!("'query'", inject_command("{q}", default_context));
         assert_eq!("'cmd_query'", inject_command("{cq}", default_context));
         assert_eq!("'a,b,c' 'x,y,z'", inject_command("{+}", default_context));
+    }
+
+    #[test]
+    fn test_escape_single_quote() {
+        assert_eq!("'\\''a'\\''\\0", escape_single_quote("'a'\0"));
     }
 }

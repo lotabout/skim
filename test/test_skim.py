@@ -70,9 +70,10 @@ class Alt(Key):
 class TmuxOutput(list):
     """A list that contains the output of tmux"""
     # match the status line
-    # normal: `| 10/219 [2]               8.`
-    # inline: `> query < 10/219 [2]       8.`
-    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?$')
+    # normal:  `| 10/219 [2]               8.`
+    # inline:  `> query < 10/219 [2]       8.`
+    # preview: `> query < 10/219 [2]       8.│...`
+    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?(?: │)? *$')
     def __init__(self, iteratable=[]):
         super(TmuxOutput, self).__init__(iteratable)
         self._counts = None
@@ -875,6 +876,12 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.send_keys(Key('Enter')) # not triggered anymore
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
+
+    def test_nul_in_execute(self):
+        """NUL should work in preview command see #278"""
+        self.tmux.send_keys(f"""echo -ne 'a\\0b' | {self.sk("--preview='echo -en {} | xxd'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.until(lambda lines: lines.any_include('6100 62'))
 
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
