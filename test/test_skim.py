@@ -807,7 +807,9 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.until(lambda lines: lines[-1].startswith('> c'))
 
-        self.tmux.send_keys('d', Key('Enter'))
+        self.tmux.send_keys('d')
+        self.tmux.until(lambda lines: lines[-1].startswith('> cd'))
+        self.tmux.send_keys(Key('Enter'))
 
         with open(history_file) as fp:
             self.assertEqual('a\nb\nc\ncd', fp.read())
@@ -839,10 +841,40 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.until(lambda lines: lines[-1].startswith('c> c'))
 
-        self.tmux.send_keys('d', Key('Enter'))
+        self.tmux.send_keys('d')
+        self.tmux.until(lambda lines: lines[-1].startswith('c> cd'))
+        self.tmux.send_keys(Key('Enter'))
 
         with open(history_file) as fp:
             self.assertEqual('a\nb\nc\ncd', fp.read())
+
+    def test_execute_with_zero_result_ref(self):
+        """execute should not panic with zero results #276"""
+        self.tmux.send_keys(f"""echo -n "" | {self.sk("--bind 'enter:execute(less {})'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(Key('q'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.until(lambda lines: lines[-1].startswith('> q')) # less is not executed at all
+        self.tmux.send_keys(Ctrl('g'))
+
+    def test_execute_with_zero_result_no_ref(self):
+        """execute should not panic with zero results #276"""
+        self.tmux.send_keys(f"""echo -n "" | {self.sk("--bind 'enter:execute(less)'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(Key('q'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Ctrl('g'))
+
+    def test_if_non_matched(self):
+        """commands only effect if no item is matched"""
+        self.tmux.send_keys(f"""echo "a\nb" | {self.sk("--bind 'enter:if-non-matched(backward-delete-char)'", "-q ab")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.send_keys(Key('Enter')) # not triggered anymore
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
 
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1

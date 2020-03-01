@@ -25,7 +25,7 @@ use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
-use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
+use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
 
 const REFRESH_DURATION: i64 = 100;
@@ -339,6 +339,13 @@ impl Model {
     }
 
     fn act_execute(&mut self, cmd: &str) {
+        let item = self.selection.get_current_item();
+        if depends_on_items(cmd) && item.is_none() {
+            debug!("act_execute: command refers to items and there is no item for now");
+            debug!("command to execute: [{}]", cmd);
+            return;
+        }
+
         let _ = self.term.pause();
         self.act_execute_silent(cmd);
         let _ = self.term.restart();
@@ -346,7 +353,16 @@ impl Model {
 
     fn act_execute_silent(&mut self, cmd: &str) {
         let item = self.selection.get_current_item();
-        let current_selection = item.as_ref().map(|item| item.output()).unwrap();
+        if depends_on_items(cmd) && item.is_none() {
+            debug!("act_execute_silent: command refers to items and there is no item for now");
+            debug!("command to execute: [{}]", cmd);
+            return;
+        }
+
+        let current_selection = item
+            .as_ref()
+            .map(|item| item.output())
+            .unwrap_or_else(|| Cow::Borrowed(""));
         let query = self.query.get_fz_query();
         let cmd_query = self.query.get_cmd_query();
 
@@ -408,6 +424,15 @@ impl Model {
                     // consume following HeartBeat event
                     next_event = self.consume_additional_event(&Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
+                }
+
+                Event::EvActIfNonMatched(ref arg_str) => {
+                    let matched =
+                        self.num_options + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
+                    if matched == 0 {
+                        next_event = parse_action_arg(arg_str);
+                        continue;
+                    }
                 }
 
                 Event::EvActIfQueryEmpty(ref arg_str) => {
