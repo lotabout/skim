@@ -10,10 +10,6 @@ use crate::field::get_string_by_range;
 use crate::item::ItemWrapper;
 use crate::SkimItem;
 
-lazy_static! {
-    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
-}
-
 pub fn escape_single_quote(text: &str) -> String {
     text.replace("'", "'\\''")
 }
@@ -299,6 +295,17 @@ pub struct InjectContext<'a> {
     pub selections: &'a [&'a str],
     pub query: &'a str,
     pub cmd_query: &'a str,
+}
+
+lazy_static! {
+    static ref RE_ITEMS: Regex = Regex::new(r"\\?(\{ *-?[0-9.+]*? *})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
+}
+
+/// Check if a command depends on item
+/// e.g. contains `{}`, `{1..}`, `{+}`
+pub fn depends_on_items(cmd: &str) -> bool {
+    RE_ITEMS.is_match(cmd)
 }
 
 /// inject the fields into commands

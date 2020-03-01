@@ -2,7 +2,7 @@ use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::item::ItemWrapper;
 use crate::spinlock::SpinLock;
-use crate::util::{inject_command, InjectContext};
+use crate::util::{depends_on_items, inject_command, InjectContext};
 use crate::{ItemPreview, SkimItem};
 use derive_builder::Builder;
 use nix::libc;
@@ -141,6 +141,12 @@ impl Previewer {
                         ItemPreview::Global => self.preview_cmd.clone().expect("previewer: not provided"),
                         ItemPreview::Text(_) | ItemPreview::AnsiText(_) => unreachable!(),
                     };
+
+                    if depends_on_items(&cmd) && self.prev_item.is_none() {
+                        debug!("the command for preview refers to items and currently there is no item");
+                        debug!("command to execute: [{}]", cmd);
+                        PreviewEvent::PreviewPlainText("no item matched".to_string());
+                    }
 
                     let current_selection = self
                         .prev_item

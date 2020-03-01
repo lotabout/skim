@@ -844,6 +844,25 @@ class TestSkim(TestBase):
         with open(history_file) as fp:
             self.assertEqual('a\nb\nc\ncd', fp.read())
 
+    def test_execute_with_zero_result_ref(self):
+        """execute should not panic with zero results #276"""
+        self.tmux.send_keys(f"""echo -n "" | {self.sk("--bind 'enter:execute(less {})'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(Key('q'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.until(lambda lines: lines[-1].startswith('> q')) # less is not executed at all
+        self.tmux.send_keys(Ctrl('g'))
+
+    def test_execute_with_zero_result_no_ref(self):
+        """execute should not panic with zero results #276"""
+        self.tmux.send_keys(f"""echo -n "" | {self.sk("--bind 'enter:execute(less)'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(Key('q'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Ctrl('g'))
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"
