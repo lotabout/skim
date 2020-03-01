@@ -807,7 +807,9 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.until(lambda lines: lines[-1].startswith('> c'))
 
-        self.tmux.send_keys('d', Key('Enter'))
+        self.tmux.send_keys('d')
+        self.tmux.until(lambda lines: lines[-1].startswith('> cd'))
+        self.tmux.send_keys(Key('Enter'))
 
         with open(history_file) as fp:
             self.assertEqual('a\nb\nc\ncd', fp.read())
@@ -839,7 +841,9 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.until(lambda lines: lines[-1].startswith('c> c'))
 
-        self.tmux.send_keys('d', Key('Enter'))
+        self.tmux.send_keys('d')
+        self.tmux.until(lambda lines: lines[-1].startswith('c> cd'))
+        self.tmux.send_keys(Key('Enter'))
 
         with open(history_file) as fp:
             self.assertEqual('a\nb\nc\ncd', fp.read())
