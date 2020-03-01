@@ -10,16 +10,10 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::io::AsRawFd;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
 
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
-
-use skim::{
-    read_and_collect_from_command, CaseMatching, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimOptions,
-    SkimOptionsBuilder,
-};
+use skim::prelude::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -281,7 +275,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // filter mode
     if opts.is_present("filter") {
-        return Skim::filter(&options, rx_item);
+        return filter(&options, rx_item);
     }
 
     //------------------------------------------------------------------------------
@@ -428,4 +422,71 @@ fn write_history_to_file(
     let mut file = BufWriter::new(file);
     file.write_all(history.join("\n").as_bytes())?;
     Ok(())
+}
+
+pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
+    let output_ending = if options.print0 { "\0" } else { "\n" };
+    let query = options.filter;
+    let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
+        Ok("") | Err(_) => "find .".to_owned(),
+        Ok(val) => val.to_owned(),
+    };
+    let cmd = options.cmd.unwrap_or(&default_command);
+
+    // output query
+    if options.print_query {
+        print!("{}{}", query, output_ending);
+    }
+
+    if options.print_cmd {
+        print!("{}{}", cmd, output_ending);
+    }
+
+    //------------------------------------------------------------------------------
+    // matcher
+    let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
+        Box::new(RegexEngineFactory::new())
+    } else {
+        let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
+            .fuzzy_algorithm(options.algorithm)
+            .exact_mode(options.exact)
+            .build();
+        Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
+    };
+
+    let engine = engine_factory.create_engine_with_case(query, options.case);
+
+    //------------------------------------------------------------------------------
+    // start
+    let item_index = AtomicUsize::new(0);
+    let components_to_stop = Arc::new(AtomicUsize::new(0));
+    let collector_option = CollectorOption::with_options(&options);
+
+    let stream_of_item = source.unwrap_or_else(|| {
+        let collector_input = CollectorInput::Command(cmd.to_string());
+        let (ret, _control) = read_and_collect_from_command(components_to_stop, collector_input, collector_option);
+        ret
+    });
+
+    let stream_of_matched = stream_of_item
+        .into_iter()
+        .map(|item| ItemWrapper::new(item, (0, item_index.fetch_add(0, Ordering::SeqCst))))
+        .filter_map(|wrapped| engine.match_item(Arc::new(wrapped)));
+
+    let mut num_matched = 0;
+    for matched in stream_of_matched.into_iter() {
+        num_matched += 1;
+
+        if options.print_score {
+            println!("{}\t{}", -matched.rank.score, matched.item.output());
+        } else {
+            println!("{}", matched.item.output());
+        }
+    }
+
+    if num_matched == 0 {
+        1
+    } else {
+        0
+    }
 }

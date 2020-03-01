@@ -1,7 +1,26 @@
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate log;
+
+use std::any::Any;
+use std::borrow::Cow;
+use std::fmt::Display;
+use std::sync::mpsc::channel;
+use std::sync::Arc;
+use std::thread;
+
+use crossbeam::channel::{Receiver, Sender};
+use tuikit::prelude::{Event as TermEvent, *};
+
+pub use crate::ansi::AnsiString;
+pub use crate::engine::fuzzy::FuzzyAlgorithm;
+use crate::event::{EventReceiver, EventSender};
+pub use crate::item::{ItemWrapper, MatchedItem};
+use crate::model::Model;
+pub use crate::options::SkimOptions;
+pub use crate::output::SkimOutput;
+use crate::reader::Reader;
 
 mod ansi;
 mod engine;
@@ -24,26 +43,6 @@ mod selection;
 mod spinlock;
 mod theme;
 mod util;
-pub use crate::engine::fuzzy::FuzzyAlgorithm;
-
-pub use crate::ansi::AnsiString;
-use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, RegexEngineFactory};
-use crate::event::{EventReceiver, EventSender};
-use crate::item::{ItemWrapper, MatchedItem};
-pub use crate::item_collector::*;
-use crate::model::Model;
-pub use crate::options::{SkimOptions, SkimOptionsBuilder};
-pub use crate::output::SkimOutput;
-use crate::reader::Reader;
-use crossbeam::channel::{Receiver, Sender};
-use std::any::Any;
-use std::borrow::Cow;
-use std::env;
-use std::fmt::Display;
-use std::sync::mpsc::channel;
-use std::sync::Arc;
-use std::thread;
-use tuikit::prelude::{Event as TermEvent, *};
 
 //------------------------------------------------------------------------------
 pub trait AsAny {
@@ -240,68 +239,6 @@ impl Skim {
         let _ = input_thread.join();
         let _ = term.pause();
         ret
-    }
-
-    pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
-        let output_ending = if options.print0 { "\0" } else { "\n" };
-        let query = options.filter;
-        let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
-            Ok("") | Err(_) => "find .".to_owned(),
-            Ok(val) => val.to_owned(),
-        };
-
-        let cmd = options.cmd.unwrap_or(&default_command);
-
-        // output query
-        if options.print_query {
-            print!("{}{}", query, output_ending);
-        }
-
-        if options.print_cmd {
-            print!("{}{}", cmd, output_ending);
-        }
-
-        //------------------------------------------------------------------------------
-        // reader
-
-        let mut reader = Reader::with_options(&options).source(source);
-
-        //------------------------------------------------------------------------------
-        // matcher
-        let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
-            Box::new(RegexEngineFactory::new())
-        } else {
-            let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
-                .fuzzy_algorithm(options.algorithm)
-                .exact_mode(options.exact)
-                .build();
-            Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
-        };
-        let engine = engine_factory.create_engine_with_case(query, CaseMatching::default());
-
-        //------------------------------------------------------------------------------
-        // start
-        let reader_control = reader.run(cmd);
-
-        let mut match_count = 0;
-        while !reader_control.is_done() {
-            for item in reader_control.take().into_iter() {
-                if let Some(matched) = engine.match_item(item) {
-                    if options.print_score {
-                        println!("{}\t{}", -matched.rank.score, matched.item.output());
-                    } else {
-                        println!("{}", matched.item.output());
-                    }
-                    match_count += 1;
-                }
-            }
-        }
-
-        if match_count == 0 {
-            1
-        } else {
-            0
-        }
     }
 
     // 10 -> TermHeight::Fixed(10)
