@@ -117,6 +117,7 @@ Usage: sk [options]
 
 const DEFAULT_HISTORY_SIZE: usize = 1000;
 
+//------------------------------------------------------------------------------
 fn main() {
     use env_logger::fmt::Formatter;
     use env_logger::Builder;
@@ -143,12 +144,22 @@ fn main() {
 
     builder.try_init().expect("failed to initialize logger builder");
 
-    let exit_code = real_main();
-    std::process::exit(exit_code);
+    match real_main() {
+        Ok(exit_code) => std::process::exit(exit_code),
+        Err(err) => {
+            // if downstream pipe is closed, exit silently, see PR#279
+            if err.kind() == std::io::ErrorKind::BrokenPipe {
+                std::process::exit(0)
+            }
+            std::process::exit(2)
+        },
+    }
 }
 
 #[rustfmt::skip]
-fn real_main() -> i32 {
+fn real_main() -> Result<i32, std::io::Error> {
+    let mut stdout = std::io::stdout();
+
     let mut args = Vec::new();
 
     args.push(env::args().next().expect("there should be at least one arg: the application name"));
@@ -229,13 +240,13 @@ fn real_main() -> i32 {
         .get_matches_from(args);
 
     if opts.is_present("help") {
-        print!("{}", USAGE);
-        return 0;
+        write!(stdout, "{}", USAGE)?;
+        return Ok(0);
     }
 
     if opts.is_present("version") {
-        println!("{}", VERSION);
-        return 0;
+        writeln!(stdout, "{}", VERSION)?;
+        return Ok(0);
     }
 
     //------------------------------------------------------------------------------
@@ -283,7 +294,7 @@ fn real_main() -> i32 {
 
     let output = Skim::run_with(&options, rx_item);
     if output.is_none() {
-        return 130;
+        return Ok(130);
     }
 
     //------------------------------------------------------------------------------
@@ -292,19 +303,19 @@ fn real_main() -> i32 {
 
     // output query
     if options.print_query {
-        print!("{}{}", output.query, output_ending);
+        write!(stdout, "{}{}", output.query, output_ending)?;
     }
 
     if options.print_cmd {
-        print!("{}{}", output.cmd, output_ending);
+        write!(stdout, "{}{}", output.cmd, output_ending)?;
     }
 
     if let Some(key) = output.accept_key {
-        print!("{}{}", key, output_ending);
+        write!(stdout, "{}{}", key, output_ending)?;
     }
 
     for item in output.selected_items.iter() {
-        print!("{}{}", item.output(), output_ending);
+        write!(stdout, "{}{}", item.output(), output_ending)?;
     }
 
     //------------------------------------------------------------------------------
@@ -313,17 +324,17 @@ fn real_main() -> i32 {
         let limit = opts.values_of("history-size").and_then(|vals| vals.last())
             .and_then(|size| size.parse::<usize>().ok())
             .unwrap_or(DEFAULT_HISTORY_SIZE);
-        let _ = write_history_to_file(&query_history, &output.query, limit, file);
+        write_history_to_file(&query_history, &output.query, limit, file)?;
     }
 
     if let Some(file) = cmd_query_histories {
         let limit = opts.values_of("cmd-history-size").and_then(|vals| vals.last())
             .and_then(|size| size.parse::<usize>().ok())
             .unwrap_or(DEFAULT_HISTORY_SIZE);
-        let _ = write_history_to_file(&cmd_history, &output.cmd, limit, file);
+        write_history_to_file(&cmd_history, &output.cmd, limit, file)?;
     }
 
-    if output.selected_items.is_empty() { 1 } else { 0 }
+    Ok(if output.selected_items.is_empty() { 1 } else { 0 })
 }
 
 fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
@@ -424,7 +435,9 @@ fn write_history_to_file(
     Ok(())
 }
 
-pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
+pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result<i32, std::io::Error> {
+    let mut stdout = std::io::stdout();
+
     let output_ending = if options.print0 { "\0" } else { "\n" };
     let query = options.filter;
     let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
@@ -435,11 +448,11 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
 
     // output query
     if options.print_query {
-        print!("{}{}", query, output_ending);
+        write!(stdout, "{}{}", query, output_ending)?;
     }
 
     if options.print_cmd {
-        print!("{}{}", cmd, output_ending);
+        write!(stdout, "{}{}", cmd, output_ending)?;
     }
 
     //------------------------------------------------------------------------------
@@ -468,25 +481,19 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> i32 {
         ret
     });
 
-    let stream_of_matched = stream_of_item
+    let mut num_matched = 0;
+    stream_of_item
         .into_iter()
         .map(|item| ItemWrapper::new(item, (0, item_index.fetch_add(0, Ordering::SeqCst))))
-        .filter_map(|wrapped| engine.match_item(Arc::new(wrapped)));
+        .filter_map(|wrapped| engine.match_item(Arc::new(wrapped)))
+        .try_for_each(|matched| {
+            num_matched += 1;
+            if options.print_score {
+                writeln!(stdout, "{}\t{}", -matched.rank.score, matched.item.output())
+            } else {
+                writeln!(stdout, "{}", matched.item.output())
+            }
+        })?;
 
-    let mut num_matched = 0;
-    for matched in stream_of_matched.into_iter() {
-        num_matched += 1;
-
-        if options.print_score {
-            println!("{}\t{}", -matched.rank.score, matched.item.output());
-        } else {
-            println!("{}", matched.item.output());
-        }
-    }
-
-    if num_matched == 0 {
-        1
-    } else {
-        0
-    }
+    Ok(if num_matched == 0 { 1 } else { 0 })
 }
