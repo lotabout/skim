@@ -1,7 +1,6 @@
 # Key bindings
 # ------------
 # copied and modified from https://github.com/junegunn/fzf/blob/master/shell/key-bindings.bash
-#
 __skim_select__() {
   local cmd="${SKIM_CTRL_T_COMMAND:-"command find -L . -mindepth 1 \\( -path '*/\\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \\) -prune \
     -o -type f -print \
@@ -55,69 +54,46 @@ __skim_cd__() {
 
 __skim_history__() (
   local line
-  shopt -u nocaseglob nocasematch
   line=$(
-    HISTTIMEFORMAT= builtin history |
-    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS --tac --sync -n2..,.. --tiebreak=index $SKIM_CTRL_R_OPTS -m" $(__skimcmd) |
-    command grep '^ *[0-9]') &&
-    if [[ $- =~ H ]]; then
-      sed 's/^ *\([0-9]*\)\** .*/!\1/' <<< "$line"
-    else
-      sed 's/^ *\([0-9]*\)\** *//' <<< "$line"
-    fi
+    builtin fc -lnr -2147483648 |
+      perl -p -l0 -e 'BEGIN { getc; $/ = "\n\t" } s/^[ *]//; $_ = '"$1"' - $. . "\t$_"' |
+      SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS --tiebreak=score,index $SKIM_CTRL_R_OPTS -m --read0" $(__skimcmd)
+  )
+  echo "${line#*$'\t'}"
 )
 
-if [[ ! -o vi ]]; then
-  # Required to refresh the prompt after skim
-  bind '"\er": redraw-current-line'
-  bind '"\e^": history-expand-line'
+# Required to refresh the prompt after skim
+bind -m emacs-standard '"\er": redraw-current-line'
 
-  # CTRL-T - Paste the selected file path into the command line
-  if [ $BASH_VERSINFO -gt 3 ]; then
-    bind -x '"\C-t": "skim-file-widget"'
-  elif __skim_use_tmux__; then
-    bind '"\C-t": " \C-u \C-a\C-k`__skim_select_tmux__`\e\C-e\C-y\C-a\C-d\C-y\ey\C-h"'
-  else
-    bind '"\C-t": " \C-u \C-a\C-k`__skim_select__`\e\C-e\C-y\C-a\C-y\ey\C-h\C-e\er \C-h"'
-  fi
-
-  # CTRL-R - Paste the selected command from history into the command line
-  bind '"\C-r": " \C-e\C-u\C-y\ey\C-u`__skim_history__`\e\C-e\er\e^"'
-
-  # ALT-C - cd into the selected directory
-  bind '"\ec": " \C-e\C-u`__skim_cd__`\e\C-e\er\C-m"'
+# CTRL-T - Paste the selected file path into the command line
+if [ $BASH_VERSINFO -gt 3 ]; then
+  bind -m emacs-standard -x '"\C-t": "skim-file-widget"'
+elif __skim_use_tmux__; then
+  bind -m emacs-standard '"\C-t": " \C-b\C-k \C-u`__skim_select_tmux__`\e\C-e\C-a\C-y\C-h\C-e\e \C-y\ey\C-x\C-x\C-f"'
 else
-  # We'd usually use "\e" to enter vi-movement-mode so we can do our magic,
-  # but this incurs a very noticeable delay of a half second or so,
-  # because many other commands start with "\e".
-  # Instead, we bind an unused key, "\C-x\C-a",
-  # to also enter vi-movement-mode,
-  # and then use that thereafter.
-  # (We imagine that "\C-x\C-a" is relatively unlikely to be in use.)
-  bind '"\C-x\C-a": vi-movement-mode'
-
-  bind '"\C-x\C-e": shell-expand-line'
-  bind '"\C-x\C-r": redraw-current-line'
-  bind '"\C-x^": history-expand-line'
-
-  # CTRL-T - Paste the selected file path into the command line
-  # - FIXME: Selected items are attached to the end regardless of cursor position
-  if [ $BASH_VERSINFO -gt 3 ]; then
-    bind -x '"\C-t": "skim-file-widget"'
-  elif __skim_use_tmux__; then
-    bind '"\C-t": "\C-x\C-a$a \C-x\C-addi`__skim_select_tmux__`\C-x\C-e\C-x\C-a0P$xa"'
-  else
-    bind '"\C-t": "\C-x\C-a$a \C-x\C-addi`__skim_select__`\C-x\C-e\C-x\C-a0Px$a \C-x\C-r\C-x\C-axa "'
-  fi
-  bind -m vi-command '"\C-t": "i\C-t"'
-
-  # CTRL-R - Paste the selected command from history into the command line
-  bind '"\C-r": "\C-x\C-addi`__skim_history__`\C-x\C-e\C-x\C-r\C-x^\C-x\C-a$a"'
-  bind -m vi-command '"\C-r": "i\C-r"'
-
-  # ALT-C - cd into the selected directory
-  bind '"\ec": "\C-x\C-addi`__skim_cd__`\C-x\C-e\C-x\C-r\C-m"'
-  bind -m vi-command '"\ec": "ddi`__skim_cd__`\C-x\C-e\C-x\C-r\C-m"'
+  bind -m emacs-standard '"\C-t": " \C-b\C-k \C-u`__skim_select__`\e\C-e\er\C-a\C-y\C-h\C-e\e \C-y\ey\C-x\C-x\C-f"'
 fi
+
+# CTRL-R - Paste the selected command from history into the command line
+bind -m emacs-standard '"\C-r": "\C-e \C-u\C-y\ey\C-u__skim_history__ $HISTCMD\e\C-e`"\C-a"`\C-e\e\C-e\er"'
+
+# ALT-C - cd into the selected directory
+bind -m emacs-standard '"\ec": " \C-b\C-k \C-u`__skim_cd__`\e\C-e\er\C-m\C-y\C-h\e \C-y\ey\C-x\C-x\C-d"'
+
+bind -m vi-command '"\C-z": emacs-editing-mode'
+bind -m vi-insert '"\C-z": emacs-editing-mode'
+bind -m emacs-standard '"\C-z": vi-editing-mode'
+
+# CTRL-T - Paste the selected file path into the command line
+bind -m vi-command '"\C-t": "\C-z\C-t\C-z"'
+bind -m vi-insert '"\C-t": "\C-z\C-t\C-z"'
+
+# CTRL-R - Paste the selected command from history into the command line
+bind -m vi-command '"\C-r": "\C-z\C-r\C-z"'
+bind -m vi-insert '"\C-r": "\C-z\C-r\C-z"'
+
+# ALT-C - cd into the selected directory
+bind -m vi-command '"\ec": "\C-z\ec\C-z"'
+bind -m vi-insert '"\ec": "\C-z\ec\C-z"'
 
 fi
