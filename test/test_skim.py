@@ -409,6 +409,11 @@ class TestSkim(TestBase):
         lines = self.readonce().strip()
         self.assertEqual(lines, 'a\0b\0')
 
+        self.tmux.send_keys(f"echo -e 'a\\naa\\nb' | {self.sk('-f a', '--print0')}", Key('Enter'))
+
+        lines = self.readonce().strip()
+        self.assertEqual(lines, 'a\0aa\0')
+
     def test_with_nth_preview(self):
         sk_command = self.sk("--delimiter ','", '--with-nth 2..', '--preview', "'echo X{1}Y'")
         self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
