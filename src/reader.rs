@@ -8,7 +8,7 @@ use crate::spinlock::SpinLock;
 use crate::SkimItemReceiver;
 use crossbeam::channel::{bounded, select, Sender};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 
@@ -106,14 +106,14 @@ impl Reader {
 // What if you invoke the same command and same arguments twice?
 // => We use NUM_MAP to specify the same run number.
 lazy_static! {
-    static ref RUN_NUM: AtomicUsize = AtomicUsize::new(0);
-    static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
+    static ref RUN_NUM: AtomicU32 = AtomicU32::new(0);
+    static ref NUM_MAP: RwLock<HashMap<String, u32>> = RwLock::new(HashMap::new());
 }
 
 fn collect_item(
     components_to_stop: Arc<AtomicUsize>,
     rx_item: SkimItemReceiver,
-    run_num: usize,
+    run_num: u32,
     items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
 ) -> Sender<i32> {
     let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);

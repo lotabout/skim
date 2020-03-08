@@ -116,23 +116,25 @@ impl SkimItem for DefaultSkimItem {
 }
 
 //------------------------------------------------------------------------------
+pub type ItemIndex = (u32, u32);
+
 pub struct ItemWrapper {
-    // (num of run, number of index)
-    id: (usize, usize),
     inner: Arc<dyn SkimItem>,
+    // (num of run, number of index)
+    id: ItemIndex,
 }
 
 impl ItemWrapper {
-    pub fn new(item: Arc<dyn SkimItem>, index: (usize, usize)) -> Self {
+    pub fn new(item: Arc<dyn SkimItem>, index: ItemIndex) -> Self {
         Self { id: index, inner: item }
     }
 
-    pub fn get_id(&self) -> (usize, usize) {
+    pub fn get_id(&self) -> ItemIndex {
         self.id
     }
 
     pub fn get_index(&self) -> usize {
-        self.id.1
+        self.id.1 as usize
     }
 
     pub fn get_inner(&self) -> Arc<dyn SkimItem> {

@@ -82,7 +82,7 @@ pub struct Model {
     timer: Timer,
     hb_timer_guard: Option<TimerGuard>,
 
-    next_idx_to_append: usize, // for AppendAndSelect action
+    next_idx_to_append: u32, // for AppendAndSelect action
 }
 
 impl Model {
@@ -391,7 +391,7 @@ impl Model {
         }
         let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(
             Arc::new(query),
-            (std::usize::MAX, self.next_idx_to_append),
+            (std::u32::MAX, self.next_idx_to_append),
         ));
 
         self.next_idx_to_append += 1;

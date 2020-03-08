@@ -10,6 +10,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::io::AsRawFd;
+use std::sync::atomic::AtomicU32;
 
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
@@ -471,7 +472,7 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
 
     //------------------------------------------------------------------------------
     // start
-    let item_index = AtomicUsize::new(0);
+    let item_index = AtomicU32::new(0);
     let components_to_stop = Arc::new(AtomicUsize::new(0));
     let collector_option = CollectorOption::with_options(&options);
 
