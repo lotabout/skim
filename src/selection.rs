@@ -1,6 +1,6 @@
 ///! Handle the selections of items
 use crate::event::{Event, EventHandler, UpdateScreen};
-use crate::item::{parse_criteria, RankCriteria};
+use crate::item::{parse_criteria, ItemIndex, RankCriteria};
 use crate::item::{ItemWrapper, MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
@@ -30,7 +30,7 @@ lazy_static! {
 pub struct Selection {
     criterion: Vec<RankCriteria>,
     items: OrderedVec<MatchedItem>, // all items
-    selected: HashMap<(usize, usize), Arc<ItemWrapper>>,
+    selected: HashMap<ItemIndex, Arc<ItemWrapper>>,
 
     //
     // |>------ items[items.len()-1]

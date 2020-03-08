@@ -1,16 +1,18 @@
 ///! An item is line of text that read from `find` command or stdin together with
 ///! the internal states, such as selected or not
-use crate::ansi::{ANSIParser, AnsiString};
-use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
-use crate::spinlock::{SpinLock, SpinLockGuard};
-use crate::{ItemPreview, SkimItem};
-use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::min;
 use std::default::Default;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
+use regex::Regex;
+
+use crate::ansi::{ANSIParser, AnsiString};
+use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
+use crate::spinlock::{SpinLock, SpinLockGuard};
+use crate::{ItemPreview, SkimItem};
 
 //------------------------------------------------------------------------------
 /// An item will store everything that one line input will need to be operated and displayed.
@@ -25,22 +27,20 @@ use std::sync::Arc;
 /// more than one line.
 #[derive(Debug)]
 pub struct DefaultSkimItem {
-    // The text that will be output when user press `enter`
-    orig_text: String,
+    /// The text that will be output when user press `enter`
+    /// `Some(..)` => the original input is transformed, could not output `text` directly
+    /// `None` => that it is safe to output `text` directly
+    orig_text: Option<String>,
 
-    // The text that will shown into the screen. Can be transformed.
+    /// The text that will be shown on screen and matched.
     text: AnsiString<'static>,
 
     matching_ranges: Vec<(usize, usize)>,
-
-    // For the transformed ANSI case, the output will need another transform.
-    using_transform_fields: bool,
-    ansi_enabled: bool,
 }
 
 impl<'a> DefaultSkimItem {
     pub fn new(
-        orig_text: Cow<str>,
+        orig_text: String,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -60,65 +60,53 @@ impl<'a> DefaultSkimItem {
 
         let mut ansi_parser: ANSIParser = Default::default();
 
-        let text = if using_transform_fields && ansi_enabled {
+        let (orig_text, text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
-            ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
+            let transformed = ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields));
+            (Some(orig_text), transformed)
         } else if using_transform_fields {
             // transformed, not ansi
-            parse_transform_fields(delimiter, &orig_text, trans_fields).into()
+            (None, parse_transform_fields(delimiter, &orig_text, trans_fields).into())
         } else if ansi_enabled {
             // not transformed, ansi
-            ansi_parser.parse_ansi(&orig_text)
+            (None, ansi_parser.parse_ansi(&orig_text))
         } else {
             // normal case
-            AnsiString::new_empty()
-        };
-
-        let mut ret = DefaultSkimItem {
-            orig_text: orig_text.into(),
-            text,
-            using_transform_fields: !trans_fields.is_empty(),
-            matching_ranges: Vec::new(),
-            ansi_enabled,
+            (None, orig_text.into())
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
-            parse_matching_fields(delimiter, &ret.text(), matching_fields)
+            parse_matching_fields(delimiter, text.stripped(), matching_fields)
         } else {
-            vec![(0, ret.text().len())]
+            vec![(0, text.stripped().len())]
         };
 
-        ret.matching_ranges = matching_ranges;
-        ret
+        DefaultSkimItem {
+            orig_text,
+            text,
+            matching_ranges,
+        }
     }
 }
 
 impl SkimItem for DefaultSkimItem {
+    #[inline]
     fn display(&self) -> Cow<AnsiString> {
-        if self.using_transform_fields || self.ansi_enabled {
-            Cow::Borrowed(&self.text)
-        } else {
-            Cow::Owned(self.orig_text.as_str().into())
-        }
+        Cow::Borrowed(&self.text)
     }
 
+    #[inline]
     fn text(&self) -> Cow<str> {
-        if !self.using_transform_fields && !self.ansi_enabled {
-            Cow::Borrowed(&self.orig_text)
-        } else {
-            Cow::Borrowed(self.text.stripped())
-        }
+        Cow::Borrowed(self.text.stripped())
     }
 
     fn output(&self) -> Cow<str> {
-        if self.using_transform_fields && self.ansi_enabled {
+        if self.orig_text.is_some() {
             let mut ansi_parser: ANSIParser = Default::default();
-            let text = ansi_parser.parse_ansi(&self.orig_text);
-            Cow::Owned(text.into_inner())
-        } else if !self.using_transform_fields && self.ansi_enabled {
-            Cow::Borrowed(self.text.stripped())
+            let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
+            Cow::Owned(text.into_inner().unwrap())
         } else {
-            Cow::Borrowed(&self.orig_text)
+            Cow::Borrowed(self.text.stripped())
         }
     }
 
@@ -126,24 +114,27 @@ impl SkimItem for DefaultSkimItem {
         Cow::Borrowed(&self.matching_ranges)
     }
 }
+
 //------------------------------------------------------------------------------
+pub type ItemIndex = (u32, u32);
+
 pub struct ItemWrapper {
-    // (num of run, number of index)
-    id: (usize, usize),
     inner: Arc<dyn SkimItem>,
+    // (num of run, number of index)
+    id: ItemIndex,
 }
 
 impl ItemWrapper {
-    pub fn new(item: Arc<dyn SkimItem>, index: (usize, usize)) -> Self {
+    pub fn new(item: Arc<dyn SkimItem>, index: ItemIndex) -> Self {
         Self { id: index, inner: item }
     }
 
-    pub fn get_id(&self) -> (usize, usize) {
+    pub fn get_id(&self) -> ItemIndex {
         self.id
     }
 
     pub fn get_index(&self) -> usize {
-        self.id.1
+        self.id.1 as usize
     }
 
     pub fn get_inner(&self) -> Arc<dyn SkimItem> {
@@ -186,8 +177,9 @@ pub struct Rank {
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
 pub enum MatchedRange {
-    ByteRange(usize, usize), // range of bytes
-    Chars(Vec<usize>),       // individual character indices matched
+    ByteRange(usize, usize),
+    // range of bytes
+    Chars(Vec<usize>), // individual character indices matched
 }
 
 #[derive(Clone)]
