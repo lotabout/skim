@@ -252,10 +252,12 @@ impl<'a> AnsiString<'a> {
         ANSIParser::default().parse_ansi(raw)
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.fragments.is_empty()
     }
 
+    #[inline]
     pub fn into_inner(self) -> Option<String> {
         self.stripped
     }
@@ -269,6 +271,7 @@ impl<'a> AnsiString<'a> {
         self.fragments.len() > 1 || (!self.fragments.is_empty() && self.fragments[0].0 != Attr::default())
     }
 
+    #[inline]
     pub fn stripped(&self) -> &str {
         self.stripped
             .as_ref()

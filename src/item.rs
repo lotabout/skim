@@ -40,7 +40,7 @@ pub struct DefaultSkimItem {
 
 impl<'a> DefaultSkimItem {
     pub fn new(
-        orig_text: Cow<str>,
+        orig_text: String,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -60,18 +60,19 @@ impl<'a> DefaultSkimItem {
 
         let mut ansi_parser: ANSIParser = Default::default();
 
-        let text = if using_transform_fields && ansi_enabled {
+        let (orig_text, text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
-            ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
+            let transformed = ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields));
+            (Some(orig_text), transformed)
         } else if using_transform_fields {
             // transformed, not ansi
-            parse_transform_fields(delimiter, &orig_text, trans_fields).into()
+            (None, parse_transform_fields(delimiter, &orig_text, trans_fields).into())
         } else if ansi_enabled {
             // not transformed, ansi
-            ansi_parser.parse_ansi(&orig_text)
+            (None, ansi_parser.parse_ansi(&orig_text))
         } else {
             // normal case
-            orig_text.to_string().into()
+            (None, orig_text.into())
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
@@ -81,11 +82,7 @@ impl<'a> DefaultSkimItem {
         };
 
         DefaultSkimItem {
-            orig_text: if using_transform_fields {
-                Some(orig_text.to_string())
-            } else {
-                None
-            },
+            orig_text,
             text,
             matching_ranges,
         }
@@ -93,10 +90,12 @@ impl<'a> DefaultSkimItem {
 }
 
 impl SkimItem for DefaultSkimItem {
+    #[inline]
     fn display(&self) -> Cow<AnsiString> {
         Cow::Borrowed(&self.text)
     }
 
+    #[inline]
     fn text(&self) -> Cow<str> {
         Cow::Borrowed(self.text.stripped())
     }
