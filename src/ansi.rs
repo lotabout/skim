@@ -214,37 +214,36 @@ impl ANSIParser {
 ///
 /// It is internally represented as Vec<(attr, string)>
 pub struct AnsiString<'a> {
-    stripped: Cow<'a, str>,
+    stripped: Option<String>,
     fragments: Vec<(Attr, Cow<'a, str>)>,
 }
 
 impl<'a> AnsiString<'a> {
     pub fn new_empty() -> Self {
         Self {
-            stripped: Cow::Owned(String::new()),
+            stripped: None,
             fragments: Vec::new(),
         }
     }
 
     fn new_string(string: String) -> Self {
-        let stripped: Cow<'static, str> = Cow::Owned(string);
         Self {
-            stripped: stripped.clone(),
-            fragments: vec![(Attr::default(), stripped.clone())],
+            stripped: None,
+            fragments: vec![(Attr::default(), Cow::Owned(string))],
         }
     }
 
     fn new_str(str_ref: &'a str) -> Self {
         let stripped: Cow<'a, str> = Cow::Borrowed(str_ref);
         Self {
-            stripped: stripped.clone(),
+            stripped: None,
             fragments: vec![(Attr::default(), stripped.clone())],
         }
     }
 
     fn new(stripped: String, fragments: Vec<(Attr, Cow<'static, str>)>) -> Self {
         Self {
-            stripped: Cow::Owned(stripped),
+            stripped: Some(stripped),
             fragments,
         }
     }
@@ -257,8 +256,8 @@ impl<'a> AnsiString<'a> {
         self.fragments.is_empty()
     }
 
-    pub fn into_inner(self) -> String {
-        self.stripped.into()
+    pub fn into_inner(self) -> Option<String> {
+        self.stripped
     }
 
     pub fn iter(&self) -> AnsiStringIterator {
@@ -271,7 +270,11 @@ impl<'a> AnsiString<'a> {
     }
 
     pub fn stripped(&self) -> &str {
-        &self.stripped
+        self.stripped
+            .as_ref()
+            .map(|x| x.as_str())
+            .or_else(|| self.fragments.get(0).map(|(_attr, cow)| cow.as_ref()))
+            .unwrap()
     }
 }
 
@@ -361,7 +364,7 @@ mod tests {
         assert_eq!(Some(('b', Attr::default())), it.next());
         assert_eq!(None, it.next());
 
-        assert_eq!("ab", ansistring.into_inner())
+        assert_eq!("ab", ansistring.into_inner().unwrap())
     }
 
     #[test]
