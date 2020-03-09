@@ -66,7 +66,8 @@ impl<'a> DefaultSkimItem {
             (Some(orig_text), transformed)
         } else if using_transform_fields {
             // transformed, not ansi
-            (None, parse_transform_fields(delimiter, &orig_text, trans_fields).into())
+            let transformed = parse_transform_fields(delimiter, &orig_text, trans_fields).into();
+            (Some(orig_text), transformed)
         } else if ansi_enabled {
             // not transformed, ansi
             (None, ansi_parser.parse_ansi(&orig_text))
@@ -102,9 +103,13 @@ impl SkimItem for DefaultSkimItem {
 
     fn output(&self) -> Cow<str> {
         if self.orig_text.is_some() {
-            let mut ansi_parser: ANSIParser = Default::default();
-            let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
-            Cow::Owned(text.into_inner().unwrap())
+            if self.text.has_attrs() {
+                let mut ansi_parser: ANSIParser = Default::default();
+                let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
+                Cow::Owned(text.into_inner().unwrap())
+            } else {
+                Cow::Borrowed(self.orig_text.as_ref().unwrap())
+            }
         } else {
             Cow::Borrowed(self.text.stripped())
         }
