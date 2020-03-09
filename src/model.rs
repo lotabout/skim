@@ -366,14 +366,17 @@ impl Model {
         let query = self.query.get_fz_query();
         let cmd_query = self.query.get_cmd_query();
 
-        let tmp = self.selection.get_selected_items();
-        let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.text()).collect();
+        let selections = self.selection.get_selected_wrapped_items();
+        let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
         let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
+        let indices: Vec<usize> = selections.iter().map(|x| x.get_index()).collect();
 
         let context = InjectContext {
+            current_index: item.as_ref().map(|x| x.get_index()).unwrap_or(0),
             delimiter: &self.delimiter,
             current_selection: &current_selection,
             selections: &selected_texts,
+            indices: &indices,
             query: &query,
             cmd_query: &cmd_query,
         };
@@ -552,7 +555,7 @@ impl Model {
                 let item = self.selection.get_current_item();
                 if let Some(previewer) = self.previewer.as_mut() {
                     let selections = &self.selection;
-                    let get_selected_items = || selections.get_selected_items();
+                    let get_selected_items = || selections.get_selected_wrapped_items();
                     previewer.on_item_change(
                         item,
                         env.query.to_string(),

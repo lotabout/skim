@@ -490,7 +490,13 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
         .try_for_each(|matched| {
             num_matched += 1;
             if options.print_score {
-                write!(stdout, "{}\t{}{}", -matched.rank.score, matched.item.output(), output_ending)
+                write!(
+                    stdout,
+                    "{}\t{}{}",
+                    -matched.rank.score,
+                    matched.item.output(),
+                    output_ending
+                )
             } else {
                 write!(stdout, "{}{}", matched.item.output(), output_ending)
             }
