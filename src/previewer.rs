@@ -93,7 +93,7 @@ impl Previewer {
         new_query: impl Into<Option<String>>,
         new_cmd_query: impl Into<Option<String>>,
         num_selected: usize,
-        get_selected_items: impl Fn() -> Vec<Arc<dyn SkimItem>>, // lazy get
+        get_selected_items: impl Fn() -> Vec<Arc<ItemWrapper>>, // lazy get
     ) {
         let new_item = new_item.into();
         let new_query = new_query.into();
@@ -156,14 +156,17 @@ impl Previewer {
                     let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
                     let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
 
-                    let tmp = get_selected_items();
-                    let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.text()).collect();
+                    let selections = get_selected_items();
+                    let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
                     let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
+                    let indices: Vec<usize> = selections.iter().map(|x| x.get_index()).collect();
 
                     let context = InjectContext {
+                        current_index: item.get_index(),
                         delimiter: &self.delimiter,
                         current_selection: &current_selection,
                         selections: &selected_texts,
+                        indices: &indices,
                         query: &query,
                         cmd_query: &cmd_query,
                     };

@@ -271,10 +271,21 @@ e.g. \fBsk --preview='head -$LINES {}'\fR
 sk overrides \fB$LINES\fR and \fB$COLUMNS\fR so that they represent the exact
 size of the preview window.
 
+A placeholder expression starting with \fB+\fR flag will be replaced to the
+space-separated list of the selected lines (or the current line if no selection
+was made) individually quoted.
+
+e.g.
+     \fBsk --multi --preview='head -10 {+}'
+     git log --oneline | sk --multi --preview 'git show {+1}'\fR
+
+
 Note that you can escape a placeholder pattern by prepending a backslash.
 
 Also, \fB{q}\fR is replaced to the current query string. \fB{cq}\fR is
-replaced to the current command query string.
+replaced to the current command query string. \fB{n}\fR is replaced to
+zero-based ordinal index of the line. Use \fB{+n}\fR if you want all index
+numbers when multiple lines are selected
 
 Preview window will be updated even when there is no match for the current
 query if any of the placeholder expressions evaluates to a non-empty string.

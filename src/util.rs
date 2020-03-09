@@ -301,7 +301,9 @@ pub fn parse_margin(margin_option: &str) -> (Size, Size, Size, Size) {
 #[derive(Copy, Clone)]
 pub struct InjectContext<'a> {
     pub delimiter: &'a Regex,
+    pub current_index: usize,
     pub current_selection: &'a str,
+    pub indices: &'a [usize],
     pub selections: &'a [&'a str],
     pub query: &'a str,
     pub cmd_query: &'a str,
@@ -309,7 +311,7 @@ pub struct InjectContext<'a> {
 
 lazy_static! {
     static ref RE_ITEMS: Regex = Regex::new(r"\\?(\{ *-?[0-9.+]*? *})").unwrap();
-    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+n]*? *})").unwrap();
 }
 
 /// Check if a command depends on item
@@ -340,24 +342,42 @@ pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, s
         let range = &range[1..range.len() - 1];
         let range = range.trim();
 
-        if range == "+" {
+        if range.starts_with("+") {
             let current_selection = vec![context.current_selection];
             let selections = if context.selections.is_empty() {
                 &current_selection
             } else {
                 context.selections
             };
+            let current_index = vec![context.current_index];
+            let indices = if context.indices.is_empty() {
+                &current_index
+            } else {
+                context.indices
+            };
 
             return selections
                 .iter()
-                .map(|&s| format!("'{}'", escape_single_quote(s)))
+                .zip(indices.iter())
+                .map(|(&s, &i)| {
+                    let rest = &range[1..];
+                    let index_str = format!("{}", i);
+                    let replacement = match rest {
+                        "" => s,
+                        "n" => &index_str,
+                        _ => get_string_by_range(context.delimiter, s, rest).unwrap_or(""),
+                    };
+                    format!("'{}'", escape_single_quote(replacement))
+                })
                 .collect::<Vec<_>>()
                 .join(" ");
         }
 
+        let index_str = format!("{}", context.current_index);
         let replacement = match range {
             "" => context.current_selection,
-            "+" => unreachable!(),
+            x if x.starts_with("+") => unreachable!(),
+            "n" => &index_str,
             "q" => context.query,
             "cq" => context.cmd_query,
             _ => get_string_by_range(context.delimiter, context.current_selection, range).unwrap_or(""),
@@ -398,9 +418,11 @@ mod tests {
         let cmd_query = "cmd_query";
 
         let default_context = InjectContext {
+            current_index: 0,
             delimiter: &delimiter,
             current_selection,
             selections: &selections,
+            indices: &[0, 1],
             query,
             cmd_query,
         };
@@ -422,6 +444,10 @@ mod tests {
         assert_eq!("'query'", inject_command("{q}", default_context));
         assert_eq!("'cmd_query'", inject_command("{cq}", default_context));
         assert_eq!("'a,b,c' 'x,y,z'", inject_command("{+}", default_context));
+        assert_eq!("'0'", inject_command("{n}", default_context));
+        assert_eq!("'a' 'x'", inject_command("{+1}", default_context));
+        assert_eq!("'b' 'y'", inject_command("{+2}", default_context));
+        assert_eq!("'0' '1'", inject_command("{+n}", default_context));
     }
 
     #[test]
