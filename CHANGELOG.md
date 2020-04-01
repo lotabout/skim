@@ -1,5 +1,32 @@
 # Change Log
 
+## 0.8.1: 2020-02-23
+
+Feature:
+
+- [#63](https://github.com/lotabout/skim/issues/63) could save to and read
+    from history for query and command query via `--history` and `--cmd-history`
+- [#273](https://github.com/lotabout/skim/issues/273) inline-info now has
+    spinner
+- [#276](https://github.com/lotabout/skim/issues/276) new action:
+    `if-non-matched` will execute if non of the items matches
+- reduce memory footprint
+- [#248](https://github.com/lotabout/skim/issues/248) implement `{n}`
+    placeholder, used to refer to current items's index(zero based).
+
+Bug fixes:
+
+- [PR #279](https://github.com/lotabout/skim/pull/279) exit gracefully on
+    SIGPIPE error. (e.g. Ctrl-C on pipes)
+- [#276](https://github.com/lotabout/skim/issues/276) `execute` panic on zero
+    results
+- [#278](https://github.com/lotabout/skim/issues/278) `NUL` character not
+    working in preview command
+- handle `print0` correctly in filter mode
+- Preview's fields now based on original text, not transformed.
+- [#295](https://github.com/lotabout/skim/issues/295) skim not exits
+    sometimes (occasionally happens on Ubuntu)
+
 ## 0.8.0: 2020-02-23
 
 **Breaking Changes in API**
