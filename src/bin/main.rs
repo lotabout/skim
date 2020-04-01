@@ -153,7 +153,7 @@ fn real_main() -> Result<i32, std::io::Error> {
     //------------------------------------------------------------------------------
     // parse options
     let opts = App::new("sk")
-        .author("Jinzhou Zhang<lotabout@gmail.com")
+        .author("Jinzhou Zhang<lotabout@gmail.com>")
         .arg(Arg::with_name("help").long("help").short("h"))
         .arg(Arg::with_name("version").long("version").short("v"))
         .arg(Arg::with_name("bind").long("bind").short("b").multiple(true).takes_value(true))
