@@ -120,30 +120,7 @@ const DEFAULT_HISTORY_SIZE: usize = 1000;
 
 //------------------------------------------------------------------------------
 fn main() {
-    use env_logger::fmt::Formatter;
-    use env_logger::Builder;
-    use log::{LevelFilter, Record};
-
-    let format = |buf: &mut Formatter, record: &Record| {
-        let t = time::now();
-        writeln!(
-            buf,
-            "{},{:03} - {} - {}",
-            time::strftime("%Y-%m-%d %H:%M:%S", &t).expect("main: time format error"),
-            t.tm_nsec / 1_000_000,
-            record.level(),
-            record.args()
-        )
-    };
-
-    let mut builder = Builder::new();
-    builder.format(format).filter(None, LevelFilter::Info);
-
-    if env::var("RUST_LOG").is_ok() {
-        builder.parse_filters(&env::var("RUST_LOG").unwrap());
-    }
-
-    builder.try_init().expect("failed to initialize logger builder");
+    env_logger::init();
 
     match real_main() {
         Ok(exit_code) => std::process::exit(exit_code),
