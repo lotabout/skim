@@ -408,7 +408,7 @@ pub fn main() {
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}: {}{}", item.get_index(), item.get_output_text(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 }
 ```
