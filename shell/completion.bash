@@ -40,10 +40,10 @@ __skim_comprun() {
     _skim_comprun "$@"
   elif [ -n "$TMUX_PANE" ] && [ "${SKIM_TMUX:-0}" != 0 ] && [ ${LINES:-40} -gt 15 ]; then
     shift
-    skim-tmux -d "${SKIM_TMUX_HEIGHT:-40%}" "$@"
+    sk-tmux -d "${SKIM_TMUX_HEIGHT:-40%}" "$@"
   else
     shift
-    skim "$@"
+    sk "$@"
   fi
 }
 
