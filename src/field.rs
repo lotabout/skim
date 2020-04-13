@@ -1,6 +1,8 @@
 use regex::Regex;
 use std::cmp::{max, min};
 
+const DELIMITER_STR: &str = r"[\t\n ]+";
+
 lazy_static! {
     static ref FIELD_RANGE: Regex = Regex::new(r"^(?P<left>-?\d+)?(?P<sep>\.\.)?(?P<right>-?\d+)?$").unwrap();
 }
@@ -99,13 +101,22 @@ impl FieldRange {
 // ("|", "a|b||c") -> [(0, 2), (2, 4), (4, 5), (5, 6)]
 // explain: split to ["a|", "b|", "|", "c"]
 fn get_ranges_by_delimiter(delimiter: &Regex, text: &str) -> Vec<(usize, usize)> {
+    let orig_text = text;
+    let text = if &delimiter.as_str() == &DELIMITER_STR {
+        let delim: &[char] = &[' ', '\t', '\n'];
+        orig_text.trim_start_matches(delim)
+    } else {
+        orig_text
+    };
+    let trimed_count = orig_text.len() - text.len();
+
     let mut ranges = Vec::new();
-    let mut last = 0;
+    let mut last = trimed_count;
     for mat in delimiter.find_iter(text) {
-        ranges.push((last, mat.start()));
-        last = mat.end();
+        ranges.push((last, mat.start() + trimed_count));
+        last = mat.end() + trimed_count;
     }
-    ranges.push((last, text.len()));
+    ranges.push((last, orig_text.len()));
     ranges
 }
 
@@ -268,6 +279,23 @@ mod test {
     }
 
     #[test]
+    fn test_parse_transform_fields_with_default_delimiter() {
+        // delimiter is AWK style
+        let re = Regex::new(DELIMITER_STR).unwrap();
+
+        assert_eq!(
+            super::parse_transform_fields(&re, &"A B C D E F", &vec![Single(2), Single(4), Single(-1), Single(-7)]),
+            "B D F"
+        );
+
+        // AWK style delimiter trims the beginning white spaces
+        assert_eq!(
+            super::parse_transform_fields(&re, &"  A B\tC  D\t\tE   F", &vec![Single(2), Single(4), Single(-1), Single(-7)]),
+            "B\tD\t\tF"
+        );
+    }
+
+    #[test]
     fn test_parse_matching_fields() {
         // delimiter is ","
         let re = Regex::new(",").unwrap();
@@ -305,6 +333,43 @@ mod test {
                 &vec![Both(3, 3), Both(-8, 2), Both(6, 10), Both(-8, -5)]
             ),
             vec![(8, 12), (0, 8), (18, 19), (0, 8)]
+        );
+    }
+
+    #[test]
+    fn test_parse_matching_fields_with_default_delimiter() {
+        // delimiter is AWK style
+        let re = Regex::new(DELIMITER_STR).unwrap();
+
+        // bytes:3  3  3 3
+        //       中,华,人,民,E,F",
+
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &"中 华 人 民 E F",
+                &vec![Single(2), Single(4), Single(-1), Single(-7)]
+            ),
+            vec![(4, 8), (12, 16), (18, 19)]
+        );
+
+        // AWK style delimiter trims the beginning white spaces
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &" 中 华 人 民 E F",
+                &vec![Single(2), Single(4), Single(-1), Single(-7)]
+            ),
+            vec![(5, 9), (13, 17), (19, 20)]
+        );
+
+        assert_eq!(
+            super::parse_matching_fields(
+                &re,
+                &"  中  华  人  民 E  F",
+                &vec![Single(2), Single(4), Single(-1), Single(-7)]
+            ),
+            vec![(7, 12), (17, 21), (24, 25)]
         );
     }
 
@@ -371,5 +436,24 @@ mod test {
         assert_eq!(get_string_by_field(&re, &text, &Both(2, 3)), Some("b,c"));
         assert_eq!(get_string_by_field(&re, &text, &Both(3, 3)), Some("c"));
         assert_eq!(get_string_by_field(&re, &text, &Both(4, 3)), None);
+    }
+
+    #[test]
+    fn test_get_string_by_field_with_default_delimiter() {
+        // delimiter is AWK style
+        let re = Regex::new(DELIMITER_STR).unwrap();
+
+        let text = "a  b\tc";
+        assert_eq!(get_string_by_field(&re, &text, &Single(0)), None);
+        assert_eq!(get_string_by_field(&re, &text, &Single(1)), Some("a"));
+        assert_eq!(get_string_by_field(&re, &text, &Single(2)), Some("b"));
+        assert_eq!(get_string_by_field(&re, &text, &Single(3)), Some("c"));
+
+        // AWK style delimiter trims the beginning white spaces
+        let text2 = "  a  b\tc";
+        assert_eq!(get_string_by_field(&re, &text2, &Single(0)), None);
+        assert_eq!(get_string_by_field(&re, &text2, &Single(1)), Some("a"));
+        assert_eq!(get_string_by_field(&re, &text2, &Single(2)), Some("b"));
+        assert_eq!(get_string_by_field(&re, &text2, &Single(3)), Some("c"));
     }
 }
