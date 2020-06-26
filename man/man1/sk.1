@@ -72,10 +72,14 @@ Field delimiter regex for \fB--nth\fR and \fB--with-nth\fR (default: AWK-style)
 .SS Search result
 .TP
 .B "--tac"
-Reverse the order of the input
+Reverse the order of the search result(normally used together with \fB--no-sort\fR)
+
+.TP
+.B "--no-sort"
+Do not sort the search result(normally used together with \fB--tac\fR)
 
 .RS
-e.g. \fBhistory | sk --tac\fR
+e.g. \fBhistory | sk --tac --no-sort\fR
 .RE
 .TP
 .BI "--tiebreak=" "CRI[,..]"

@@ -1,3 +1,12 @@
+use std::cmp::max;
+use std::cmp::min;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
+use tuikit::prelude::{Event as TermEvent, *};
+
 ///! Handle the selections of items
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::item::{parse_criteria, ItemIndex, RankCriteria};
@@ -8,13 +17,6 @@ use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{SkimItem, SkimOptions};
-use std::cmp::max;
-use std::cmp::min;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
-use tuikit::prelude::{Event as TermEvent, *};
 
 const DOUBLE_CLICK_DURATION: u128 = 300;
 
@@ -28,8 +30,8 @@ lazy_static! {
 }
 
 pub struct Selection {
-    criterion: Vec<RankCriteria>,
-    items: OrderedVec<MatchedItem>, // all items
+    // all items
+    items: OrderedVec<MatchedItem>,
     selected: HashMap<ItemIndex, Arc<ItemWrapper>>,
 
     //
@@ -43,8 +45,10 @@ pub struct Selection {
     // |
     // |>------ item[0]
     //
-    item_cursor: usize, // the index of matched item currently highlighted.
-    line_cursor: usize, // line No.
+    // the index of matched item currently highlighted.
+    item_cursor: usize,
+    // line No.
+    line_cursor: usize,
     hscroll_offset: usize,
     height: AtomicUsize,
     tabstop: usize,
@@ -63,7 +67,6 @@ pub struct Selection {
 impl Selection {
     pub fn new() -> Self {
         Selection {
-            criterion: DEFAULT_CRITERION.clone(),
             items: OrderedVec::new(build_compare_function(DEFAULT_CRITERION.clone())),
             selected: HashMap::new(),
             item_cursor: 0,
@@ -107,23 +110,16 @@ impl Selection {
 
         if let Some(ref tie_breaker) = options.tiebreak {
             let criterion = tie_breaker.split(',').filter_map(parse_criteria).collect();
-            self.criterion = criterion;
+            self.items = OrderedVec::new(build_compare_function(criterion));
         }
 
         if options.tac {
-            let criterion = self
-                .criterion
-                .iter()
-                .map(|&criteria| match criteria {
-                    RankCriteria::Index => RankCriteria::NegIndex,
-                    RankCriteria::NegIndex => RankCriteria::Index,
-                    criteria => criteria,
-                })
-                .collect();
-            self.criterion = criterion;
+            self.items.tac(true);
         }
 
-        self.items = OrderedVec::new(build_compare_function(self.criterion.clone()));
+        if options.nosort {
+            self.items.nosort(true);
+        }
     }
 
     pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {

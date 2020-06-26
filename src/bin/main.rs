@@ -26,7 +26,8 @@ Usage: sk [options]
     --version            print out the current version of skim
 
   Search
-    --tac                reverse the order of input
+    --tac                reverse the order of search result
+    --no-sort            Do not sort the result
     -t, --tiebreak [score,index,begin,end,-score,...]
                          comma seperated criteria
     -n, --nth 1,2..5     specify the fields to be matched
@@ -111,7 +112,6 @@ Usage: sk [options]
     --history=FILE
     --history-size=N
     --sync
-    --no-sort
     --select-1
     --exit-0
 ";
@@ -359,6 +359,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
         .tiebreak(options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")))
         .tac(options.is_present("tac"))
+        .nosort(options.is_present("no-sort"))
         .exact(options.is_present("exact"))
         .regex(options.is_present("regex"))
         .inline_info(options.is_present("inline-info"))
