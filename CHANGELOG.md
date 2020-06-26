@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.8.2: 2020-06-26
+
+Bug fixes:
+- fix skim executable in bash completion
+- fix [#291](https://github.com/lotabout/skim/issues/291) hide scroll in when
+    content fit
+- fix [#308](https://github.com/lotabout/skim/issues/308) hangs on
+    initialization
+
 ## 0.8.1: 2020-02-23
 
 Feature:
