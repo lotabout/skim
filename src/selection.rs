@@ -215,7 +215,7 @@ impl Selection {
             return;
         }
 
-        for current_item in self.items.iter() {
+        for current_item in self.items.get_sorted().iter() {
             let index = current_item.item.get_id();
             if !self.selected.contains_key(&index) {
                 self.selected.insert(index, current_item.item.clone());
@@ -238,7 +238,7 @@ impl Selection {
             return;
         }
 
-        for current_item in self.items.iter() {
+        for current_item in self.items.get_sorted().iter() {
             let item = current_item.item.clone();
             self.selected.insert(item.get_id(), item);
         }
