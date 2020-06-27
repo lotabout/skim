@@ -142,7 +142,6 @@ impl MatchEngine for FuzzyEngine {
 
         let rank = Rank {
             score: -score,
-            index: item.get_index() as i64,
             begin,
             end,
         };

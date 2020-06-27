@@ -58,7 +58,6 @@ impl MatchEngine for RegexEngine {
         let score = (end - begin) as i64;
         let rank = Rank {
             score: -score,
-            index: item.get_index() as i64,
             begin: begin as i64,
             end: end as i64,
         };

@@ -26,6 +26,7 @@ mod ansi;
 mod engine;
 mod event;
 mod field;
+mod global;
 mod header;
 mod input;
 mod item;

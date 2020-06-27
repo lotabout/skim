@@ -1,3 +1,4 @@
+use crate::global::{current_run_num, mark_new_run};
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
@@ -7,9 +8,8 @@ use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
 use crate::SkimItemReceiver;
 use crossbeam::channel::{bounded, select, Sender};
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 
 const CHANNEL_SIZE: usize = 1024;
@@ -65,21 +65,14 @@ impl Reader {
     }
 
     pub fn run(&mut self, cmd: &str) -> ReaderControl {
+        mark_new_run(cmd);
+        let run_num = current_run_num();
+
         let components_to_stop: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
         let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
         let option_clone = self.option.clone();
         let cmd = cmd.to_string();
-
-        let run_num = if self.rx_item.is_some() {
-            RUN_NUM.fetch_add(1, Ordering::SeqCst)
-        } else {
-            *NUM_MAP
-                .write()
-                .expect("reader: failed to lock NUM_MAP")
-                .entry(cmd.to_string())
-                .or_insert_with(|| RUN_NUM.fetch_add(1, Ordering::SeqCst))
-        };
 
         let (rx_item, tx_interrupt_cmd) = self.rx_item.take().map(|rx| (rx, None)).unwrap_or_else(|| {
             let components_to_stop_clone = components_to_stop.clone();
@@ -98,16 +91,6 @@ impl Reader {
             items,
         }
     }
-}
-
-// Consider that you invoke a command with different arguments several times
-// If you select some items each time, how will skim remember it?
-// => Well, we'll give each invocation a number, i.e. RUN_NUM
-// What if you invoke the same command and same arguments twice?
-// => We use NUM_MAP to specify the same run number.
-lazy_static! {
-    static ref RUN_NUM: AtomicU32 = AtomicU32::new(0);
-    static ref NUM_MAP: RwLock<HashMap<String, u32>> = RwLock::new(HashMap::new());
 }
 
 fn collect_item(

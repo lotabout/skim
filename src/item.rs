@@ -174,7 +174,6 @@ impl SkimItem for ItemWrapper {
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Rank {
     pub score: i64,
-    pub index: i64,
     pub begin: i64,
     pub end: i64,
 }
@@ -326,11 +325,9 @@ impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum RankCriteria {
     Score,
-    Index,
     Begin,
     End,
     NegScore,
-    NegIndex,
     NegBegin,
     NegEnd,
 }
@@ -338,11 +335,9 @@ pub enum RankCriteria {
 pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
     match text.to_lowercase().as_ref() {
         "score" => Some(RankCriteria::Score),
-        "index" => Some(RankCriteria::Index),
         "begin" => Some(RankCriteria::Begin),
         "end" => Some(RankCriteria::End),
         "-score" => Some(RankCriteria::NegScore),
-        "-index" => Some(RankCriteria::NegIndex),
         "-begin" => Some(RankCriteria::NegBegin),
         "-end" => Some(RankCriteria::NegEnd),
         _ => None,

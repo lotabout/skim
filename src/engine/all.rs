@@ -22,7 +22,6 @@ impl MatchEngine for MatchAllEngine {
     fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
         let rank = Rank {
             score: 0,
-            index: item.get_index() as i64,
             begin: 0,
             end: 0,
         };

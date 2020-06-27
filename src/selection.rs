@@ -21,12 +21,8 @@ use crate::{SkimItem, SkimOptions};
 const DOUBLE_CLICK_DURATION: u128 = 300;
 
 lazy_static! {
-    static ref DEFAULT_CRITERION: Vec<RankCriteria> = vec![
-        RankCriteria::Score,
-        RankCriteria::Begin,
-        RankCriteria::End,
-        RankCriteria::Index,
-    ];
+    static ref DEFAULT_CRITERION: Vec<RankCriteria> =
+        vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End,];
 }
 
 pub struct Selection {
@@ -545,20 +541,6 @@ fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<Match
                         continue;
                     } else {
                         return b.rank.end.cmp(&a.rank.end);
-                    }
-                }
-                RankCriteria::Index => {
-                    if a.rank.index == b.rank.index {
-                        continue;
-                    } else {
-                        return a.rank.index.cmp(&b.rank.index);
-                    }
-                }
-                RankCriteria::NegIndex => {
-                    if a.rank.index == b.rank.index {
-                        continue;
-                    } else {
-                        return b.rank.index.cmp(&a.rank.index);
                     }
                 }
                 RankCriteria::Score => {
