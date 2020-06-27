@@ -392,6 +392,9 @@ impl Model {
         if query.is_empty() {
             return;
         }
+
+        let item_index = (std::u32::MAX, self.next_idx_to_append);
+
         let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(
             Arc::new(query),
             (std::u32::MAX, self.next_idx_to_append),
@@ -400,7 +403,7 @@ impl Model {
         self.next_idx_to_append += 1;
 
         self.item_pool.append(vec![item.clone()]);
-        self.selection.act_select_item(item);
+        self.selection.act_select_item(item_index, item);
 
         self.act_heart_beat(env);
     }

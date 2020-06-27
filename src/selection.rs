@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -9,6 +9,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 
 ///! Handle the selections of items
 use crate::event::{Event, EventHandler, UpdateScreen};
+use crate::global::current_run_num;
 use crate::item::{parse_criteria, ItemIndex, RankCriteria};
 use crate::item::{ItemWrapper, MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
@@ -28,7 +29,7 @@ lazy_static! {
 pub struct Selection {
     // all items
     items: OrderedVec<MatchedItem>,
-    selected: HashMap<ItemIndex, Arc<ItemWrapper>>,
+    selected: BTreeMap<ItemIndex, Arc<ItemWrapper>>,
 
     //
     // |>------ items[items.len()-1]
@@ -64,7 +65,7 @@ impl Selection {
     pub fn new() -> Self {
         Selection {
             items: OrderedVec::new(build_compare_function(DEFAULT_CRITERION.clone())),
-            selected: HashMap::new(),
+            selected: BTreeMap::new(),
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
@@ -193,7 +194,7 @@ impl Selection {
             .items
             .get(cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
-        let index = current_item.item.get_id();
+        let index = (current_run_num(), cursor as u32);
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, current_item.item.clone());
         } else {
@@ -207,8 +208,9 @@ impl Selection {
             return;
         }
 
-        for current_item in self.items.iter() {
-            let index = current_item.item.get_id();
+        let run_num = current_run_num();
+        for (idx, current_item) in self.items.iter().enumerate() {
+            let index = (run_num, idx as u32);
             if !self.selected.contains_key(&index) {
                 self.selected.insert(index, current_item.item.clone());
             } else {
@@ -217,12 +219,12 @@ impl Selection {
         }
     }
 
-    pub fn act_select_item(&mut self, item: Arc<ItemWrapper>) {
+    pub fn act_select_item(&mut self, item_index: ItemIndex, item: Arc<ItemWrapper>) {
         if !self.multi_selection {
             return;
         }
 
-        self.selected.insert(item.get_id(), item);
+        self.selected.insert(item_index, item);
     }
 
     pub fn act_select_all(&mut self) {
@@ -230,9 +232,10 @@ impl Selection {
             return;
         }
 
-        for current_item in self.items.iter() {
+        let run_num = current_run_num();
+        for (idx, current_item) in self.items.iter().enumerate() {
             let item = current_item.item.clone();
-            self.selected.insert(item.get_id(), item);
+            self.selected.insert((run_num, idx as u32), item);
         }
     }
 
@@ -346,6 +349,7 @@ impl Selection {
         canvas: &mut dyn Canvas,
         row: usize,
         matched_item: &MatchedItem,
+        item_index: usize,
         is_current: bool,
     ) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
@@ -356,8 +360,6 @@ impl Selection {
         if screen_width < 3 {
             return Err("screen width is too small".into());
         }
-
-        let index = matched_item.item.get_id();
 
         let default_attr = if is_current {
             self.theme.current()
@@ -372,6 +374,7 @@ impl Selection {
         };
 
         // print selection cursor
+        let index = (current_run_num(), item_index as u32);
         if self.selected.contains_key(&index) {
             let _ = canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
         } else {
@@ -473,7 +476,7 @@ impl Draw for Selection {
                 .get(item_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
-            let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
+            let _ = self.draw_item(canvas, line_no, &item, item_idx, line_cursor == self.line_cursor);
         }
 
         Ok(())
