@@ -81,10 +81,9 @@ impl<T: Send> OrderedVec<T> {
 
     fn sort_vector(&self, vec: &mut Vec<T>, asc: bool) {
         let asc = asc ^ self.tac;
-        if asc {
-            vec.sort_by(self.compare.as_ref());
-        } else {
-            vec.sort_by(|a, b| (self.compare)(b, a));
+        vec.sort_by(self.compare.as_ref());
+        if !asc {
+            vec.reverse();
         }
     }
 
@@ -259,6 +258,19 @@ mod tests {
         ordered_vec.append_ordered(b);
         ordered_vec.append_ordered(c);
         for (a, b) in ordered_vec.iter().zip(d.iter()) {
+            assert_eq!(*a, *b);
+        }
+    }
+
+    #[test]
+    fn test_equals() {
+        let a = vec![1, 2, 3, 4];
+        let b = vec![5, 6, 7, 8];
+        let target = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        let mut ordered_vec = OrderedVec::new(Box::new(|_a, _b| Ordering::Equal));
+        ordered_vec.append_ordered(a);
+        ordered_vec.append_ordered(b);
+        for (a, b) in ordered_vec.iter().zip(target.iter()) {
             assert_eq!(*a, *b);
         }
     }
