@@ -7,8 +7,8 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
-use crate::item::ItemWrapper;
 use crate::SkimItem;
+use std::sync::Arc;
 
 lazy_static! {
     static ref RE_ESCAPE: Regex = Regex::new(r"['\U{00}]").unwrap();
@@ -179,7 +179,7 @@ impl LinePrinter {
     }
 }
 
-pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &ItemWrapper, default_attr: Attr) {
+pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &Arc<dyn SkimItem>, default_attr: Attr) {
     for (ch, attr) in item.display().iter() {
         printer.print_char(canvas, ch, default_attr.extend(attr), false);
     }

@@ -12,7 +12,7 @@ use regex::Regex;
 use crate::ansi::{ANSIParser, AnsiString};
 use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
 use crate::spinlock::{SpinLock, SpinLockGuard};
-use crate::{ItemPreview, SkimItem};
+use crate::SkimItem;
 
 //------------------------------------------------------------------------------
 /// An item will store everything that one line input will need to be operated and displayed.
@@ -123,53 +123,6 @@ impl SkimItem for DefaultSkimItem {
 //------------------------------------------------------------------------------
 pub type ItemIndex = (u32, u32);
 
-pub struct ItemWrapper {
-    inner: Arc<dyn SkimItem>,
-    // (num of run, number of index)
-    id: ItemIndex,
-}
-
-impl ItemWrapper {
-    pub fn new(item: Arc<dyn SkimItem>, index: ItemIndex) -> Self {
-        Self { id: index, inner: item }
-    }
-
-    pub fn get_id(&self) -> ItemIndex {
-        self.id
-    }
-
-    pub fn get_index(&self) -> usize {
-        self.id.1 as usize
-    }
-
-    pub fn get_inner(&self) -> Arc<dyn SkimItem> {
-        self.inner.clone()
-    }
-}
-
-/// delegate to inner
-impl SkimItem for ItemWrapper {
-    fn display(&self) -> Cow<AnsiString> {
-        self.inner.display()
-    }
-
-    fn text(&self) -> Cow<str> {
-        self.inner.text()
-    }
-
-    fn preview(&self) -> ItemPreview {
-        self.inner.preview()
-    }
-
-    fn output(&self) -> Cow<str> {
-        self.inner.output()
-    }
-
-    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
-        self.inner.get_matching_ranges()
-    }
-}
-
 //------------------------------------------------------------------------------
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Rank {
@@ -188,13 +141,13 @@ pub enum MatchedRange {
 
 #[derive(Clone)]
 pub struct MatchedItem {
-    pub item: Arc<ItemWrapper>,
+    pub item: Arc<dyn SkimItem>,
     pub rank: Rank,
     pub matched_range: Option<MatchedRange>, // range of chars that matched the pattern
 }
 
 impl MatchedItem {
-    pub fn builder(item: Arc<ItemWrapper>) -> Self {
+    pub fn builder(item: Arc<dyn SkimItem>) -> Self {
         MatchedItem {
             item,
             rank: Rank::default(),
@@ -233,12 +186,12 @@ const ITEM_POOL_CAPACITY: usize = 1024;
 
 pub struct ItemPool {
     length: AtomicUsize,
-    pool: SpinLock<Vec<Arc<ItemWrapper>>>,
+    pool: SpinLock<Vec<Arc<dyn SkimItem>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
 
     /// reverse first N lines as header
-    reserved_items: SpinLock<Vec<Arc<ItemWrapper>>>,
+    reserved_items: SpinLock<Vec<Arc<dyn SkimItem>>>,
     lines_to_reserve: usize,
 }
 
@@ -281,7 +234,7 @@ impl ItemPool {
         self.taken.store(0, Ordering::SeqCst);
     }
 
-    pub fn append(&self, mut items: Vec<Arc<ItemWrapper>>) {
+    pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) {
         let mut pool = self.pool.lock();
         let mut header_items = self.reserved_items.lock();
 
@@ -296,13 +249,13 @@ impl ItemPool {
         self.length.store(pool.len(), Ordering::SeqCst);
     }
 
-    pub fn take(&self) -> ItemPoolGuard<Arc<ItemWrapper>> {
+    pub fn take(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {
         let guard = self.pool.lock();
         let taken = self.taken.swap(guard.len(), Ordering::SeqCst);
         ItemPoolGuard { guard, start: taken }
     }
 
-    pub fn reserved(&self) -> ItemPoolGuard<Arc<ItemWrapper>> {
+    pub fn reserved(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {
         let guard = self.reserved_items.lock();
         ItemPoolGuard { guard, start: 0 }
     }

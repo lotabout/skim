@@ -130,7 +130,7 @@ impl Draw for Header {
                 .text_width(screen_width - 2)
                 .hscroll_offset(self.hscroll_offset)
                 .build();
-            print_item(canvas, &mut printer, &item, self.theme.header());
+            print_item(canvas, &mut printer, item, self.theme.header());
         }
 
         Ok(())

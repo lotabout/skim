@@ -11,7 +11,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::global::current_run_num;
 use crate::item::{parse_criteria, ItemIndex, RankCriteria};
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange};
+use crate::item::{MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
 use crate::spinlock::SpinLock;
@@ -29,7 +29,7 @@ lazy_static! {
 pub struct Selection {
     // all items
     items: OrderedVec<MatchedItem>,
-    selected: BTreeMap<ItemIndex, Arc<ItemWrapper>>,
+    selected: BTreeMap<ItemIndex, Arc<dyn SkimItem>>,
 
     //
     // |>------ items[items.len()-1]
@@ -219,7 +219,7 @@ impl Selection {
         }
     }
 
-    pub fn act_select_item(&mut self, item_index: ItemIndex, item: Arc<ItemWrapper>) {
+    pub fn act_select_item(&mut self, item_index: ItemIndex, item: Arc<dyn SkimItem>) {
         if !self.multi_selection {
             return;
         }
@@ -250,10 +250,11 @@ impl Selection {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn get_selected_wrapped_items(&self) -> Vec<Arc<ItemWrapper>> {
+    pub fn get_selected_indices_and_items(&self) -> (Vec<usize>, Vec<Arc<dyn SkimItem>>) {
         // select the current one
         let select_cursor = !self.multi_selection || self.selected.is_empty();
-        let mut selected: Vec<Arc<ItemWrapper>> = self.selected.values().cloned().collect();
+        let mut selected: Vec<Arc<dyn SkimItem>> = self.selected.values().cloned().collect();
+        let mut item_indices: Vec<usize> = self.selected.keys().map(|(_run, idx)| *idx as usize).collect();
 
         if select_cursor && !self.items.is_empty() {
             let cursor = self.item_cursor + self.line_cursor;
@@ -262,18 +263,11 @@ impl Selection {
                 .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let item = current_item.item.clone();
+            item_indices.push(cursor);
             selected.push(item);
         }
 
-        selected.sort_by_key(|item| item.get_id());
-        selected
-    }
-
-    pub fn get_selected_items(&self) -> Vec<Arc<dyn SkimItem>> {
-        self.get_selected_wrapped_items()
-            .into_iter()
-            .map(|wrapped| wrapped.get_inner())
-            .collect()
+        (item_indices, selected)
     }
 
     pub fn get_num_of_selected_exclude_current(&self) -> usize {
@@ -292,7 +286,7 @@ impl Selection {
         self.multi_selection
     }
 
-    pub fn get_current_item(&self) -> Option<Arc<ItemWrapper>> {
+    pub fn get_current_item(&self) -> Option<Arc<dyn SkimItem>> {
         let item_idx = self.get_current_item_idx();
         self.items.get(item_idx).map(|item| item.item.clone())
     }

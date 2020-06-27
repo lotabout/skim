@@ -10,7 +10,6 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::os::unix::io::AsRawFd;
-use std::sync::atomic::AtomicU32;
 
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
@@ -454,7 +453,6 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
 
     //------------------------------------------------------------------------------
     // start
-    let item_index = AtomicU32::new(0);
     let components_to_stop = Arc::new(AtomicUsize::new(0));
     let collector_option = CollectorOption::with_options(&options);
 
@@ -467,8 +465,7 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
     let mut num_matched = 0;
     stream_of_item
         .into_iter()
-        .map(|item| ItemWrapper::new(item, (0, item_index.fetch_add(0, Ordering::SeqCst))))
-        .filter_map(|wrapped| engine.match_item(Arc::new(wrapped)))
+        .filter_map(|item| engine.match_item(item))
         .try_for_each(|matched| {
             num_matched += 1;
             if options.print_score {

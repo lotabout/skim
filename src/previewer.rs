@@ -1,12 +1,3 @@
-use crate::ansi::{ANSIParser, AnsiString};
-use crate::event::{Event, EventHandler, UpdateScreen};
-use crate::item::ItemWrapper;
-use crate::spinlock::SpinLock;
-use crate::util::{depends_on_items, inject_command, InjectContext};
-use crate::{ItemPreview, SkimItem};
-use derive_builder::Builder;
-use nix::libc;
-use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::env;
@@ -16,7 +7,17 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+
+use derive_builder::Builder;
+use nix::libc;
+use regex::Regex;
 use tuikit::prelude::{Event as TermEvent, *};
+
+use crate::ansi::{ANSIParser, AnsiString};
+use crate::event::{Event, EventHandler, UpdateScreen};
+use crate::spinlock::SpinLock;
+use crate::util::{depends_on_items, inject_command, InjectContext};
+use crate::{ItemPreview, SkimItem};
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -31,7 +32,8 @@ pub struct Previewer {
     vscroll_offset: usize,
     wrap: bool,
 
-    prev_item: Option<Arc<ItemWrapper>>,
+    prev_item: Option<Arc<dyn SkimItem>>,
+    prev_item_index: Option<usize>,
     prev_query: Option<String>,
     prev_cmd_query: Option<String>,
     prev_num_selected: usize,
@@ -67,6 +69,7 @@ impl Previewer {
             wrap: false,
 
             prev_item: None,
+            prev_item_index: None,
             prev_query: None,
             prev_cmd_query: None,
             prev_num_selected: 0,
@@ -89,21 +92,22 @@ impl Previewer {
 
     pub fn on_item_change(
         &mut self,
-        new_item: impl Into<Option<Arc<ItemWrapper>>>,
+        new_item_index: usize,
+        new_item: impl Into<Option<Arc<dyn SkimItem>>>,
         new_query: impl Into<Option<String>>,
         new_cmd_query: impl Into<Option<String>>,
         num_selected: usize,
-        get_selected_items: impl Fn() -> Vec<Arc<ItemWrapper>>, // lazy get
+        get_selected_items: impl Fn() -> (Vec<usize>, Vec<Arc<dyn SkimItem>>), // lazy get
     ) {
         let new_item = new_item.into();
         let new_query = new_query.into();
         let new_cmd_query = new_cmd_query.into();
 
-        let item_changed = match (self.prev_item.as_ref(), new_item.as_ref()) {
+        let item_changed = match (self.prev_item_index.as_ref(), new_item.as_ref()) {
             (None, None) => false,
             (None, Some(_)) => true,
             (Some(_), None) => true,
-            (Some(prev), Some(cur)) => prev.get_id() != cur.get_id(),
+            (Some(&prev_index), Some(_)) => prev_index == new_item_index,
         };
 
         let query_changed = match (self.prev_query.as_ref(), new_query.as_ref()) {
@@ -127,6 +131,7 @@ impl Previewer {
         }
 
         self.prev_item = new_item.clone();
+        self.prev_item_index = Some(new_item_index);
         self.prev_query = new_query;
         self.prev_cmd_query = new_cmd_query;
         self.prev_num_selected = num_selected;
@@ -156,13 +161,12 @@ impl Previewer {
                     let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
                     let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
 
-                    let selections = get_selected_items();
+                    let (indices, selections) = get_selected_items();
                     let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
                     let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
-                    let indices: Vec<usize> = selections.iter().map(|x| x.get_index()).collect();
 
                     let context = InjectContext {
-                        current_index: item.get_index(),
+                        current_index: new_item_index,
                         delimiter: &self.delimiter,
                         current_selection: &current_selection,
                         selections: &selected_texts,

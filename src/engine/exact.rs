@@ -1,7 +1,6 @@
 use crate::engine::util::{contains_upper, regex_match};
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
-use crate::SkimItem;
-use crate::{CaseMatching, MatchEngine};
+use crate::item::{MatchedItem, MatchedRange, Rank};
+use crate::{CaseMatching, MatchEngine, SkimItem};
 use regex::{escape, Regex};
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
@@ -66,7 +65,7 @@ impl ExactEngine {
 }
 
 impl MatchEngine for ExactEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges().as_ref() {
             if self.query_regex.is_none() {

@@ -5,7 +5,7 @@ use fuzzy_matcher::clangd::ClangdMatcher;
 use fuzzy_matcher::skim::{SkimMatcher, SkimMatcherV2};
 use fuzzy_matcher::FuzzyMatcher;
 
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
+use crate::item::{MatchedItem, MatchedRange, Rank};
 use crate::SkimItem;
 use crate::{CaseMatching, MatchEngine};
 
@@ -113,7 +113,7 @@ impl FuzzyEngine {
 }
 
 impl MatchEngine for FuzzyEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         // iterate over all matching fields:
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges().as_ref() {

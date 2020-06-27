@@ -15,7 +15,7 @@ use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, Rege
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{ItemPool, ItemWrapper};
+use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -352,27 +352,27 @@ impl Model {
     }
 
     fn act_execute_silent(&mut self, cmd: &str) {
-        let item = self.selection.get_current_item();
-        if depends_on_items(cmd) && item.is_none() {
+        let current_index = self.selection.get_current_item_idx();
+        let current_item = self.selection.get_current_item();
+        if depends_on_items(cmd) && current_item.is_none() {
             debug!("act_execute_silent: command refers to items and there is no item for now");
             debug!("command to execute: [{}]", cmd);
             return;
         }
 
-        let current_selection = item
+        let current_selection = current_item
             .as_ref()
             .map(|item| item.output())
             .unwrap_or_else(|| Cow::Borrowed(""));
         let query = self.query.get_fz_query();
         let cmd_query = self.query.get_cmd_query();
 
-        let selections = self.selection.get_selected_wrapped_items();
+        let (indices, selections) = self.selection.get_selected_indices_and_items();
         let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
         let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
-        let indices: Vec<usize> = selections.iter().map(|x| x.get_index()).collect();
 
         let context = InjectContext {
-            current_index: item.as_ref().map(|x| x.get_index()).unwrap_or(0),
+            current_index,
             delimiter: &self.delimiter,
             current_selection: &current_selection,
             selections: &selected_texts,
@@ -395,10 +395,7 @@ impl Model {
 
         let item_index = (std::u32::MAX, self.next_idx_to_append);
 
-        let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(
-            Arc::new(query),
-            (std::u32::MAX, self.next_idx_to_append),
-        ));
+        let item: Arc<dyn SkimItem> = Arc::new(query);
 
         self.next_idx_to_append += 1;
 
@@ -475,7 +472,7 @@ impl Model {
                         accept_key,
                         query: self.query.get_fz_query(),
                         cmd: self.query.get_cmd_query(),
-                        selected_items: self.selection.get_selected_items(),
+                        selected_items: self.selection.get_selected_indices_and_items().1,
                     });
                 }
 
@@ -555,11 +552,13 @@ impl Model {
 
             // re-draw
             if !self.preview_hidden {
+                let item_index = self.selection.get_current_item_idx();
                 let item = self.selection.get_current_item();
                 if let Some(previewer) = self.previewer.as_mut() {
                     let selections = &self.selection;
-                    let get_selected_items = || selections.get_selected_wrapped_items();
+                    let get_selected_items = || selections.get_selected_indices_and_items();
                     previewer.on_item_change(
+                        item_index,
                         item,
                         env.query.to_string(),
                         env.cmd_query.to_string(),

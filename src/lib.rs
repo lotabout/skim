@@ -16,7 +16,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 pub use crate::ansi::AnsiString;
 pub use crate::engine::fuzzy::FuzzyAlgorithm;
 use crate::event::{EventReceiver, EventSender};
-pub use crate::item::{ItemWrapper, MatchedItem};
+pub use crate::item::MatchedItem;
 use crate::model::Model;
 pub use crate::options::SkimOptions;
 pub use crate::output::SkimOutput;
@@ -174,7 +174,7 @@ impl Default for CaseMatching {
 }
 
 pub trait MatchEngine: Sync + Send + Display {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem>;
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem>;
 }
 
 pub trait MatchEngineFactory {

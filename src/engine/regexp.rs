@@ -4,7 +4,7 @@ use std::sync::Arc;
 use regex::Regex;
 
 use crate::engine::util::regex_match;
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
+use crate::item::{MatchedItem, MatchedRange, Rank};
 use crate::SkimItem;
 use crate::{CaseMatching, MatchEngine};
 
@@ -38,7 +38,7 @@ impl RegexEngine {
 }
 
 impl MatchEngine for RegexEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         let mut matched_result = None;
         for &(start, end) in item.get_matching_ranges().as_ref() {
             if self.query_regex.is_none() {
