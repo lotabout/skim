@@ -116,10 +116,12 @@ impl MatchEngine for FuzzyEngine {
     fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         // iterate over all matching fields:
         let mut matched_result = None;
-        for &(start, end) in item.get_matching_ranges().as_ref() {
+        let item_text = item.text();
+        let default_range = [(0, item_text.len())];
+        for &(start, end) in item.get_matching_ranges().unwrap_or(&default_range) {
             matched_result = self.fuzzy_match(&item.text()[start..end], &self.query).map(|(s, vec)| {
                 if start != 0 {
-                    let start_char = &item.text()[..start].chars().count();
+                    let start_char = &item_text[..start].chars().count();
                     (s, vec.iter().map(|x| x + start_char).collect())
                 } else {
                     (s, vec)

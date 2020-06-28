@@ -35,7 +35,7 @@ pub struct DefaultSkimItem {
     /// The text that will be shown on screen and matched.
     text: AnsiString<'static>,
 
-    matching_ranges: Vec<(usize, usize)>,
+    matching_ranges: Option<Vec<(usize, usize)>>,
 }
 
 impl<'a> DefaultSkimItem {
@@ -77,9 +77,9 @@ impl<'a> DefaultSkimItem {
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
-            parse_matching_fields(delimiter, text.stripped(), matching_fields)
+            Some(parse_matching_fields(delimiter, text.stripped(), matching_fields))
         } else {
-            vec![(0, text.stripped().len())]
+            None
         };
 
         DefaultSkimItem {
@@ -115,8 +115,8 @@ impl SkimItem for DefaultSkimItem {
         }
     }
 
-    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
-        Cow::Borrowed(&self.matching_ranges)
+    fn get_matching_ranges(&self) -> Option<&[(usize, usize)]> {
+        self.matching_ranges.as_ref().map(|vec| vec as &[(usize, usize)])
     }
 }
 
