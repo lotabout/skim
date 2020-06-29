@@ -131,8 +131,11 @@ pub fn read_and_collect_from_command(
 
         let opt = option;
         // set the proper run number
+
+        let mut buffer = Vec::with_capacity(READ_BUFFER_SIZE);
         loop {
-            let mut buffer = Vec::with_capacity(READ_BUFFER_SIZE);
+            buffer.clear();
+
             // start reading
             match source.read_until(opt.line_ending, &mut buffer) {
                 Ok(n) => {
