@@ -35,7 +35,8 @@ pub struct DefaultSkimItem {
     /// The text that will be shown on screen and matched.
     text: AnsiString<'static>,
 
-    matching_ranges: Option<Vec<(usize, usize)>>,
+    // Option<Box<_>> to reduce memory use in normal cases where no matching ranges are specified.
+    matching_ranges: Option<Box<Vec<(usize, usize)>>>,
 }
 
 impl<'a> DefaultSkimItem {
@@ -77,7 +78,11 @@ impl<'a> DefaultSkimItem {
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
-            Some(parse_matching_fields(delimiter, text.stripped(), matching_fields))
+            Some(Box::new(parse_matching_fields(
+                delimiter,
+                text.stripped(),
+                matching_fields,
+            )))
         } else {
             None
         };
