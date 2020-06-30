@@ -106,7 +106,7 @@ impl SkimItem for DefaultSkimItem {
             if self.text.has_attrs() {
                 let mut ansi_parser: ANSIParser = Default::default();
                 let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
-                Cow::Owned(text.into_inner().unwrap())
+                text.into_inner()
             } else {
                 Cow::Borrowed(self.orig_text.as_ref().unwrap())
             }

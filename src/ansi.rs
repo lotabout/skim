@@ -15,7 +15,7 @@ pub struct ANSIParser {
     last_attr: Attr,
 
     stripped: String,
-    fragments: Vec<(Attr, Cow<'static, str>)>,
+    fragments: Vec<(Attr, (u32, u32))>,
 }
 
 impl Default for ANSIParser {
@@ -181,8 +181,11 @@ impl ANSIParser {
         }
 
         let string = mem::replace(&mut self.partial_str, String::new());
+        self.fragments.push((
+            self.last_attr,
+            (self.stripped.len() as u32, (self.stripped.len() + string.len()) as u32),
+        ));
         self.stripped.push_str(&string);
-        self.fragments.push((self.last_attr, Cow::Owned(string)));
     }
 
     // accept a new attr
@@ -214,36 +217,38 @@ impl ANSIParser {
 ///
 /// It is internally represented as Vec<(attr, string)>
 pub struct AnsiString<'a> {
-    stripped: Option<String>,
-    fragments: Vec<(Attr, Cow<'a, str>)>,
+    stripped: Cow<'a, str>,
+    // attr: start, end
+    fragments: Vec<(Attr, (u32, u32))>,
 }
 
 impl<'a> AnsiString<'a> {
     pub fn new_empty() -> Self {
         Self {
-            stripped: None,
+            stripped: Cow::Borrowed(""),
             fragments: Vec::new(),
         }
     }
 
     fn new_string(string: String) -> Self {
+        let string_len = string.len() as u32;
         Self {
-            stripped: None,
-            fragments: vec![(Attr::default(), Cow::Owned(string))],
+            stripped: Cow::Owned(string),
+            fragments: vec![(Attr::default(), (0, string_len))],
         }
     }
 
     fn new_str(str_ref: &'a str) -> Self {
-        let stripped: Cow<'a, str> = Cow::Borrowed(str_ref);
+        let string_len = str_ref.len() as u32;
         Self {
-            stripped: None,
-            fragments: vec![(Attr::default(), stripped.clone())],
+            stripped: Cow::Borrowed(str_ref),
+            fragments: vec![(Attr::default(), (0, string_len))],
         }
     }
 
-    fn new(stripped: String, fragments: Vec<(Attr, Cow<'static, str>)>) -> Self {
+    fn new(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         Self {
-            stripped: Some(stripped),
+            stripped: Cow::Owned(stripped),
             fragments,
         }
     }
@@ -258,12 +263,12 @@ impl<'a> AnsiString<'a> {
     }
 
     #[inline]
-    pub fn into_inner(self) -> Option<String> {
+    pub fn into_inner(self) -> Cow<'a, str> {
         self.stripped
     }
 
     pub fn iter(&self) -> AnsiStringIterator {
-        AnsiStringIterator::new(&self.fragments)
+        AnsiStringIterator::new(&self.stripped, &self.fragments)
     }
 
     pub fn has_attrs(&self) -> bool {
@@ -273,11 +278,7 @@ impl<'a> AnsiString<'a> {
 
     #[inline]
     pub fn stripped(&self) -> &str {
-        self.stripped
-            .as_ref()
-            .map(|x| x.as_str())
-            .or_else(|| self.fragments.get(0).map(|(_attr, cow)| cow.as_ref()))
-            .unwrap()
+        &self.stripped
     }
 }
 
@@ -295,19 +296,17 @@ impl From<String> for AnsiString<'static> {
 
 /// An iterator over all the (char, attr) characters.
 pub struct AnsiStringIterator<'a> {
-    fragments: &'a [(Attr, Cow<'a, str>)],
+    fragments: &'a [(Attr, (u32, u32))],
     fragment_idx: usize,
-    attr: Attr,
-    chars_iter: Option<std::str::Chars<'a>>,
+    chars_iter: std::str::CharIndices<'a>,
 }
 
 impl<'a> AnsiStringIterator<'a> {
-    pub fn new(fragments: &'a [(Attr, Cow<'a, str>)]) -> Self {
+    pub fn new(stripped: &'a str, fragments: &'a [(Attr, (u32, u32))]) -> Self {
         Self {
             fragments,
             fragment_idx: 0,
-            attr: Attr::default(),
-            chars_iter: None,
+            chars_iter: stripped.char_indices(),
         }
     }
 }
@@ -316,21 +315,26 @@ impl<'a> Iterator for AnsiStringIterator<'a> {
     type Item = (char, Attr);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ch = self.chars_iter.as_mut().and_then(|iter| iter.next());
-        match ch {
-            Some(c) => Some((c, self.attr)),
-            None => {
-                if self.fragment_idx >= self.fragments.len() {
-                    None
-                } else {
-                    // try next fragment
-                    let (attr, string) = &self.fragments[self.fragment_idx];
-                    self.attr = *attr;
-                    self.chars_iter.replace(string.chars());
-                    self.fragment_idx += 1;
-                    self.next()
+        match self.chars_iter.next() {
+            Some((byte_idx, char)) => {
+                // update fragment_idx
+                loop {
+                    if self.fragment_idx >= self.fragments.len() {
+                        return None;
+                    }
+
+                    let (_attr, (_start, end)) = self.fragments[self.fragment_idx];
+                    if byte_idx < (end as usize) {
+                        break;
+                    } else {
+                        self.fragment_idx += 1;
+                    }
                 }
+
+                let (attr, _) = self.fragments[self.fragment_idx];
+                Some((char, attr))
             }
+            None => None,
         }
     }
 }
@@ -367,7 +371,7 @@ mod tests {
         assert_eq!(Some(('b', Attr::default())), it.next());
         assert_eq!(None, it.next());
 
-        assert_eq!("ab", ansistring.into_inner().unwrap())
+        assert_eq!("ab", ansistring.into_inner())
     }
 
     #[test]
