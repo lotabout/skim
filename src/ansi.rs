@@ -219,37 +219,36 @@ impl ANSIParser {
 pub struct AnsiString<'a> {
     stripped: Cow<'a, str>,
     // attr: start, end
-    fragments: Vec<(Attr, (u32, u32))>,
+    fragments: Option<Vec<(Attr, (u32, u32))>>,
 }
 
 impl<'a> AnsiString<'a> {
     pub fn new_empty() -> Self {
         Self {
             stripped: Cow::Borrowed(""),
-            fragments: Vec::new(),
+            fragments: None,
         }
     }
 
     fn new_string(string: String) -> Self {
-        let string_len = string.len() as u32;
         Self {
             stripped: Cow::Owned(string),
-            fragments: vec![(Attr::default(), (0, string_len))],
+            fragments: None,
         }
     }
 
     fn new_str(str_ref: &'a str) -> Self {
-        let string_len = str_ref.len() as u32;
         Self {
             stripped: Cow::Borrowed(str_ref),
-            fragments: vec![(Attr::default(), (0, string_len))],
+            fragments: None,
         }
     }
 
     fn new(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
+        let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
             stripped: Cow::Owned(stripped),
-            fragments,
+            fragments: if fragments_empty { None } else { Some(fragments) },
         }
     }
 
@@ -259,7 +258,7 @@ impl<'a> AnsiString<'a> {
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.fragments.is_empty()
+        self.stripped.is_empty()
     }
 
     #[inline]
@@ -267,13 +266,19 @@ impl<'a> AnsiString<'a> {
         self.stripped
     }
 
-    pub fn iter(&self) -> AnsiStringIterator {
-        AnsiStringIterator::new(&self.stripped, &self.fragments)
+    pub fn iter(&'a self) -> Box<dyn Iterator<Item = (char, Attr)> + 'a> {
+        if self.fragments.is_none() {
+            return Box::new(self.stripped.chars().map(|c| (c, Attr::default())));
+        }
+
+        Box::new(AnsiStringIterator::new(
+            &self.stripped,
+            self.fragments.as_ref().unwrap(),
+        ))
     }
 
     pub fn has_attrs(&self) -> bool {
-        // more than 1 fragments or is not default attr
-        self.fragments.len() > 1 || (!self.fragments.is_empty() && self.fragments[0].0 != Attr::default())
+        self.fragments.is_some()
     }
 
     #[inline]
@@ -357,6 +362,7 @@ mod tests {
         assert_eq!(Some(('h', attr)), it.next());
         assert_eq!(Some(('i', attr)), it.next());
         assert_eq!(None, it.next());
+        assert_eq!(ansistring.stripped(), "hi");
     }
 
     #[test]
@@ -371,7 +377,7 @@ mod tests {
         assert_eq!(Some(('b', Attr::default())), it.next());
         assert_eq!(None, it.next());
 
-        assert_eq!("ab", ansistring.into_inner())
+        assert_eq!(ansistring.stripped(), "ab");
     }
 
     #[test]
@@ -388,12 +394,14 @@ mod tests {
         assert_eq!(Some(('h', attr)), it.next());
         assert_eq!(Some(('i', attr)), it.next());
         assert_eq!(None, it.next());
+        assert_eq!(ansistring.stripped(), "hi");
     }
 
     #[test]
     fn test_reset() {
         let input = "\x1B[35mA\x1B[mB";
         let ansistring = ANSIParser::default().parse_ansi(input);
-        assert_eq!(ansistring.fragments.len(), 2);
+        assert_eq!(ansistring.fragments.as_ref().map(|x| x.len()).unwrap(), 2);
+        assert_eq!(ansistring.stripped(), "AB");
     }
 }
