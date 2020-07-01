@@ -27,7 +27,8 @@ Usage: sk [options]
   Search
     --tac                reverse the order of search result
     --no-sort            Do not sort the result
-    -t, --tiebreak [score,index,begin,end,-score,...]
+    -t, --tiebreak [score,begin,end,-score,length...]
+
                          comma seperated criteria
     -n, --nth 1,2..5     specify the fields to be matched
     --with-nth 1,2..5    specify the fields to be transformed

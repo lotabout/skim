@@ -288,6 +288,8 @@ pub enum RankCriteria {
     NegScore,
     NegBegin,
     NegEnd,
+    Length,
+    NegLength,
 }
 
 pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
@@ -298,6 +300,8 @@ pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
         "-score" => Some(RankCriteria::NegScore),
         "-begin" => Some(RankCriteria::NegBegin),
         "-end" => Some(RankCriteria::NegEnd),
+        "length" => Some(RankCriteria::Length),
+        "-length" => Some(RankCriteria::NegLength),
         _ => None,
     }
 }
