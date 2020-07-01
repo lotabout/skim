@@ -314,6 +314,14 @@ impl EventHandler for Selection {
             EvActDeselectAll => {
                 self.act_deselect_all();
             }
+            EvActHalfPageDown(diff) => {
+                let height = 1 - (self.height.load(Ordering::Relaxed) as i32);
+                self.act_move_line_cursor(height * *diff / 2);
+            }
+            EvActHalfPageUp(diff) => {
+                let height = (self.height.load(Ordering::Relaxed) as i32) - 1;
+                self.act_move_line_cursor(height * *diff / 2);
+            }
             EvActPageDown(diff) => {
                 let height = 1 - (self.height.load(Ordering::Relaxed) as i32);
                 self.act_move_line_cursor(height * *diff);
