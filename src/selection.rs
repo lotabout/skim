@@ -566,14 +566,14 @@ fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<Match
                     if a.item.text().len() == b.item.text().len() {
                         continue;
                     } else {
-                        return a.item.text().len().cmp(&b.item.text().len())
+                        return a.item.text().len().cmp(&b.item.text().len());
                     }
                 }
                 RankCriteria::NegLength => {
                     if a.item.text().len() == b.item.text().len() {
                         continue;
                     } else {
-                        return b.item.text().len().cmp(&a.item.text().len())
+                        return b.item.text().len().cmp(&a.item.text().len());
                     }
                 }
             }

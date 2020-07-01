@@ -33,7 +33,6 @@ pub struct Previewer {
     wrap: bool,
 
     prev_item: Option<Arc<dyn SkimItem>>,
-    prev_item_index: Option<usize>,
     prev_query: Option<String>,
     prev_cmd_query: Option<String>,
     prev_num_selected: usize,
@@ -69,7 +68,6 @@ impl Previewer {
             wrap: false,
 
             prev_item: None,
-            prev_item_index: None,
             prev_query: None,
             prev_cmd_query: None,
             prev_num_selected: 0,
@@ -103,11 +101,11 @@ impl Previewer {
         let new_query = new_query.into();
         let new_cmd_query = new_cmd_query.into();
 
-        let item_changed = match (self.prev_item_index.as_ref(), new_item.as_ref()) {
+        let item_changed = match (self.prev_item.as_ref(), new_item.as_ref()) {
             (None, None) => false,
             (None, Some(_)) => true,
             (Some(_), None) => true,
-            (Some(&prev_index), Some(_)) => prev_index == new_item_index,
+            (Some(prev), Some(new)) => !Arc::ptr_eq(prev, new),
         };
 
         let query_changed = match (self.prev_query.as_ref(), new_query.as_ref()) {
@@ -131,7 +129,6 @@ impl Previewer {
         }
 
         self.prev_item = new_item.clone();
-        self.prev_item_index = Some(new_item_index);
         self.prev_query = new_query;
         self.prev_cmd_query = new_cmd_query;
         self.prev_num_selected = num_selected;
