@@ -378,7 +378,7 @@ First, add skim into your `Cargo.toml`:
 
 ```toml
 [dependencies]
-skim = "0.7.0"
+skim = "0.8.1"
 ```
 
 Then try to run this simple example:
@@ -408,7 +408,7 @@ pub fn main() {
         .unwrap_or_else(|| Vec::new());
 
     for item in selected_items.iter() {
-        print!("{}: {}{}", item.get_index(), item.get_output_text(), "\n");
+        print!("{}{}", item.output(), "\n");
     }
 }
 ```

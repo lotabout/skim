@@ -1,6 +1,8 @@
-#!/bin/zsh
-# completion.zsh
-# copied and modified from https://github.com/junegunn/fzf/blob/master/shell/completion.zsh
+#     ____      ____
+#    / __/___  / __/
+#   / /_/_  / / /_
+#  / __/ / /_/ __/
+# /_/   /___/_/-completion.zsh
 #
 # - $SKIM_TMUX               (default: 0)
 # - $SKIM_TMUX_HEIGHT        (default: '40%')
@@ -14,7 +16,7 @@ if ! declare -f _skim_compgen_path > /dev/null; then
   _skim_compgen_path() {
     echo "$1"
     command find -L "$1" \
-      -name .git -prune -o -name .svn -prune -o \( -type d -o -type f -o -type l \) \
+      -name .git -prune -o -name .hg -prune -o -name .svn -prune -o \( -type d -o -type f -o -type l \) \
       -a -not -path "$1" -print 2> /dev/null | sed 's@^\./@@'
   }
 fi
@@ -22,27 +24,47 @@ fi
 if ! declare -f _skim_compgen_dir > /dev/null; then
   _skim_compgen_dir() {
     command find -L "$1" \
-      -name .git -prune -o -name .svn -prune -o -type d \
+      -name .git -prune -o -name .hg -prune -o -name .svn -prune -o -type d \
       -a -not -path "$1" -print 2> /dev/null | sed 's@^\./@@'
   }
 fi
 
 ###########################################################
 
-__skimcmd_complete() {
-  [ -n "$TMUX_PANE" ] && [ "${SKIM_TMUX:-0}" != 0 ] && [ ${LINES:-40} -gt 15 ] &&
-    echo "sk-tmux -d${SKIM_TMUX_HEIGHT:-40%}" || echo "sk"
+__skim_comprun() {
+  if [[ "$(type _skim_comprun 2>&1)" =~ function ]]; then
+    _skim_comprun "$@"
+  elif [ -n "$TMUX_PANE" ] && [ "${SKIM_TMUX:-0}" != 0 ] && [ ${LINES:-40} -gt 15 ]; then
+    shift
+    sk-tmux -d "${SKIM_TMUX_HEIGHT:-40%}" "$@"
+  else
+    shift
+    sk "$@"
+  fi
+}
+
+# Extract the name of the command. e.g. foo=1 bar baz**<tab>
+__skim_extract_command() {
+  local token tokens
+  tokens=(${(z)1})
+  for token in $tokens; do
+    if [[ "$token" =~ [[:alnum:]] && ! "$token" =~ "=" ]]; then
+      echo "$token"
+      return
+    fi
+  done
+  echo "${tokens[1]}"
 }
 
 __skim_generic_path_completion() {
-  local base lbuf compgen skim_opts suffix tail skim dir leftover matches
+  local base lbuf cmd compgen skim_opts suffix tail dir leftover matches
   base=$1
   lbuf=$2
+  cmd=$(__skim_extract_command "$lbuf")
   compgen=$3
   skim_opts=$4
   suffix=$5
   tail=$6
-  skim="$(__skimcmd_complete)"
 
   setopt localoptions nonomatch
   eval "base=$base"
@@ -53,7 +75,7 @@ __skim_generic_path_completion() {
       leftover=${leftover/#\/}
       [ -z "$dir" ] && dir='.'
       [ "$dir" != "/" ] && dir="${dir/%\//}"
-      matches=$(eval "$compgen $(printf %q "$dir")" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS" ${=skim} ${=skim_opts} -q "$leftover" | while read item; do
+      matches=$(eval "$compgen $(printf %q "$dir")" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS" __skim_comprun "$cmd" ${(Q)${(Z+n+)skim_opts}} -q "$leftover" | while read item; do
         echo -n "${(q)item}$suffix "
       done)
       matches=${matches% }
@@ -85,17 +107,16 @@ _skim_feed_fifo() (
 )
 
 _skim_complete() {
-  local fifo skim_opts lbuf skim matches post
+  local fifo skim_opts lbuf cmd matches post
   fifo="${TMPDIR:-/tmp}/skim-complete-fifo-$$"
   skim_opts=$1
   lbuf=$2
+  cmd=$(__skim_extract_command "$lbuf")
   post="${funcstack[2]}_post"
   type $post > /dev/null 2>&1 || post=cat
 
-  skim="$(__skimcmd_complete)"
-
   _skim_feed_fifo "$fifo"
-  matches=$(cat "$fifo" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS" ${=skim} ${=skim_opts} -q "${(Q)prefix}" | $post | tr '\n' ' ')
+  matches=$(cat "$fifo" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS" __skim_comprun "$cmd" ${(Q)${(Z+n+)skim_opts}} -q "${(Q)prefix}" | $post | tr '\n' ' ')
   if [ -n "$matches" ]; then
     LBUFFER="$lbuf$matches"
   fi
@@ -113,7 +134,7 @@ _skim_complete_telnet() {
 _skim_complete_ssh() {
   _skim_complete '-m' "$@" < <(
     setopt localoptions nonomatch
-    command cat <(cat ~/.ssh/config ~/.ssh/config.d/* /etc/ssh/ssh_config 2> /dev/null | command grep -i '^host ' | command grep -v '[*?]' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}') \
+    command cat <(cat ~/.ssh/config ~/.ssh/config.d/* /etc/ssh/ssh_config 2> /dev/null | command grep -i '^\s*host\(name\)\? ' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}' | command grep -v '[*?]') \
         <(command grep -oE '^[[a-z0-9.,:-]+' ~/.ssh/known_hosts | tr ',' '\n' | tr -d '[' | awk '{ print $1 " " $1 }') \
         <(command grep -v '^\s*\(#\|$\)' /etc/hosts | command grep -Fv '0.0.0.0') |
         awk '{if (length($2) > 0) {print $2}}' | sort -u
@@ -139,7 +160,7 @@ _skim_complete_unalias() {
 }
 
 skim-completion() {
-  local tokens cmd prefix trigger tail skim matches lbuf d_cmds
+  local tokens cmd prefix trigger tail matches lbuf d_cmds
   setopt localoptions noshwordsplit noksh_arrays noposixbuiltins
 
   # http://zsh.sourceforge.net/FAQ/zshfaq03.html
@@ -150,17 +171,22 @@ skim-completion() {
     return
   fi
 
-  cmd=${tokens[1]}
+  cmd=$(__skim_extract_command "$LBUFFER")
 
   # Explicitly allow for empty trigger.
   trigger=${SKIM_COMPLETION_TRIGGER-'**'}
   [ -z "$trigger" -a ${LBUFFER[-1]} = ' ' ] && tokens+=("")
 
+  # When the trigger starts with ';', it becomes a separate token
+  if [[ ${LBUFFER} = *"${tokens[-2]}${tokens[-1]}" ]]; then
+    tokens[-2]="${tokens[-2]}${tokens[-1]}"
+    tokens=(${tokens[0,-2]})
+  fi
+
   tail=${LBUFFER:$(( ${#LBUFFER} - ${#trigger} ))}
   # Kill completion (do not require trigger sequence)
   if [ $cmd = kill -a ${LBUFFER[-1]} = ' ' ]; then
-    skim="$(__skimcmd_complete)"
-    matches=$(command ps -ef | sed 1d | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-50%} --min-height 15 --reverse $SKIM_DEFAULT_OPTIONS --preview 'echo {}' --preview-window down:3:wrap $SKIM_COMPLETION_OPTS" ${=skim} -m | awk '{print $2}' | tr '\n' ' ')
+    matches=$(command ps -ef | sed 1d | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-50%} --min-height 15 --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS --preview 'echo {}' --preview-window down:3:wrap" __skim_comprun "$cmd" -m | awk '{print $2}' | tr '\n' ' ')
     if [ -n "$matches" ]; then
       LBUFFER="$LBUFFER$matches"
     fi
@@ -173,7 +199,7 @@ skim-completion() {
     [ -z "${tokens[-1]}" ] && lbuf=$LBUFFER        || lbuf=${LBUFFER:0:-${#tokens[-1]}}
 
     if eval "type _skim_complete_${cmd} > /dev/null"; then
-      eval "prefix=\"$prefix\" _skim_complete_${cmd} \"$lbuf\""
+      prefix="$prefix" eval _skim_complete_${cmd} ${(q)lbuf}
     elif [ ${d_cmds[(i)$cmd]} -le ${#d_cmds} ]; then
       _skim_dir_completion "$prefix" "$lbuf"
     else

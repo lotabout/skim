@@ -69,7 +69,11 @@ class Alt(Key):
 
 class TmuxOutput(list):
     """A list that contains the output of tmux"""
-    RE = re.compile(r'(?:^|[^<]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?$')
+    # match the status line
+    # normal:  `| 10/219 [2]               8.`
+    # inline:  `> query < 10/219 [2]       8.`
+    # preview: `> query < 10/219 [2]       8.│...`
+    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?(?: │)? *$')
     def __init__(self, iteratable=[]):
         super(TmuxOutput, self).__init__(iteratable)
         self._counts = None
@@ -405,6 +409,11 @@ class TestSkim(TestBase):
         lines = self.readonce().strip()
         self.assertEqual(lines, 'a\0b\0')
 
+        self.tmux.send_keys(f"echo -e 'a\\naa\\nb' | {self.sk('-f a', '--print0')}", Key('Enter'))
+
+        lines = self.readonce().strip()
+        self.assertEqual(lines, 'a\0aa\0')
+
     def test_with_nth_preview(self):
         sk_command = self.sk("--delimiter ','", '--with-nth 2..', '--preview', "'echo X{1}Y'")
         self.tmux.send_keys("echo -e 'field1,field2,field3,field4' |" + sk_command, Key('Enter'))
@@ -614,7 +623,6 @@ class TestSkim(TestBase):
             '--header=STR',
             '--header-lines=N',
             '--no-bold',
-            '--history=FILE',
             '--history-size=10',
             '--sync',
             '--no-sort',
@@ -777,6 +785,108 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.send_keys(Key("'abc"))
         self.tmux.until(lambda lines: lines.ready_with_matches(0))
+
+    def test_query_history(self):
+        """query history should work"""
+
+        history_file = f'{self.tempname()}.history'
+
+        self.tmux.send_keys(f"echo -e 'a\nb\nc' > {history_file}", Key('Enter'))
+        self.tmux.send_keys(f"echo -e 'a\nb\nc' | {self.sk('--history', history_file)}", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(3))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> c'))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> b'))
+        self.tmux.send_keys('b')
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.until(lambda lines: lines[-1].startswith('> bb'))
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('> c'))
+
+        self.tmux.send_keys('d')
+        self.tmux.until(lambda lines: lines[-1].startswith('> cd'))
+        self.tmux.send_keys(Key('Enter'))
+
+        with open(history_file) as fp:
+            self.assertEqual('a\nb\nc\ncd', fp.read())
+
+    def test_cmd_history(self):
+        """query history should work"""
+
+        history_file = f'{self.tempname()}.history'
+
+        self.tmux.send_keys(f"echo -e 'a\nb\nc' > {history_file}", Key('Enter'))
+        self.tmux.send_keys(f"""{self.sk("-i -c 'echo {}'", '--cmd-history', history_file)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> c'))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> b'))
+        self.tmux.send_keys('b')
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.send_keys(Ctrl('p'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> a'))
+
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> bb'))
+        self.tmux.send_keys(Ctrl('n'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-1].startswith('c> c'))
+
+        self.tmux.send_keys('d')
+        self.tmux.until(lambda lines: lines[-1].startswith('c> cd'))
+        self.tmux.send_keys(Key('Enter'))
+
+        with open(history_file) as fp:
+            self.assertEqual('a\nb\nc\ncd', fp.read())
+
+    def test_execute_with_zero_result_ref(self):
+        """execute should not panic with zero results #276"""
+        self.tmux.send_keys(f"""echo -n "" | {self.sk("--bind 'enter:execute(less {})'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(Key('q'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.until(lambda lines: lines[-1].startswith('> q')) # less is not executed at all
+        self.tmux.send_keys(Ctrl('g'))
+
+    def test_execute_with_zero_result_no_ref(self):
+        """execute should not panic with zero results #276"""
+        self.tmux.send_keys(f"""echo -n "" | {self.sk("--bind 'enter:execute(less)'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.send_keys(Key('q'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(0))
+        self.tmux.send_keys(Ctrl('g'))
+
+    def test_if_non_matched(self):
+        """commands only effect if no item is matched"""
+        self.tmux.send_keys(f"""echo "a\nb" | {self.sk("--bind 'enter:if-non-matched(backward-delete-char)'", "-q ab")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.send_keys(Key('Enter')) # not triggered anymore
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+
+    def test_nul_in_execute(self):
+        """NUL should work in preview command see #278"""
+        self.tmux.send_keys(f"""echo -ne 'a\\0b' | {self.sk("--preview='echo -en {} | xxd'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.until(lambda lines: lines.any_include('6100 62'))
 
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1

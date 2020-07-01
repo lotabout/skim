@@ -1,21 +1,19 @@
 extern crate clap;
 extern crate env_logger;
+#[macro_use]
 extern crate log;
 extern crate shlex;
 extern crate skim;
 extern crate time;
 
+use std::env;
+use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::os::unix::io::AsRawFd;
+
 use clap::{App, Arg, ArgMatches};
 use nix::unistd::isatty;
-use skim::{
-    read_and_collect_from_command, CaseMatching, CollectorInput, CollectorOption, FuzzyAlgorithm, Skim, SkimOptions,
-    SkimOptionsBuilder,
-};
-use std::env;
-use std::io::BufReader;
-use std::os::unix::io::AsRawFd;
-use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
+use skim::prelude::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -27,8 +25,10 @@ Usage: sk [options]
     --version            print out the current version of skim
 
   Search
-    --tac                reverse the order of input
-    -t, --tiebreak [score,index,begin,end,length,-score,...]
+    --tac                reverse the order of search result
+    --no-sort            Do not sort the result
+    -t, --tiebreak [score,begin,end,-score,length...]
+
                          comma seperated criteria
     -n, --nth 1,2..5     specify the fields to be matched
     --with-nth 1,2..5    specify the fields to be transformed
@@ -71,6 +71,12 @@ Usage: sk [options]
     --header=STR         Display STR next to info
     --header-lines=N     The first N lines of the input are treated as header
 
+  History
+    --history=FILE       History file
+    --history-size=N     Maximum number of query history entries (default: 1000)
+    --cmd-history=FILE   command History file
+    --cmd-history-size=N Maximum number of command history entries (default: 1000)
+
   Preview
     --preview=COMMAND    command to preview current highlighted line ({})
                          We can specify the fields. e.g. ({1}, {..3}, {0..})
@@ -106,51 +112,39 @@ Usage: sk [options]
     --history=FILE
     --history-size=N
     --sync
-    --no-sort
     --select-1
     --exit-0
 ";
 
+const DEFAULT_HISTORY_SIZE: usize = 1000;
+
+//------------------------------------------------------------------------------
 fn main() {
-    use env_logger::fmt::Formatter;
-    use env_logger::Builder;
-    use log::{LevelFilter, Record};
-    use std::io::Write;
+    env_logger::init();
 
-    let format = |buf: &mut Formatter, record: &Record| {
-        let t = time::now();
-        writeln!(
-            buf,
-            "{},{:03} - {} - {}",
-            time::strftime("%Y-%m-%d %H:%M:%S", &t).expect("main: time format error"),
-            t.tm_nsec / 1_000_000,
-            record.level(),
-            record.args()
-        )
-    };
-
-    let mut builder = Builder::new();
-    builder.format(format).filter(None, LevelFilter::Info);
-
-    if env::var("RUST_LOG").is_ok() {
-        builder.parse_filters(&env::var("RUST_LOG").unwrap());
+    match real_main() {
+        Ok(exit_code) => std::process::exit(exit_code),
+        Err(err) => {
+            // if downstream pipe is closed, exit silently, see PR#279
+            if err.kind() == std::io::ErrorKind::BrokenPipe {
+                std::process::exit(0)
+            }
+            std::process::exit(2)
+        }
     }
-
-    builder.try_init().expect("failed to initialize logger builder");
-
-    let exit_code = real_main();
-    std::process::exit(exit_code);
 }
 
 #[rustfmt::skip]
-fn real_main() -> i32 {
+fn real_main() -> Result<i32, std::io::Error> {
+    let mut stdout = std::io::stdout();
+
     let mut args = Vec::new();
 
     args.push(env::args().next().expect("there should be at least one arg: the application name"));
     args.extend(env::var("SKIM_DEFAULT_OPTIONS")
-                .ok()
-                .and_then(|val| shlex::split(&val))
-                .unwrap_or_default());
+        .ok()
+        .and_then(|val| shlex::split(&val))
+        .unwrap_or_default());
     for arg in env::args().skip(1) {
         args.push(arg);
     }
@@ -159,7 +153,7 @@ fn real_main() -> i32 {
     //------------------------------------------------------------------------------
     // parse options
     let opts = App::new("sk")
-        .author("Jinzhou Zhang<lotabout@gmail.com")
+        .author("Jinzhou Zhang<lotabout@gmail.com>")
         .arg(Arg::with_name("help").long("help").short("h"))
         .arg(Arg::with_name("version").long("version").short("v"))
         .arg(Arg::with_name("bind").long("bind").short("b").multiple(true).takes_value(true))
@@ -205,8 +199,10 @@ fn real_main() -> i32 {
         .arg(Arg::with_name("header-lines").long("header-lines").multiple(true).takes_value(true).default_value("0"))
         .arg(Arg::with_name("tabstop").long("tabstop").multiple(true).takes_value(true).default_value("8"))
         .arg(Arg::with_name("no-bold").long("no-bold").multiple(true))
-        .arg(Arg::with_name("history").long("history").multiple(true).takes_value(true).default_value(""))
-        .arg(Arg::with_name("history-size").long("history-size").multiple(true).takes_value(true).default_value("500"))
+        .arg(Arg::with_name("history").long("history").multiple(true).takes_value(true))
+        .arg(Arg::with_name("cmd-history").long("cmd-history").multiple(true).takes_value(true))
+        .arg(Arg::with_name("history-size").long("history-size").multiple(true).takes_value(true).default_value("1000"))
+        .arg(Arg::with_name("cmd-history-size").long("cmd-history-size").multiple(true).takes_value(true).default_value("1000"))
         .arg(Arg::with_name("print-query").long("print-query").multiple(true))
         .arg(Arg::with_name("print-cmd").long("print-cmd").multiple(true))
         .arg(Arg::with_name("print-score").long("print-score").multiple(true))
@@ -222,17 +218,38 @@ fn real_main() -> i32 {
         .get_matches_from(args);
 
     if opts.is_present("help") {
-        print!("{}", USAGE);
-        return 0;
+        write!(stdout, "{}", USAGE)?;
+        return Ok(0);
     }
 
     if opts.is_present("version") {
-        println!("{}", VERSION);
-        return 0;
+        writeln!(stdout, "{}", VERSION)?;
+        return Ok(0);
     }
 
-    let options = parse_options(&opts);
+    //------------------------------------------------------------------------------
+    // read in the history file
+    let fz_query_histories = opts.values_of("history").and_then(|vals| vals.last());
+    let cmd_query_histories = opts.values_of("cmd-history").and_then(|vals| vals.last());
+    debug!("query_history_file: {:?}", fz_query_histories);
+    debug!("cmd_history_file: {:?}", cmd_query_histories);
+    let query_history = fz_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+    let cmd_history = cmd_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+    debug!("query_history: {:?}", query_history);
+    debug!("cmd_history: {:?}", query_history);
 
+    let mut options = parse_options(&opts);
+    if fz_query_histories.is_some() || cmd_query_histories.is_some() {
+        options.query_history = &query_history;
+        options.cmd_history = &cmd_history;
+        // bind ctrl-n and ctrl-p to handle history
+        options.bind.insert(0, "ctrl-p:previous-history,ctrl-n:next-history");
+    }
+
+    let options = options;
+
+    //------------------------------------------------------------------------------
+    // read from pipe or command
     let stdin = std::io::stdin();
     let components_to_stop = Arc::new(AtomicUsize::new(0));
     let rx_item = match isatty(stdin.as_raw_fd()) {
@@ -240,41 +257,62 @@ fn real_main() -> i32 {
             let collector_option = CollectorOption::with_options(&options);
             let (rx_item, _) = read_and_collect_from_command(components_to_stop, CollectorInput::Pipe(Box::new(BufReader::new(stdin))), collector_option);
             Some(rx_item)
-        },
+        }
         Ok(true) | Err(_) => None,
     };
 
+    //------------------------------------------------------------------------------
+    // filter mode
     if opts.is_present("filter") {
-        return Skim::filter(&options, rx_item);
+        return filter(&options, rx_item);
     }
 
-    let output_ending = if options.print0 {"\0"} else {"\n"};
+    //------------------------------------------------------------------------------
+    let output_ending = if options.print0 { "\0" } else { "\n" };
 
     let output = Skim::run_with(&options, rx_item);
     if output.is_none() {
-        return 130;
+        return Ok(130);
     }
 
+    //------------------------------------------------------------------------------
+    // output
     let output = output.unwrap();
 
     // output query
     if options.print_query {
-        print!("{}{}", output.query, output_ending);
+        write!(stdout, "{}{}", output.query, output_ending)?;
     }
 
     if options.print_cmd {
-        print!("{}{}", output.cmd, output_ending);
+        write!(stdout, "{}{}", output.cmd, output_ending)?;
     }
 
     if let Some(key) = output.accept_key {
-        print!("{}{}", key, output_ending);
+        write!(stdout, "{}{}", key, output_ending)?;
     }
 
     for item in output.selected_items.iter() {
-        print!("{}{}", item.output(), output_ending);
+        write!(stdout, "{}{}", item.output(), output_ending)?;
     }
 
-    if output.selected_items.is_empty() {1} else {0}
+    //------------------------------------------------------------------------------
+    // write the history with latest item
+    if let Some(file) = fz_query_histories {
+        let limit = opts.values_of("history-size").and_then(|vals| vals.last())
+            .and_then(|size| size.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_HISTORY_SIZE);
+        write_history_to_file(&query_history, &output.query, limit, file)?;
+    }
+
+    if let Some(file) = cmd_query_histories {
+        let limit = opts.values_of("cmd-history-size").and_then(|vals| vals.last())
+            .and_then(|size| size.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_HISTORY_SIZE);
+        write_history_to_file(&cmd_history, &output.cmd, limit, file)?;
+    }
+
+    Ok(if output.selected_items.is_empty() { 1 } else { 0 })
 }
 
 fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
@@ -321,6 +359,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
         .tiebreak(options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")))
         .tac(options.is_present("tac"))
+        .nosort(options.is_present("no-sort"))
         .exact(options.is_present("exact"))
         .regex(options.is_present("regex"))
         .inline_info(options.is_present("inline-info"))
@@ -344,4 +383,104 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         })
         .build()
         .unwrap()
+}
+
+fn read_file_lines(filename: &str) -> Result<Vec<String>, std::io::Error> {
+    let file = File::open(filename)?;
+    let ret = BufReader::new(file).lines().collect();
+    debug!("file content: {:?}", ret);
+    ret
+}
+
+fn write_history_to_file(
+    orig_history: &[String],
+    latest: &str,
+    limit: usize,
+    filename: &str,
+) -> Result<(), std::io::Error> {
+    if orig_history.last().map(|l| l.as_str()) == Some(latest) {
+        // no point of having at the end of the history 5x the same command...
+        return Ok(());
+    }
+    let additional_lines = if latest.trim().is_empty() { 0 } else { 1 };
+    let start_index = if orig_history.len() + additional_lines > limit {
+        orig_history.len() + additional_lines - limit
+    } else {
+        0
+    };
+
+    let mut history = orig_history[start_index..].to_vec();
+    history.push(latest.to_string());
+
+    let file = File::create(filename)?;
+    let mut file = BufWriter::new(file);
+    file.write_all(history.join("\n").as_bytes())?;
+    Ok(())
+}
+
+pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result<i32, std::io::Error> {
+    let mut stdout = std::io::stdout();
+
+    let output_ending = if options.print0 { "\0" } else { "\n" };
+    let query = options.filter;
+    let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
+        Ok("") | Err(_) => "find .".to_owned(),
+        Ok(val) => val.to_owned(),
+    };
+    let cmd = options.cmd.unwrap_or(&default_command);
+
+    // output query
+    if options.print_query {
+        write!(stdout, "{}{}", query, output_ending)?;
+    }
+
+    if options.print_cmd {
+        write!(stdout, "{}{}", cmd, output_ending)?;
+    }
+
+    //------------------------------------------------------------------------------
+    // matcher
+    let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
+        Box::new(RegexEngineFactory::new())
+    } else {
+        let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
+            .fuzzy_algorithm(options.algorithm)
+            .exact_mode(options.exact)
+            .build();
+        Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
+    };
+
+    let engine = engine_factory.create_engine_with_case(query, options.case);
+
+    //------------------------------------------------------------------------------
+    // start
+    let components_to_stop = Arc::new(AtomicUsize::new(0));
+    let collector_option = CollectorOption::with_options(&options);
+
+    let stream_of_item = source.unwrap_or_else(|| {
+        let collector_input = CollectorInput::Command(cmd.to_string());
+        let (ret, _control) = read_and_collect_from_command(components_to_stop, collector_input, collector_option);
+        ret
+    });
+
+    let mut num_matched = 0;
+    stream_of_item
+        .into_iter()
+        .filter_map(|item| engine.match_item(item))
+        .try_for_each(|matched| {
+            num_matched += 1;
+            if options.print_score {
+                write!(
+                    stdout,
+                    "{}\t{}{}",
+                    -matched.rank.score,
+                    matched.item.output(),
+                    output_ending
+                )
+            } else {
+                write!(stdout, "{}{}", matched.item.output(), output_ending)
+            }
+        })?;
+
+    Ok(if num_matched == 0 { 1 } else { 0 })
 }

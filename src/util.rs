@@ -7,15 +7,21 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
-use crate::item::ItemWrapper;
 use crate::SkimItem;
+use std::sync::Arc;
 
 lazy_static! {
-    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+]*? *})").unwrap();
+    static ref RE_ESCAPE: Regex = Regex::new(r"['\U{00}]").unwrap();
 }
 
 pub fn escape_single_quote(text: &str) -> String {
-    text.replace("'", "'\\''")
+    RE_ESCAPE
+        .replace_all(text, |x: &Captures| match x.get(0).unwrap().as_str() {
+            "'" => "'\\''".to_string(),
+            "\0" => "\\0".to_string(),
+            _ => "".to_string(),
+        })
+        .to_string()
 }
 
 /// use to print a single line, properly handle the tabsteop and shift of a string
@@ -173,7 +179,7 @@ impl LinePrinter {
     }
 }
 
-pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &ItemWrapper, default_attr: Attr) {
+pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &Arc<dyn SkimItem>, default_attr: Attr) {
     for (ch, attr) in item.display().iter() {
         printer.print_char(canvas, ch, default_attr.extend(attr), false);
     }
@@ -295,10 +301,23 @@ pub fn parse_margin(margin_option: &str) -> (Size, Size, Size, Size) {
 #[derive(Copy, Clone)]
 pub struct InjectContext<'a> {
     pub delimiter: &'a Regex,
+    pub current_index: usize,
     pub current_selection: &'a str,
+    pub indices: &'a [usize],
     pub selections: &'a [&'a str],
     pub query: &'a str,
     pub cmd_query: &'a str,
+}
+
+lazy_static! {
+    static ref RE_ITEMS: Regex = Regex::new(r"\\?(\{ *-?[0-9.+]*? *})").unwrap();
+    static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{ *-?[0-9.,cq+n]*? *})").unwrap();
+}
+
+/// Check if a command depends on item
+/// e.g. contains `{}`, `{1..}`, `{+}`
+pub fn depends_on_items(cmd: &str) -> bool {
+    RE_ITEMS.is_match(cmd)
 }
 
 /// inject the fields into commands
@@ -323,24 +342,42 @@ pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, s
         let range = &range[1..range.len() - 1];
         let range = range.trim();
 
-        if range == "+" {
+        if range.starts_with("+") {
             let current_selection = vec![context.current_selection];
             let selections = if context.selections.is_empty() {
                 &current_selection
             } else {
                 context.selections
             };
+            let current_index = vec![context.current_index];
+            let indices = if context.indices.is_empty() {
+                &current_index
+            } else {
+                context.indices
+            };
 
             return selections
                 .iter()
-                .map(|&s| format!("'{}'", escape_single_quote(s)))
+                .zip(indices.iter())
+                .map(|(&s, &i)| {
+                    let rest = &range[1..];
+                    let index_str = format!("{}", i);
+                    let replacement = match rest {
+                        "" => s,
+                        "n" => &index_str,
+                        _ => get_string_by_range(context.delimiter, s, rest).unwrap_or(""),
+                    };
+                    format!("'{}'", escape_single_quote(replacement))
+                })
                 .collect::<Vec<_>>()
                 .join(" ");
         }
 
+        let index_str = format!("{}", context.current_index);
         let replacement = match range {
             "" => context.current_selection,
-            "+" => unreachable!(),
+            x if x.starts_with("+") => unreachable!(),
+            "n" => &index_str,
             "q" => context.query,
             "cq" => context.cmd_query,
             _ => get_string_by_range(context.delimiter, context.current_selection, range).unwrap_or(""),
@@ -381,9 +418,11 @@ mod tests {
         let cmd_query = "cmd_query";
 
         let default_context = InjectContext {
+            current_index: 0,
             delimiter: &delimiter,
             current_selection,
             selections: &selections,
+            indices: &[0, 1],
             query,
             cmd_query,
         };
@@ -405,5 +444,14 @@ mod tests {
         assert_eq!("'query'", inject_command("{q}", default_context));
         assert_eq!("'cmd_query'", inject_command("{cq}", default_context));
         assert_eq!("'a,b,c' 'x,y,z'", inject_command("{+}", default_context));
+        assert_eq!("'0'", inject_command("{n}", default_context));
+        assert_eq!("'a' 'x'", inject_command("{+1}", default_context));
+        assert_eq!("'b' 'y'", inject_command("{+2}", default_context));
+        assert_eq!("'0' '1'", inject_command("{+n}", default_context));
+    }
+
+    #[test]
+    fn test_escape_single_quote() {
+        assert_eq!("'\\''a'\\''\\0", escape_single_quote("'a'\0"));
     }
 }

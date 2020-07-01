@@ -319,7 +319,8 @@ function! skim#wrap(...)
       call mkdir(dir, 'p')
     endif
     let history = skim#shellescape(dir.'/'.name)
-    let opts.options = join(['--history', history, opts.options])
+    let cmd_history = skim#shellescape(dir.'/cmd-'.name)
+    let opts.options = join(['--history', history, '--cmd-history', cmd_history, opts.options])
   endif
 
   " Action: g:skim_action

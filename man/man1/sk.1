@@ -42,6 +42,23 @@ Enable exact-match
 .B "--regex"
 Search with regular expression instead of fuzzy match
 .TP
+.BI "--algo=" TYPE
+Fuzzy matching algorithm (default: skim_v2)
+
+.br
+.BR skim_v2 " Almost always the one to choose
+.br
+.BR skim_v1 " The legacy algorithm
+.br
+.BR clangd "  the one used by clangd for keyword completion
+.br
+
+.TP
+.BI "--case=" "[smart,respect,ignore]"
+To ignore case on matching or not. (default smart)
+.br
+
+.TP
 .BI "-n, --nth=" "N[,..]"
 Comma-separated list of field index expressions for limiting search scope.
 See \fBFIELD INDEX EXPRESSION\fR for the details.
@@ -55,10 +72,14 @@ Field delimiter regex for \fB--nth\fR and \fB--with-nth\fR (default: AWK-style)
 .SS Search result
 .TP
 .B "--tac"
-Reverse the order of the input
+Reverse the order of the search result(normally used together with \fB--no-sort\fR)
+
+.TP
+.B "--no-sort"
+Do not sort the search result(normally used together with \fB--tac\fR)
 
 .RS
-e.g. \fBhistory | sk --tac\fR
+e.g. \fBhistory | sk --tac --no-sort\fR
 .RE
 .TP
 .BI "--tiebreak=" "CRI[,..]"
@@ -218,6 +239,26 @@ e.g. \fBsk --color=bg+:24\fR
     \fBspinner           \fRStreaming input indicator
     \fBheader            \fRHeader
 .RE
+.SS History
+.TP
+.BI "--history=" "HISTORY_FILE"
+Load search history from the specified file and update the file on completion.
+When enabled, \fBCTRL-N\fR and \fBCTRL-P\fR are automatically remapped to
+\fBnext-history\fR and \fBprevious-history\fR.
+.TP
+.BI "--history-size=" "N"
+Maximum number of entries in the history file (default: 1000). The file is
+automatically truncated when the number of the lines exceeds the value.
+.TP
+.BI "--cmd-history=" "HISTORY_FILE"
+Load command query history from the specified file and update the file on
+completion.  When enabled, \fBCTRL-N\fR and \fBCTRL-P\fR are automatically
+remapped to \fBnext-history\fR and \fBprevious-history\fR.
+.TP
+.BI "--cmd-history-size=" "N"
+Maximum number of command query entries in the history file (default: 1000).
+The file is automatically truncated when the number of the lines exceeds the
+value.
 .SS Preview
 .TP
 .BI "--preview=" "COMMAND"
@@ -234,10 +275,21 @@ e.g. \fBsk --preview='head -$LINES {}'\fR
 sk overrides \fB$LINES\fR and \fB$COLUMNS\fR so that they represent the exact
 size of the preview window.
 
+A placeholder expression starting with \fB+\fR flag will be replaced to the
+space-separated list of the selected lines (or the current line if no selection
+was made) individually quoted.
+
+e.g.
+     \fBsk --multi --preview='head -10 {+}'
+     git log --oneline | sk --multi --preview 'git show {+1}'\fR
+
+
 Note that you can escape a placeholder pattern by prepending a backslash.
 
 Also, \fB{q}\fR is replaced to the current query string. \fB{cq}\fR is
-replaced to the current command query string.
+replaced to the current command query string. \fB{n}\fR is replaced to
+zero-based ordinal index of the line. Use \fB{+n}\fR if you want all index
+numbers when multiple lines are selected
 
 Preview window will be updated even when there is no match for the current
 query if any of the placeholder expressions evaluates to a non-empty string.
@@ -445,11 +497,13 @@ e.g. \fBsk --bind=ctrl-j:accept,ctrl-k:kill-line\fR
     \fBexecute-silent(...)\fR   (see below for the details)
     \fBforward-char\fR          \fIctrl-f  right\fR
     \fBforward-word\fR          \fIalt-f   shift-right\fR
+    \fBif-non-matched\fR
     \fBif-query-empty\fR
     \fBif-query-not-empty\fR
     \fBignore\fR
     \fBkill-line\fR
     \fBkill-word\fR             \fIalt-d\fR
+    \fBnext-history\fR          (\fIctrl-n\fR on \fB--history\fR or \fB--cmd-history\fR)
     \fBpage-down\fR             \fIpgdn\fR
     \fBpage-up\fR               \fIpgup\fR
     \fBhalf-page-down\fR
@@ -460,6 +514,7 @@ e.g. \fBsk --bind=ctrl-j:accept,ctrl-k:kill-line\fR
     \fBpreview-right\fR
     \fBpreview-page-down\fR
     \fBpreview-page-up\fR
+    \fBprevious-history\fR      (\fIctrl-p\fR on \fB--history\fR or \fB--cmd-history\fR)
     \fBselect-all\fR
     \fBtoggle\fR
     \fBtoggle-all\fR

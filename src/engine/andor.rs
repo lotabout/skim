@@ -1,8 +1,8 @@
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
 
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange};
-use crate::MatchEngine;
+use crate::item::{MatchedItem, MatchedRange};
+use crate::{MatchEngine, SkimItem};
 
 //------------------------------------------------------------------------------
 // OrEngine, a combinator
@@ -26,7 +26,7 @@ impl OrEngine {
 }
 
 impl MatchEngine for OrEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         for engine in &self.engines {
             let result = engine.match_item(Arc::clone(&item));
             if result.is_some() {
@@ -98,7 +98,7 @@ impl AndEngine {
 }
 
 impl MatchEngine for AndEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         // mock
         let mut results = vec![];
         for engine in &self.engines {

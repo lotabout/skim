@@ -1,15 +1,14 @@
+use crate::global::mark_new_run;
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
-use crate::item::ItemWrapper;
 use crate::item_collector::{read_and_collect_from_command, CollectorInput, CollectorOption};
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
-use crate::SkimItemReceiver;
+use crate::{SkimItem, SkimItemReceiver};
 use crossbeam::channel::{bounded, select, Sender};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::thread;
 
 const CHANNEL_SIZE: usize = 1024;
@@ -18,7 +17,7 @@ pub struct ReaderControl {
     tx_interrupt: Sender<i32>,
     tx_interrupt_cmd: Option<Sender<i32>>,
     components_to_stop: Arc<AtomicUsize>,
-    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
+    items: Arc<SpinLock<Vec<Arc<dyn SkimItem>>>>,
 }
 
 impl ReaderControl {
@@ -33,7 +32,7 @@ impl ReaderControl {
         while self.components_to_stop.load(Ordering::SeqCst) != 0 {}
     }
 
-    pub fn take(&self) -> Vec<Arc<ItemWrapper>> {
+    pub fn take(&self) -> Vec<Arc<dyn SkimItem>> {
         let mut items = self.items.lock();
         let mut ret = Vec::with_capacity(items.len());
         ret.append(&mut items);
@@ -65,21 +64,13 @@ impl Reader {
     }
 
     pub fn run(&mut self, cmd: &str) -> ReaderControl {
+        mark_new_run(cmd);
+
         let components_to_stop: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
         let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
         let option_clone = self.option.clone();
         let cmd = cmd.to_string();
-
-        let run_num = if self.rx_item.is_some() {
-            RUN_NUM.fetch_add(1, Ordering::SeqCst)
-        } else {
-            *NUM_MAP
-                .write()
-                .expect("reader: failed to lock NUM_MAP")
-                .entry(cmd.to_string())
-                .or_insert_with(|| RUN_NUM.fetch_add(1, Ordering::SeqCst))
-        };
 
         let (rx_item, tx_interrupt_cmd) = self.rx_item.take().map(|rx| (rx, None)).unwrap_or_else(|| {
             let components_to_stop_clone = components_to_stop.clone();
@@ -89,7 +80,7 @@ impl Reader {
         });
 
         let components_to_stop_clone = components_to_stop.clone();
-        let tx_interrupt = collect_item(components_to_stop_clone, rx_item, run_num, items_clone);
+        let tx_interrupt = collect_item(components_to_stop_clone, rx_item, items_clone);
 
         ReaderControl {
             tx_interrupt,
@@ -100,21 +91,10 @@ impl Reader {
     }
 }
 
-// Consider that you invoke a command with different arguments several times
-// If you select some items each time, how will skim remember it?
-// => Well, we'll give each invocation a number, i.e. RUN_NUM
-// What if you invoke the same command and same arguments twice?
-// => We use NUM_MAP to specify the same run number.
-lazy_static! {
-    static ref RUN_NUM: AtomicUsize = AtomicUsize::new(0);
-    static ref NUM_MAP: RwLock<HashMap<String, usize>> = RwLock::new(HashMap::new());
-}
-
 fn collect_item(
     components_to_stop: Arc<AtomicUsize>,
     rx_item: SkimItemReceiver,
-    run_num: usize,
-    items: Arc<SpinLock<Vec<Arc<ItemWrapper>>>>,
+    items: Arc<SpinLock<Vec<Arc<dyn SkimItem>>>>,
 ) -> Sender<i32> {
     let (tx_interrupt, rx_interrupt) = bounded(CHANNEL_SIZE);
 
@@ -125,15 +105,12 @@ fn collect_item(
         components_to_stop.fetch_add(1, Ordering::SeqCst);
         started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
-        let mut index = 0;
         loop {
             select! {
                 recv(rx_item) -> new_item => match new_item {
                     Ok(item) => {
-                        let item_wrapped = ItemWrapper::new(item, (run_num, index));
                         let mut vec = items.lock();
-                        vec.push(Arc::new(item_wrapped));
-                        index += 1;
+                        vec.push(item);
                     }
                     Err(_) => break,
                 },

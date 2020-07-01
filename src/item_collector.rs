@@ -14,6 +14,7 @@ use std::thread;
 const CMD_CHANNEL_SIZE: usize = 1024;
 const ITEM_CHANNEL_SIZE: usize = 10240;
 const DELIMITER_STR: &str = r"[\t\n ]+";
+const READ_BUFFER_SIZE: usize = 1024;
 
 #[derive(Clone, Debug)]
 pub struct CollectorOption {
@@ -130,9 +131,11 @@ pub fn read_and_collect_from_command(
 
         let opt = option;
         // set the proper run number
-        let mut buffer = Vec::with_capacity(1024);
+
+        let mut buffer = Vec::with_capacity(READ_BUFFER_SIZE);
         loop {
             buffer.clear();
+
             // start reading
             match source.read_until(opt.line_ending, &mut buffer) {
                 Ok(n) => {
@@ -147,8 +150,10 @@ pub fn read_and_collect_from_command(
                         buffer.pop();
                     }
 
+                    let line = String::from_utf8_lossy(&buffer).to_string();
+
                     let raw_item = DefaultSkimItem::new(
-                        String::from_utf8_lossy(&buffer),
+                        line,
                         opt.use_ansi_color,
                         &opt.transform_fields,
                         &opt.matching_fields,

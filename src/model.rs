@@ -15,7 +15,7 @@ use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, Rege
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{ItemPool, ItemWrapper};
+use crate::item::ItemPool;
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -25,12 +25,13 @@ use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
-use crate::util::{inject_command, margin_string_to_size, parse_margin, InjectContext};
+use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
 const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+const SPINNERS_INLINE: [char; 2] = ['-', '<'];
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
@@ -81,7 +82,7 @@ pub struct Model {
     timer: Timer,
     hb_timer_guard: Option<TimerGuard>,
 
-    next_idx_to_append: usize, // for AppendAndSelect action
+    next_idx_to_append: u32, // for AppendAndSelect action
 }
 
 impl Model {
@@ -338,25 +339,44 @@ impl Model {
     }
 
     fn act_execute(&mut self, cmd: &str) {
+        let item = self.selection.get_current_item();
+        if depends_on_items(cmd) && item.is_none() {
+            debug!("act_execute: command refers to items and there is no item for now");
+            debug!("command to execute: [{}]", cmd);
+            return;
+        }
+
         let _ = self.term.pause();
         self.act_execute_silent(cmd);
         let _ = self.term.restart();
     }
 
     fn act_execute_silent(&mut self, cmd: &str) {
-        let item = self.selection.get_current_item();
-        let current_selection = item.as_ref().map(|item| item.output()).unwrap();
-        let query = self.query.get_query();
+        let current_index = self.selection.get_current_item_idx();
+        let current_item = self.selection.get_current_item();
+        if depends_on_items(cmd) && current_item.is_none() {
+            debug!("act_execute_silent: command refers to items and there is no item for now");
+            debug!("command to execute: [{}]", cmd);
+            return;
+        }
+
+        let current_selection = current_item
+            .as_ref()
+            .map(|item| item.output())
+            .unwrap_or_else(|| Cow::Borrowed(""));
+        let query = self.query.get_fz_query();
         let cmd_query = self.query.get_cmd_query();
 
-        let tmp = self.selection.get_selected_items();
-        let tmp: Vec<Cow<str>> = tmp.iter().map(|item| item.text()).collect();
+        let (indices, selections) = self.selection.get_selected_indices_and_items();
+        let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
         let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
 
         let context = InjectContext {
+            current_index,
             delimiter: &self.delimiter,
             current_selection: &current_selection,
             selections: &selected_texts,
+            indices: &indices,
             query: &query,
             cmd_query: &cmd_query,
         };
@@ -368,19 +388,19 @@ impl Model {
 
     #[allow(clippy::trivial_regex)]
     fn act_append_and_select(&mut self, env: &mut ModelEnv) {
-        let query = self.query.get_query();
+        let query = self.query.get_fz_query();
         if query.is_empty() {
             return;
         }
-        let item: Arc<ItemWrapper> = Arc::new(ItemWrapper::new(
-            Arc::new(query),
-            (std::usize::MAX, self.next_idx_to_append),
-        ));
+
+        let item_index = (std::u32::MAX, self.next_idx_to_append);
+
+        let item: Arc<dyn SkimItem> = Arc::new(query);
 
         self.next_idx_to_append += 1;
 
         self.item_pool.append(vec![item.clone()]);
-        self.selection.act_select_item(item);
+        self.selection.act_select_item(item_index, item);
 
         self.act_heart_beat(env);
     }
@@ -388,7 +408,7 @@ impl Model {
     pub fn start(&mut self) -> Option<SkimOutput> {
         let mut env = ModelEnv {
             cmd: self.query.get_cmd(),
-            query: self.query.get_query(),
+            query: self.query.get_fz_query(),
             cmd_query: self.query.get_cmd_query(),
             clear_selection: ClearStrategy::DontClear,
         };
@@ -400,11 +420,22 @@ impl Model {
         loop {
             let ev = next_event.take().or_else(|| self.rx.recv().ok())?;
 
+            debug!("handle event: {:?}", ev);
+
             match ev {
                 Event::EvHeartBeat => {
                     // consume following HeartBeat event
                     next_event = self.consume_additional_event(&Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
+                }
+
+                Event::EvActIfNonMatched(ref arg_str) => {
+                    let matched =
+                        self.num_options + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
+                    if matched == 0 {
+                        next_event = parse_action_arg(arg_str);
+                        continue;
+                    }
                 }
 
                 Event::EvActIfQueryEmpty(ref arg_str) => {
@@ -439,9 +470,9 @@ impl Model {
 
                     return Some(SkimOutput {
                         accept_key,
-                        query: self.query.get_query(),
+                        query: self.query.get_fz_query(),
                         cmd: self.query.get_cmd_query(),
-                        selected_items: self.selection.get_selected_items(),
+                        selected_items: self.selection.get_selected_indices_and_items().1,
                     });
                 }
 
@@ -501,7 +532,7 @@ impl Model {
             self.query.handle(&ev);
             env.cmd_query = self.query.get_cmd_query();
 
-            let new_query = self.query.get_query();
+            let new_query = self.query.get_fz_query();
             let new_cmd = self.query.get_cmd();
 
             // re-run reader & matcher if needed;
@@ -521,11 +552,13 @@ impl Model {
 
             // re-draw
             if !self.preview_hidden {
+                let item_index = self.selection.get_current_item_idx();
                 let item = self.selection.get_current_item();
                 if let Some(previewer) = self.previewer.as_mut() {
                     let selections = &self.selection;
-                    let get_selected_items = || selections.get_selected_items();
+                    let get_selected_items = || selections.get_selected_indices_and_items();
                     previewer.on_item_change(
+                        item_index,
                         item,
                         env.query.to_string(),
                         env.cmd_query.to_string(),
@@ -556,7 +589,7 @@ impl Model {
 
     fn restart_matcher(&mut self) {
         self.matcher_timer = Instant::now();
-        let query = self.query.get_query();
+        let query = self.query.get_fz_query();
 
         // kill existing matcher if exits
         if let Some(ctrl) = self.matcher_control.take() {
@@ -727,6 +760,16 @@ struct Status {
 #[allow(unused_assignments)]
 impl Draw for Status {
     fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
+        // example:
+        //    /--num_matched/num_read        /-- current_item_index
+        // [| 869580/869580                  0.]
+        //  `-spinner                         `-- still matching
+
+        // example(inline):
+        //        /--num_matched/num_read    /-- current_item_index
+        // [>   - 549334/549334              0.]
+        //      `-spinner                     `-- still matching
+
         canvas.clear()?;
         let (screen_width, _) = canvas.size()?;
 
@@ -740,18 +783,22 @@ impl Draw for Status {
         let a_while_since_match = self.time_since_match > Duration::from_millis(50);
 
         let mut col = 0;
+        let spinner_set: &[char] = if self.inline_info { &SPINNERS_INLINE } else { &SPINNERS };
+
         if self.inline_info {
-            col += canvas.print_with_attr(0, col, " <", self.theme.prompt())?;
+            col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
+        }
+
+        // draw the spinner
+        if self.reading && a_while_since_read {
+            let mills = (self.time_since_read.as_secs() * 1000) as u32 + self.time_since_read.subsec_millis();
+            let index = (mills / SPINNER_DURATION) % (spinner_set.len() as u32);
+            let ch = spinner_set[index as usize];
+            col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
+        } else if self.inline_info {
+            col += canvas.put_char_with_attr(0, col, '<', self.theme.prompt())?;
         } else {
-            // draw the spinner
-            if self.reading && a_while_since_read {
-                let mills = (self.time_since_read.as_secs() * 1000) as u32 + self.time_since_read.subsec_millis();
-                let index = (mills / SPINNER_DURATION) % (SPINNERS.len() as u32);
-                let ch = SPINNERS[index as usize];
-                col += canvas.put_char_with_attr(0, col, ch, self.theme.spinner())?;
-            } else {
-                col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
-            }
+            col += canvas.put_char_with_attr(0, col, ' ', self.theme.prompt())?;
         }
 
         // display matched/total number

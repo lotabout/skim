@@ -1,36 +1,35 @@
+use std::cmp::max;
+use std::cmp::min;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
+use tuikit::prelude::{Event as TermEvent, *};
+
 ///! Handle the selections of items
 use crate::event::{Event, EventHandler, UpdateScreen};
-use crate::item::{parse_criteria, RankCriteria};
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange};
+use crate::global::current_run_num;
+use crate::item::{parse_criteria, ItemIndex, RankCriteria};
+use crate::item::{MatchedItem, MatchedRange};
 use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
 use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{SkimItem, SkimOptions};
-use std::cmp::max;
-use std::cmp::min;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
-use tuikit::prelude::{Event as TermEvent, *};
 
 const DOUBLE_CLICK_DURATION: u128 = 300;
 
 lazy_static! {
-    static ref DEFAULT_CRITERION: Vec<RankCriteria> = vec![
-        RankCriteria::Score,
-        RankCriteria::Begin,
-        RankCriteria::End,
-        RankCriteria::Index,
-    ];
+    static ref DEFAULT_CRITERION: Vec<RankCriteria> =
+        vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End,];
 }
 
 pub struct Selection {
-    criterion: Vec<RankCriteria>,
-    items: OrderedVec<MatchedItem>, // all items
-    selected: HashMap<(usize, usize), Arc<ItemWrapper>>,
+    // all items
+    items: OrderedVec<MatchedItem>,
+    selected: BTreeMap<ItemIndex, Arc<dyn SkimItem>>,
 
     //
     // |>------ items[items.len()-1]
@@ -43,8 +42,10 @@ pub struct Selection {
     // |
     // |>------ item[0]
     //
-    item_cursor: usize, // the index of matched item currently highlighted.
-    line_cursor: usize, // line No.
+    // the index of matched item currently highlighted.
+    item_cursor: usize,
+    // line No.
+    line_cursor: usize,
     hscroll_offset: usize,
     height: AtomicUsize,
     tabstop: usize,
@@ -63,9 +64,8 @@ pub struct Selection {
 impl Selection {
     pub fn new() -> Self {
         Selection {
-            criterion: DEFAULT_CRITERION.clone(),
             items: OrderedVec::new(build_compare_function(DEFAULT_CRITERION.clone())),
-            selected: HashMap::new(),
+            selected: BTreeMap::new(),
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
@@ -107,23 +107,16 @@ impl Selection {
 
         if let Some(ref tie_breaker) = options.tiebreak {
             let criterion = tie_breaker.split(',').filter_map(parse_criteria).collect();
-            self.criterion = criterion;
+            self.items = OrderedVec::new(build_compare_function(criterion));
         }
 
         if options.tac {
-            let criterion = self
-                .criterion
-                .iter()
-                .map(|&criteria| match criteria {
-                    RankCriteria::Index => RankCriteria::NegIndex,
-                    RankCriteria::NegIndex => RankCriteria::Index,
-                    criteria => criteria,
-                })
-                .collect();
-            self.criterion = criterion;
+            self.items.tac(true);
         }
 
-        self.items = OrderedVec::new(build_compare_function(self.criterion.clone()));
+        if options.nosort {
+            self.items.nosort(true);
+        }
     }
 
     pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
@@ -132,7 +125,7 @@ impl Selection {
     }
 
     pub fn append_sorted_items(&mut self, items: Vec<MatchedItem>) {
-        self.items.append_ordered(items);
+        self.items.append(items);
 
         let height = self.height.load(Ordering::Relaxed);
         if self.items.len() <= self.line_cursor {
@@ -201,7 +194,7 @@ impl Selection {
             .items
             .get(cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
-        let index = current_item.item.get_id();
+        let index = (current_run_num(), cursor as u32);
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, current_item.item.clone());
         } else {
@@ -215,8 +208,9 @@ impl Selection {
             return;
         }
 
-        for current_item in self.items.iter() {
-            let index = current_item.item.get_id();
+        let run_num = current_run_num();
+        for (idx, current_item) in self.items.iter().enumerate() {
+            let index = (run_num, idx as u32);
             if !self.selected.contains_key(&index) {
                 self.selected.insert(index, current_item.item.clone());
             } else {
@@ -225,12 +219,12 @@ impl Selection {
         }
     }
 
-    pub fn act_select_item(&mut self, item: Arc<ItemWrapper>) {
+    pub fn act_select_item(&mut self, item_index: ItemIndex, item: Arc<dyn SkimItem>) {
         if !self.multi_selection {
             return;
         }
 
-        self.selected.insert(item.get_id(), item);
+        self.selected.insert(item_index, item);
     }
 
     pub fn act_select_all(&mut self) {
@@ -238,9 +232,10 @@ impl Selection {
             return;
         }
 
-        for current_item in self.items.iter() {
+        let run_num = current_run_num();
+        for (idx, current_item) in self.items.iter().enumerate() {
             let item = current_item.item.clone();
-            self.selected.insert(item.get_id(), item);
+            self.selected.insert((run_num, idx as u32), item);
         }
     }
 
@@ -255,10 +250,11 @@ impl Selection {
         self.hscroll_offset = hscroll_offset as usize;
     }
 
-    pub fn get_selected_items(&self) -> Vec<Arc<dyn SkimItem>> {
+    pub fn get_selected_indices_and_items(&self) -> (Vec<usize>, Vec<Arc<dyn SkimItem>>) {
         // select the current one
         let select_cursor = !self.multi_selection || self.selected.is_empty();
-        let mut selected: Vec<Arc<ItemWrapper>> = self.selected.values().cloned().collect();
+        let mut selected: Vec<Arc<dyn SkimItem>> = self.selected.values().cloned().collect();
+        let mut item_indices: Vec<usize> = self.selected.keys().map(|(_run, idx)| *idx as usize).collect();
 
         if select_cursor && !self.items.is_empty() {
             let cursor = self.item_cursor + self.line_cursor;
@@ -267,11 +263,11 @@ impl Selection {
                 .get(cursor)
                 .unwrap_or_else(|| panic!("model:act_output: failed to get item {}", cursor));
             let item = current_item.item.clone();
+            item_indices.push(cursor);
             selected.push(item);
         }
 
-        selected.sort_by_key(|item| item.get_id());
-        selected.into_iter().map(|wrapped| wrapped.get_inner()).collect()
+        (item_indices, selected)
     }
 
     pub fn get_num_of_selected_exclude_current(&self) -> usize {
@@ -290,7 +286,7 @@ impl Selection {
         self.multi_selection
     }
 
-    pub fn get_current_item(&self) -> Option<Arc<ItemWrapper>> {
+    pub fn get_current_item(&self) -> Option<Arc<dyn SkimItem>> {
         let item_idx = self.get_current_item_idx();
         self.items.get(item_idx).map(|item| item.item.clone())
     }
@@ -317,6 +313,14 @@ impl EventHandler for Selection {
             }
             EvActDeselectAll => {
                 self.act_deselect_all();
+            }
+            EvActHalfPageDown(diff) => {
+                let height = 1 - (self.height.load(Ordering::Relaxed) as i32);
+                self.act_move_line_cursor(height * *diff / 2);
+            }
+            EvActHalfPageUp(diff) => {
+                let height = (self.height.load(Ordering::Relaxed) as i32) - 1;
+                self.act_move_line_cursor(height * *diff / 2);
             }
             EvActPageDown(diff) => {
                 let height = 1 - (self.height.load(Ordering::Relaxed) as i32);
@@ -347,6 +351,7 @@ impl Selection {
         canvas: &mut dyn Canvas,
         row: usize,
         matched_item: &MatchedItem,
+        item_index: usize,
         is_current: bool,
     ) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
@@ -357,8 +362,6 @@ impl Selection {
         if screen_width < 3 {
             return Err("screen width is too small".into());
         }
-
-        let index = matched_item.item.get_id();
 
         let default_attr = if is_current {
             self.theme.current()
@@ -373,6 +376,7 @@ impl Selection {
         };
 
         // print selection cursor
+        let index = (current_run_num(), item_index as u32);
         if self.selected.contains_key(&index) {
             let _ = canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
         } else {
@@ -474,7 +478,7 @@ impl Draw for Selection {
                 .get(item_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
-            let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
+            let _ = self.draw_item(canvas, line_no, &item, item_idx, line_cursor == self.line_cursor);
         }
 
         Ok(())
@@ -542,20 +546,6 @@ fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<Match
                         continue;
                     } else {
                         return b.rank.end.cmp(&a.rank.end);
-                    }
-                }
-                RankCriteria::Index => {
-                    if a.rank.index == b.rank.index {
-                        continue;
-                    } else {
-                        return a.rank.index.cmp(&b.rank.index);
-                    }
-                }
-                RankCriteria::NegIndex => {
-                    if a.rank.index == b.rank.index {
-                        continue;
-                    } else {
-                        return b.rank.index.cmp(&a.rank.index);
                     }
                 }
                 RankCriteria::Score => {

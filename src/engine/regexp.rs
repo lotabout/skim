@@ -4,7 +4,7 @@ use std::sync::Arc;
 use regex::Regex;
 
 use crate::engine::util::regex_match;
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
+use crate::item::{MatchedItem, MatchedRange, Rank};
 use crate::SkimItem;
 use crate::{CaseMatching, MatchEngine};
 
@@ -38,16 +38,18 @@ impl RegexEngine {
 }
 
 impl MatchEngine for RegexEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         let mut matched_result = None;
-        for &(start, end) in item.get_matching_ranges().as_ref() {
+        let item_text = item.text();
+        let default_range = [(0, item_text.len())];
+        for &(start, end) in item.get_matching_ranges().unwrap_or(&default_range) {
             if self.query_regex.is_none() {
                 matched_result = Some((0, 0));
                 break;
             }
 
             matched_result =
-                regex_match(&item.text()[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
+                regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
 
             if matched_result.is_some() {
                 break;
@@ -58,7 +60,6 @@ impl MatchEngine for RegexEngine {
         let score = (end - begin) as i64;
         let rank = Rank {
             score: -score,
-            index: item.get_index() as i64,
             begin: begin as i64,
             end: end as i64,
         };

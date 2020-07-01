@@ -1,8 +1,8 @@
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
 
-use crate::item::{ItemWrapper, MatchedItem, MatchedRange, Rank};
-use crate::MatchEngine;
+use crate::item::{MatchedItem, MatchedRange, Rank};
+use crate::{MatchEngine, SkimItem};
 
 //------------------------------------------------------------------------------
 #[derive(Debug)]
@@ -19,10 +19,9 @@ impl MatchAllEngine {
 }
 
 impl MatchEngine for MatchAllEngine {
-    fn match_item(&self, item: Arc<ItemWrapper>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
         let rank = Rank {
             score: 0,
-            index: item.get_index() as i64,
             begin: 0,
             end: 0,
         };

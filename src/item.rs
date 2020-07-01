@@ -1,16 +1,18 @@
 ///! An item is line of text that read from `find` command or stdin together with
 ///! the internal states, such as selected or not
-use crate::ansi::{ANSIParser, AnsiString};
-use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
-use crate::spinlock::{SpinLock, SpinLockGuard};
-use crate::{ItemPreview, SkimItem};
-use regex::Regex;
 use std::borrow::Cow;
 use std::cmp::min;
 use std::default::Default;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
+use regex::Regex;
+
+use crate::ansi::{ANSIParser, AnsiString};
+use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
+use crate::spinlock::{SpinLock, SpinLockGuard};
+use crate::SkimItem;
 
 //------------------------------------------------------------------------------
 /// An item will store everything that one line input will need to be operated and displayed.
@@ -25,22 +27,21 @@ use std::sync::Arc;
 /// more than one line.
 #[derive(Debug)]
 pub struct DefaultSkimItem {
-    // The text that will be output when user press `enter`
-    orig_text: String,
+    /// The text that will be output when user press `enter`
+    /// `Some(..)` => the original input is transformed, could not output `text` directly
+    /// `None` => that it is safe to output `text` directly
+    orig_text: Option<String>,
 
-    // The text that will shown into the screen. Can be transformed.
+    /// The text that will be shown on screen and matched.
     text: AnsiString<'static>,
 
-    matching_ranges: Vec<(usize, usize)>,
-
-    // For the transformed ANSI case, the output will need another transform.
-    using_transform_fields: bool,
-    ansi_enabled: bool,
+    // Option<Box<_>> to reduce memory use in normal cases where no matching ranges are specified.
+    matching_ranges: Option<Box<Vec<(usize, usize)>>>,
 }
 
 impl<'a> DefaultSkimItem {
     pub fn new(
-        orig_text: Cow<str>,
+        orig_text: String,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -60,125 +61,77 @@ impl<'a> DefaultSkimItem {
 
         let mut ansi_parser: ANSIParser = Default::default();
 
-        let text = if using_transform_fields && ansi_enabled {
+        let (orig_text, text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
-            ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields))
+            let transformed = ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields));
+            (Some(orig_text), transformed)
         } else if using_transform_fields {
             // transformed, not ansi
-            parse_transform_fields(delimiter, &orig_text, trans_fields).into()
+            let transformed = parse_transform_fields(delimiter, &orig_text, trans_fields).into();
+            (Some(orig_text), transformed)
         } else if ansi_enabled {
             // not transformed, ansi
-            ansi_parser.parse_ansi(&orig_text)
+            (None, ansi_parser.parse_ansi(&orig_text))
         } else {
             // normal case
-            AnsiString::new_empty()
-        };
-
-        let mut ret = DefaultSkimItem {
-            orig_text: orig_text.into(),
-            text,
-            using_transform_fields: !trans_fields.is_empty(),
-            matching_ranges: Vec::new(),
-            ansi_enabled,
+            (None, orig_text.into())
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
-            parse_matching_fields(delimiter, &ret.text(), matching_fields)
+            Some(Box::new(parse_matching_fields(
+                delimiter,
+                text.stripped(),
+                matching_fields,
+            )))
         } else {
-            vec![(0, ret.text().len())]
+            None
         };
 
-        ret.matching_ranges = matching_ranges;
-        ret
+        DefaultSkimItem {
+            orig_text,
+            text,
+            matching_ranges,
+        }
     }
 }
 
 impl SkimItem for DefaultSkimItem {
+    #[inline]
     fn display(&self) -> Cow<AnsiString> {
-        if self.using_transform_fields || self.ansi_enabled {
-            Cow::Borrowed(&self.text)
-        } else {
-            Cow::Owned(self.orig_text.as_str().into())
-        }
+        Cow::Borrowed(&self.text)
     }
 
+    #[inline]
     fn text(&self) -> Cow<str> {
-        if !self.using_transform_fields && !self.ansi_enabled {
-            Cow::Borrowed(&self.orig_text)
-        } else {
-            Cow::Borrowed(self.text.stripped())
-        }
+        Cow::Borrowed(self.text.stripped())
     }
 
     fn output(&self) -> Cow<str> {
-        if self.using_transform_fields && self.ansi_enabled {
-            let mut ansi_parser: ANSIParser = Default::default();
-            let text = ansi_parser.parse_ansi(&self.orig_text);
-            Cow::Owned(text.into_inner())
-        } else if !self.using_transform_fields && self.ansi_enabled {
-            Cow::Borrowed(self.text.stripped())
+        if self.orig_text.is_some() {
+            if self.text.has_attrs() {
+                let mut ansi_parser: ANSIParser = Default::default();
+                let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
+                text.into_inner()
+            } else {
+                Cow::Borrowed(self.orig_text.as_ref().unwrap())
+            }
         } else {
-            Cow::Borrowed(&self.orig_text)
+            Cow::Borrowed(self.text.stripped())
         }
     }
 
-    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
-        Cow::Borrowed(&self.matching_ranges)
+    fn get_matching_ranges(&self) -> Option<&[(usize, usize)]> {
+        self.matching_ranges.as_ref().map(|vec| vec as &[(usize, usize)])
     }
 }
+
 //------------------------------------------------------------------------------
-pub struct ItemWrapper {
-    // (num of run, number of index)
-    id: (usize, usize),
-    inner: Arc<dyn SkimItem>,
-}
-
-impl ItemWrapper {
-    pub fn new(item: Arc<dyn SkimItem>, index: (usize, usize)) -> Self {
-        Self { id: index, inner: item }
-    }
-
-    pub fn get_id(&self) -> (usize, usize) {
-        self.id
-    }
-
-    pub fn get_index(&self) -> usize {
-        self.id.1
-    }
-
-    pub fn get_inner(&self) -> Arc<dyn SkimItem> {
-        self.inner.clone()
-    }
-}
-
-/// delegate to inner
-impl SkimItem for ItemWrapper {
-    fn display(&self) -> Cow<AnsiString> {
-        self.inner.display()
-    }
-
-    fn text(&self) -> Cow<str> {
-        self.inner.text()
-    }
-
-    fn preview(&self) -> ItemPreview {
-        self.inner.preview()
-    }
-
-    fn output(&self) -> Cow<str> {
-        self.inner.output()
-    }
-
-    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
-        self.inner.get_matching_ranges()
-    }
-}
+pub type ItemIndex = (u32, u32);
 
 //------------------------------------------------------------------------------
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Rank {
     pub score: i64,
-    pub index: i64,
     pub begin: i64,
     pub end: i64,
 }
@@ -186,19 +139,20 @@ pub struct Rank {
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
 pub enum MatchedRange {
-    ByteRange(usize, usize), // range of bytes
-    Chars(Vec<usize>),       // individual character indices matched
+    ByteRange(usize, usize),
+    // range of bytes
+    Chars(Vec<usize>), // individual character indices matched
 }
 
 #[derive(Clone)]
 pub struct MatchedItem {
-    pub item: Arc<ItemWrapper>,
+    pub item: Arc<dyn SkimItem>,
     pub rank: Rank,
     pub matched_range: Option<MatchedRange>, // range of chars that matched the pattern
 }
 
 impl MatchedItem {
-    pub fn builder(item: Arc<ItemWrapper>) -> Self {
+    pub fn builder(item: Arc<dyn SkimItem>) -> Self {
         MatchedItem {
             item,
             rank: Rank::default(),
@@ -237,12 +191,12 @@ const ITEM_POOL_CAPACITY: usize = 1024;
 
 pub struct ItemPool {
     length: AtomicUsize,
-    pool: SpinLock<Vec<Arc<ItemWrapper>>>,
+    pool: SpinLock<Vec<Arc<dyn SkimItem>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
 
     /// reverse first N lines as header
-    reserved_items: SpinLock<Vec<Arc<ItemWrapper>>>,
+    reserved_items: SpinLock<Vec<Arc<dyn SkimItem>>>,
     lines_to_reserve: usize,
 }
 
@@ -285,7 +239,7 @@ impl ItemPool {
         self.taken.store(0, Ordering::SeqCst);
     }
 
-    pub fn append(&self, mut items: Vec<Arc<ItemWrapper>>) {
+    pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) {
         let mut pool = self.pool.lock();
         let mut header_items = self.reserved_items.lock();
 
@@ -300,13 +254,13 @@ impl ItemPool {
         self.length.store(pool.len(), Ordering::SeqCst);
     }
 
-    pub fn take(&self) -> ItemPoolGuard<Arc<ItemWrapper>> {
+    pub fn take(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {
         let guard = self.pool.lock();
         let taken = self.taken.swap(guard.len(), Ordering::SeqCst);
         ItemPoolGuard { guard, start: taken }
     }
 
-    pub fn reserved(&self) -> ItemPoolGuard<Arc<ItemWrapper>> {
+    pub fn reserved(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {
         let guard = self.reserved_items.lock();
         ItemPoolGuard { guard, start: 0 }
     }
@@ -329,11 +283,9 @@ impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum RankCriteria {
     Score,
-    Index,
     Begin,
     End,
     NegScore,
-    NegIndex,
     NegBegin,
     NegEnd,
     Length,
@@ -343,11 +295,9 @@ pub enum RankCriteria {
 pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
     match text.to_lowercase().as_ref() {
         "score" => Some(RankCriteria::Score),
-        "index" => Some(RankCriteria::Index),
         "begin" => Some(RankCriteria::Begin),
         "end" => Some(RankCriteria::End),
         "-score" => Some(RankCriteria::NegScore),
-        "-index" => Some(RankCriteria::NegIndex),
         "-begin" => Some(RankCriteria::NegBegin),
         "-end" => Some(RankCriteria::NegEnd),
         "length" => Some(RankCriteria::Length),

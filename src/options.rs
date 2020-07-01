@@ -14,6 +14,7 @@ pub struct SkimOptions<'a> {
     pub cmd_prompt: Option<&'a str>,
     pub expect: Option<String>,
     pub tac: bool,
+    pub nosort: bool,
     pub tiebreak: Option<String>,
     pub ansi: bool,
     pub exact: bool,
@@ -50,6 +51,8 @@ pub struct SkimOptions<'a> {
     pub algorithm: FuzzyAlgorithm,
     pub case: CaseMatching,
     pub engine_factory: Option<Rc<dyn MatchEngineFactory>>,
+    pub query_history: &'a [String],
+    pub cmd_history: &'a [String],
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -61,6 +64,7 @@ impl<'a> Default for SkimOptions<'a> {
             cmd_prompt: Some("c> "),
             expect: None,
             tac: false,
+            nosort: false,
             tiebreak: None,
             ansi: false,
             exact: false,
@@ -97,6 +101,8 @@ impl<'a> Default for SkimOptions<'a> {
             algorithm: FuzzyAlgorithm::default(),
             case: CaseMatching::default(),
             engine_factory: None,
+            query_history: &[],
+            cmd_history: &[],
         }
     }
 }
