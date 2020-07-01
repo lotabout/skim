@@ -35,7 +35,8 @@ pub struct DefaultSkimItem {
     /// The text that will be shown on screen and matched.
     text: AnsiString<'static>,
 
-    matching_ranges: Vec<(usize, usize)>,
+    // Option<Box<_>> to reduce memory use in normal cases where no matching ranges are specified.
+    matching_ranges: Option<Box<Vec<(usize, usize)>>>,
 }
 
 impl<'a> DefaultSkimItem {
@@ -77,9 +78,13 @@ impl<'a> DefaultSkimItem {
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
-            parse_matching_fields(delimiter, text.stripped(), matching_fields)
+            Some(Box::new(parse_matching_fields(
+                delimiter,
+                text.stripped(),
+                matching_fields,
+            )))
         } else {
-            vec![(0, text.stripped().len())]
+            None
         };
 
         DefaultSkimItem {
@@ -106,7 +111,7 @@ impl SkimItem for DefaultSkimItem {
             if self.text.has_attrs() {
                 let mut ansi_parser: ANSIParser = Default::default();
                 let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
-                Cow::Owned(text.into_inner().unwrap())
+                text.into_inner()
             } else {
                 Cow::Borrowed(self.orig_text.as_ref().unwrap())
             }
@@ -115,8 +120,8 @@ impl SkimItem for DefaultSkimItem {
         }
     }
 
-    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
-        Cow::Borrowed(&self.matching_ranges)
+    fn get_matching_ranges(&self) -> Option<&[(usize, usize)]> {
+        self.matching_ranges.as_ref().map(|vec| vec as &[(usize, usize)])
     }
 }
 

@@ -128,8 +128,8 @@ pub trait SkimItem: AsAny + Send + Sync + 'static {
 
     /// we could limit the matching ranges of the `get_text` of the item.
     /// providing (start_byte, end_byte) of the range
-    fn get_matching_ranges(&self) -> Cow<[(usize, usize)]> {
-        Cow::Owned(vec![(0, self.display().stripped().len())])
+    fn get_matching_ranges(&self) -> Option<&[(usize, usize)]> {
+        None
     }
 }
 

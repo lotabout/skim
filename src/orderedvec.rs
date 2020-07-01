@@ -41,7 +41,7 @@ impl<T: Send> OrderedVec<T> {
         self
     }
 
-    pub fn append_ordered(&mut self, mut items: Vec<T>) {
+    pub fn append(&mut self, mut items: Vec<T>) {
         if self.nosort {
             self.sorted.borrow_mut().append(&mut items);
             return;
@@ -193,15 +193,15 @@ mod tests {
         let b = vec![4, 8, 9];
         let c = vec![2, 6, 10];
         let mut ordered_vec = OrderedVec::new(Box::new(usize::cmp));
-        ordered_vec.append_ordered(a);
+        ordered_vec.append(a);
         assert_eq!(*ordered_vec.get(0).unwrap(), 1);
 
-        ordered_vec.append_ordered(b);
+        ordered_vec.append(b);
         assert_eq!(*ordered_vec.get(1).unwrap(), 3);
         assert_eq!(*ordered_vec.get(2).unwrap(), 4);
         assert_eq!(*ordered_vec.get(3).unwrap(), 5);
 
-        ordered_vec.append_ordered(c);
+        ordered_vec.append(c);
 
         for (idx, item) in ordered_vec.iter().enumerate() {
             assert_eq!(idx + 1, *item)
@@ -216,15 +216,15 @@ mod tests {
         let mut ordered_vec = OrderedVec::new(Box::new(usize::cmp));
         ordered_vec.tac(true);
 
-        ordered_vec.append_ordered(a);
+        ordered_vec.append(a);
         assert_eq!(*ordered_vec.get(0).unwrap(), 7);
 
-        ordered_vec.append_ordered(b);
+        ordered_vec.append(b);
         assert_eq!(*ordered_vec.get(1).unwrap(), 8);
         assert_eq!(*ordered_vec.get(2).unwrap(), 7);
         assert_eq!(*ordered_vec.get(3).unwrap(), 5);
 
-        ordered_vec.append_ordered(c);
+        ordered_vec.append(c);
         for (idx, item) in ordered_vec.iter().enumerate() {
             assert_eq!(10 - idx, *item)
         }
@@ -238,9 +238,9 @@ mod tests {
         let d = vec![1, 3, 5, 7, 4, 8, 9, 2, 6, 10];
         let mut ordered_vec = OrderedVec::new(Box::new(usize::cmp));
         ordered_vec.nosort(true);
-        ordered_vec.append_ordered(a);
-        ordered_vec.append_ordered(b);
-        ordered_vec.append_ordered(c);
+        ordered_vec.append(a);
+        ordered_vec.append(b);
+        ordered_vec.append(c);
         for (a, b) in ordered_vec.iter().zip(d.iter()) {
             assert_eq!(*a, *b);
         }
@@ -254,9 +254,9 @@ mod tests {
         let d = vec![10, 6, 2, 9, 8, 4, 7, 5, 3, 1];
         let mut ordered_vec = OrderedVec::new(Box::new(usize::cmp));
         ordered_vec.nosort(true).tac(true);
-        ordered_vec.append_ordered(a);
-        ordered_vec.append_ordered(b);
-        ordered_vec.append_ordered(c);
+        ordered_vec.append(a);
+        ordered_vec.append(b);
+        ordered_vec.append(c);
         for (a, b) in ordered_vec.iter().zip(d.iter()) {
             assert_eq!(*a, *b);
         }
@@ -268,8 +268,8 @@ mod tests {
         let b = vec![5, 6, 7, 8];
         let target = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let mut ordered_vec = OrderedVec::new(Box::new(|_a, _b| Ordering::Equal));
-        ordered_vec.append_ordered(a);
-        ordered_vec.append_ordered(b);
+        ordered_vec.append(a);
+        ordered_vec.append(b);
         for (a, b) in ordered_vec.iter().zip(target.iter()) {
             assert_eq!(*a, *b);
         }
