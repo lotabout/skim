@@ -194,12 +194,6 @@ impl Previewer {
     }
 
     fn act_scroll_down(&mut self, diff: i32) {
-        let content_len = self.content_lines.lock().len();
-        if content_len <= self.height.load(Ordering::SeqCst) {
-            // don't scroll if content could be filled
-            return;
-        }
-
         if diff > 0 {
             self.vscroll_offset += diff as usize;
         } else {
@@ -271,20 +265,18 @@ impl Draw for Previewer {
             .unwrap();
         printer.print_lines(canvas, &content);
 
-        // print the vscroll info (only if content could not fit in one page)
-        if content.len() > self.height.load(Ordering::SeqCst) {
-            let status = format!("{}/{}", self.vscroll_offset + 1, content.len());
-            let col = max(status.len() + 1, self.width.load(Ordering::SeqCst)) - status.len() - 1;
-            canvas.print_with_attr(
-                0,
-                col,
-                &status,
-                Attr {
-                    effect: Effect::REVERSE,
-                    ..Attr::default()
-                },
-            )?;
-        }
+        // print the vscroll info
+        let status = format!("{}/{}", self.vscroll_offset + 1, content.len());
+        let col = max(status.len() + 1, self.width.load(Ordering::Relaxed)) - status.len() - 1;
+        canvas.print_with_attr(
+            0,
+            col,
+            &status,
+            Attr {
+                effect: Effect::REVERSE,
+                ..Attr::default()
+            },
+        )?;
 
         Ok(())
     }
