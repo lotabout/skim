@@ -50,8 +50,8 @@ pub struct ColorTheme {
 impl ColorTheme {
     pub fn init_from_options(options: &SkimOptions) -> ColorTheme {
         // register
-        if let Some(color) = options.color {
-            ColorTheme::from_options(color)
+        if let Some(color) = &options.color {
+            ColorTheme::from_options(&color)
         } else {
             ColorTheme::dark256()
         }
