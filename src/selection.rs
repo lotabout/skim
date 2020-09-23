@@ -54,6 +54,7 @@ pub struct Selection {
     multi_selection: bool,
     reverse: bool,
     no_hscroll: bool,
+    no_highlight: bool,
     theme: Arc<ColorTheme>,
 
     // used to detect double click(two consecutive press) event.
@@ -74,6 +75,7 @@ impl Selection {
             multi_selection: false,
             reverse: false,
             no_hscroll: false,
+            no_highlight: false,
             theme: Arc::new(*DEFAULT_THEME),
 
             last_click_row: AtomicUsize::new(0),
@@ -98,6 +100,10 @@ impl Selection {
 
         if options.no_hscroll {
             self.no_hscroll = true;
+        }
+
+        if options.no_highlight {
+            self.no_highlight = true;
         }
 
         if let Some(tabstop_str) = options.tabstop {
@@ -417,6 +423,10 @@ impl Selection {
 
         // print out the original content
         print_item(canvas, &mut printer, &item, default_attr);
+
+        if self.no_highlight {
+            return Ok(());
+        }
 
         // print the highlighted content
         printer.reset();
