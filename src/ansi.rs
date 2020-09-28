@@ -1,8 +1,8 @@
 // Parse ANSI attr code
-use std::borrow::Cow;
 use std::default::Default;
 use std::mem;
 
+use beef::lean::Cow;
 use tuikit::prelude::*;
 use vte::Perform;
 
@@ -225,21 +225,21 @@ pub struct AnsiString<'a> {
 impl<'a> AnsiString<'a> {
     pub fn new_empty() -> Self {
         Self {
-            stripped: Cow::Borrowed(""),
+            stripped: Cow::borrowed(""),
             fragments: None,
         }
     }
 
     fn new_string(string: String) -> Self {
         Self {
-            stripped: Cow::Owned(string),
+            stripped: Cow::owned(string),
             fragments: None,
         }
     }
 
     fn new_str(str_ref: &'a str) -> Self {
         Self {
-            stripped: Cow::Borrowed(str_ref),
+            stripped: Cow::borrowed(str_ref),
             fragments: None,
         }
     }
@@ -247,7 +247,7 @@ impl<'a> AnsiString<'a> {
     fn new(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
-            stripped: Cow::Owned(stripped),
+            stripped: Cow::owned(stripped),
             fragments: if fragments_empty { None } else { Some(fragments) },
         }
     }
@@ -262,8 +262,8 @@ impl<'a> AnsiString<'a> {
     }
 
     #[inline]
-    pub fn into_inner(self) -> Cow<'a, str> {
-        self.stripped
+    pub fn into_inner(self) -> std::borrow::Cow<'a, str> {
+        std::borrow::Cow::Owned(self.stripped.into_owned())
     }
 
     pub fn iter(&'a self) -> Box<dyn Iterator<Item = (char, Attr)> + 'a> {
