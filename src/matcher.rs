@@ -8,8 +8,8 @@ use rayon::prelude::*;
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
-use std::rc::Rc;
 use defer_drop::DeferDrop;
+use std::rc::Rc;
 
 //==============================================================================
 pub struct MatcherControl {

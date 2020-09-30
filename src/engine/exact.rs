@@ -1,5 +1,5 @@
 use crate::engine::util::{contains_upper, regex_match};
-use crate::item::{MatchedItem, MatchedRange, Rank};
+use crate::item::{MatchedItem, MatchedRange, RankBuilder};
 use crate::{CaseMatching, MatchEngine, SkimItem};
 use regex::{escape, Regex};
 use std::fmt::{Display, Error, Formatter};
@@ -20,6 +20,7 @@ pub struct ExactMatchingParam {
 pub struct ExactEngine {
     query: String,
     query_regex: Option<Regex>,
+    rank_builder: Arc<RankBuilder>,
     inverse: bool,
 }
 
@@ -55,8 +56,14 @@ impl ExactEngine {
         ExactEngine {
             query: query.to_string(),
             query_regex,
+            rank_builder: Default::default(),
             inverse: param.inverse,
         }
+    }
+
+    pub fn rank_builder(mut self, rank_builder: Arc<RankBuilder>) -> Self {
+        self.rank_builder = rank_builder;
+        self
     }
 
     pub fn build(self) -> Self {
@@ -88,16 +95,11 @@ impl MatchEngine for ExactEngine {
         }
 
         let (begin, end) = matched_result?;
-        let score = (end - begin) as i64;
-        let rank = Rank {
-            score: -score,
-            begin: begin as i64,
-            end: end as i64,
-        };
-
+        let score = (end - begin) as i32;
+        let item_len = item_text.len();
         Some(
             MatchedItem::builder(item)
-                .rank(rank)
+                .rank(self.rank_builder.build_rank(score, begin, end, item_len))
                 .matched_range(MatchedRange::ByteRange(begin, end))
                 .build(),
         )

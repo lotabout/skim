@@ -353,7 +353,6 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .print0(options.is_present("print0"))
         .print_query(options.is_present("print-query"))
         .print_cmd(options.is_present("print-cmd"))
-        .print_score(options.is_present("print-score"))
         .no_hscroll(options.is_present("no-hscroll"))
         .no_mouse(options.is_present("no-mouse"))
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
@@ -441,7 +440,7 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
     //------------------------------------------------------------------------------
     // matcher
     let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
-        Box::new(RegexEngineFactory::new())
+        Box::new(RegexEngineFactory::builder())
     } else {
         let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
             .fuzzy_algorithm(options.algorithm)
@@ -469,17 +468,7 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
         .filter_map(|item| engine.match_item(item))
         .try_for_each(|matched| {
             num_matched += 1;
-            if options.print_score {
-                write!(
-                    stdout,
-                    "{}\t{}{}",
-                    -matched.rank.score,
-                    matched.item.output(),
-                    output_ending
-                )
-            } else {
-                write!(stdout, "{}{}", matched.item.output(), output_ending)
-            }
+            write!(stdout, "{}{}", matched.item.output(), output_ending)
         })?;
 
     Ok(if num_matched == 0 { 1 } else { 0 })

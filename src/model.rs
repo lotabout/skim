@@ -15,7 +15,7 @@ use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, Rege
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::ItemPool;
+use crate::item::{parse_criteria, ItemPool, RankBuilder, RankCriteria};
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -37,6 +37,8 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+    static ref DEFAULT_CRITERION: Vec<RankCriteria> =
+        vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End,];
 }
 
 pub struct Model {
@@ -99,8 +101,17 @@ impl Model {
             .theme(theme.clone())
             .build();
 
+        let criterion = if let Some(ref tie_breaker) = options.tiebreak {
+            tie_breaker.split(',').filter_map(parse_criteria).collect()
+        } else {
+            DEFAULT_CRITERION.clone()
+        };
+
+        let rank_builder = Arc::new(RankBuilder::new(criterion));
+
         let selection = Selection::with_options(options).theme(theme.clone());
-        let regex_engine: Rc<dyn MatchEngineFactory> = Rc::new(RegexEngineFactory::new());
+        let regex_engine: Rc<dyn MatchEngineFactory> =
+            Rc::new(RegexEngineFactory::builder().rank_builder(rank_builder.clone()).build());
         let regex_matcher = Matcher::builder(regex_engine).build();
 
         let matcher = if let Some(engine_factory) = options.engine_factory.as_ref() {
@@ -108,7 +119,10 @@ impl Model {
             Matcher::builder(engine_factory.clone()).case(options.case).build()
         } else {
             let fuzzy_engine_factory: Rc<dyn MatchEngineFactory> = Rc::new(AndOrEngineFactory::new(
-                ExactOrFuzzyEngineFactory::builder().exact_mode(options.exact).build(),
+                ExactOrFuzzyEngineFactory::builder()
+                    .exact_mode(options.exact)
+                    .rank_builder(rank_builder.clone())
+                    .build(),
             ));
             Matcher::builder(fuzzy_engine_factory).case(options.case).build()
         };

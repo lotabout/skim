@@ -7,10 +7,10 @@ use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
 use crate::util::{print_item, LinePrinter};
 use crate::SkimOptions;
+use defer_drop::DeferDrop;
 use std::cmp::max;
 use std::sync::Arc;
 use tuikit::prelude::*;
-use defer_drop::DeferDrop;
 
 pub struct Header {
     header: AnsiString<'static>,

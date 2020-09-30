@@ -5,7 +5,7 @@ use fuzzy_matcher::clangd::ClangdMatcher;
 use fuzzy_matcher::skim::{SkimMatcher, SkimMatcherV2};
 use fuzzy_matcher::FuzzyMatcher;
 
-use crate::item::{MatchedItem, MatchedRange, Rank};
+use crate::item::{MatchedItem, MatchedRange, RankBuilder};
 use crate::SkimItem;
 use crate::{CaseMatching, MatchEngine};
 
@@ -43,6 +43,7 @@ pub struct FuzzyEngineBuilder {
     query: String,
     case: CaseMatching,
     algorithm: FuzzyAlgorithm,
+    rank_builder: Arc<RankBuilder>,
 }
 
 impl FuzzyEngineBuilder {
@@ -58,6 +59,11 @@ impl FuzzyEngineBuilder {
 
     pub fn algorithm(mut self, algorithm: FuzzyAlgorithm) -> Self {
         self.algorithm = algorithm;
+        self
+    }
+
+    pub fn rank_builder(mut self, rank_builder: Arc<RankBuilder>) -> Self {
+        self.rank_builder = rank_builder;
         self
     }
 
@@ -87,6 +93,7 @@ impl FuzzyEngineBuilder {
         FuzzyEngine {
             matcher,
             query: self.query,
+            rank_builder: self.rank_builder,
         }
     }
 }
@@ -94,6 +101,7 @@ impl FuzzyEngineBuilder {
 pub struct FuzzyEngine {
     query: String,
     matcher: Box<dyn FuzzyMatcher>,
+    rank_builder: Arc<RankBuilder>,
 }
 
 impl FuzzyEngine {
@@ -139,18 +147,13 @@ impl MatchEngine for FuzzyEngine {
 
         let (score, matched_range) = matched_result.unwrap();
 
-        let begin = *matched_range.get(0).unwrap_or(&0) as i64;
-        let end = *matched_range.last().unwrap_or(&0) as i64;
+        let begin = *matched_range.get(0).unwrap_or(&0);
+        let end = *matched_range.last().unwrap_or(&0);
 
-        let rank = Rank {
-            score: -score,
-            begin,
-            end,
-        };
-
+        let item_len = item_text.len();
         Some(
             MatchedItem::builder(item)
-                .rank(rank)
+                .rank(self.rank_builder.build_rank(score as i32, begin, end, item_len))
                 .matched_range(MatchedRange::Chars(matched_range))
                 .build(),
         )

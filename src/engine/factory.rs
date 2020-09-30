@@ -3,8 +3,10 @@ use crate::engine::andor::{AndEngine, OrEngine};
 use crate::engine::exact::{ExactEngine, ExactMatchingParam};
 use crate::engine::fuzzy::{FuzzyAlgorithm, FuzzyEngine};
 use crate::engine::regexp::RegexEngine;
+use crate::item::RankBuilder;
 use crate::{CaseMatching, MatchEngine, MatchEngineFactory};
 use regex::Regex;
+use std::sync::Arc;
 
 lazy_static! {
     static ref RE_AND: Regex = Regex::new(r"([^ |]+( +\| +[^ |]*)+)|( +)").unwrap();
@@ -15,6 +17,7 @@ lazy_static! {
 pub struct ExactOrFuzzyEngineFactory {
     exact_mode: bool,
     fuzzy_algorithm: FuzzyAlgorithm,
+    rank_builder: Arc<RankBuilder>,
 }
 
 impl ExactOrFuzzyEngineFactory {
@@ -22,6 +25,7 @@ impl ExactOrFuzzyEngineFactory {
         Self {
             exact_mode: false,
             fuzzy_algorithm: FuzzyAlgorithm::SkimV2,
+            rank_builder: Default::default(),
         }
     }
 
@@ -32,6 +36,11 @@ impl ExactOrFuzzyEngineFactory {
 
     pub fn fuzzy_algorithm(mut self, fuzzy_algorithm: FuzzyAlgorithm) -> Self {
         self.fuzzy_algorithm = fuzzy_algorithm;
+        self
+    }
+
+    pub fn rank_builder(mut self, rank_builder: Arc<RankBuilder>) -> Self {
+        self.rank_builder = rank_builder;
         self
     }
 
@@ -62,6 +71,7 @@ impl MatchEngineFactory for ExactOrFuzzyEngineFactory {
                         .query(&query[1..])
                         .algorithm(self.fuzzy_algorithm)
                         .case(case)
+                        .rank_builder(self.rank_builder.clone())
                         .build(),
                 );
             } else {
@@ -78,7 +88,11 @@ impl MatchEngineFactory for ExactOrFuzzyEngineFactory {
 
         if query.is_empty() {
             // if only "!" was provided, will still show all items
-            return Box::new(MatchAllEngine::builder().build());
+            return Box::new(
+                MatchAllEngine::builder()
+                    .rank_builder(self.rank_builder.clone())
+                    .build(),
+            );
         }
 
         if query.starts_with('^') {
@@ -98,13 +112,18 @@ impl MatchEngineFactory for ExactOrFuzzyEngineFactory {
         }
 
         if exact {
-            Box::new(ExactEngine::builder(query, param).build())
+            Box::new(
+                ExactEngine::builder(query, param)
+                    .rank_builder(self.rank_builder.clone())
+                    .build(),
+            )
         } else {
             Box::new(
                 FuzzyEngine::builder()
                     .query(query)
                     .algorithm(self.fuzzy_algorithm)
                     .case(case)
+                    .rank_builder(self.rank_builder.clone())
                     .build(),
             )
         }
@@ -167,17 +186,34 @@ impl MatchEngineFactory for AndOrEngineFactory {
 }
 
 //------------------------------------------------------------------------------
-pub struct RegexEngineFactory {}
+pub struct RegexEngineFactory {
+    rank_builder: Arc<RankBuilder>,
+}
 
 impl RegexEngineFactory {
-    pub fn new() -> Self {
-        Self {}
+    pub fn builder() -> Self {
+        Self {
+            rank_builder: Default::default(),
+        }
+    }
+
+    pub fn rank_builder(mut self, rank_builder: Arc<RankBuilder>) -> Self {
+        self.rank_builder = rank_builder;
+        self
+    }
+
+    pub fn build(self) -> Self {
+        self
     }
 }
 
 impl MatchEngineFactory for RegexEngineFactory {
     fn create_engine_with_case(&self, query: &str, case: CaseMatching) -> Box<dyn MatchEngine> {
-        Box::new(RegexEngine::builder(query, case).build())
+        Box::new(
+            RegexEngine::builder(query, case)
+                .rank_builder(self.rank_builder.clone())
+                .build(),
+        )
     }
 }
 
@@ -210,7 +246,7 @@ mod test {
         let x = exact_or_fuzzy.create_engine("!^abc$");
         assert_eq!(format!("{}", x), "(Exact|!(?i)^abc$)");
 
-        let regex_factory = RegexEngineFactory::new();
+        let regex_factory = RegexEngineFactory::builder();
         let and_or_factory = AndOrEngineFactory::new(exact_or_fuzzy);
 
         let x = and_or_factory.create_engine("'abc | def ^gh ij | kl mn");
