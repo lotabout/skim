@@ -4,27 +4,28 @@
 
 use std::cell::{Ref, RefCell};
 use std::cmp::Ordering;
+use defer_drop::DeferDrop;
 
 pub type CompareFunction<T> = Box<dyn Fn(&T, &T) -> Ordering + Send + Sync>;
 
 const ORDERED_SIZE: usize = 300;
 const MAX_MOVEMENT: usize = 100;
 
-pub struct OrderedVec<T: Send> {
+pub struct OrderedVec<T: Send + 'static> {
     // sorted vectors for merge, reverse ordered, last one is the smallest one
-    sub_vectors: RefCell<Vec<Vec<T>>>,
+    sub_vectors: RefCell<DeferDrop<Vec<Vec<T>>>>,
     // globally sorted items, the first one is the smallest one.
-    sorted: RefCell<Vec<T>>,
+    sorted: RefCell<DeferDrop<Vec<T>>>,
     compare: CompareFunction<T>,
     tac: bool,
     nosort: bool,
 }
 
-impl<T: Send> OrderedVec<T> {
+impl<T: Send + 'static> OrderedVec<T> {
     pub fn new(compare: CompareFunction<T>) -> Self {
         OrderedVec {
-            sub_vectors: RefCell::new(Vec::new()),
-            sorted: RefCell::new(Vec::with_capacity(ORDERED_SIZE)),
+            sub_vectors: RefCell::new(DeferDrop::new(Vec::new())),
+            sorted: RefCell::new(DeferDrop::new(Vec::with_capacity(ORDERED_SIZE))),
             compare,
             tac: false,
             nosort: false,
@@ -42,6 +43,7 @@ impl<T: Send> OrderedVec<T> {
     }
 
     pub fn append(&mut self, mut items: Vec<T>) {
+        trace!("orderedvec append: new vec size: {}", items.len());
         if self.nosort {
             self.sorted.borrow_mut().append(&mut items);
             return;
@@ -73,10 +75,13 @@ impl<T: Send> OrderedVec<T> {
             // means the current sorted vector contains item that's large
             // so we'll move the sorted vector to partially sorted candidates.
             self.sort_vector(&mut sorted, false);
-            self.sub_vectors.borrow_mut().push(self.sorted.replace(Vec::new()));
+            let old_vec = self.sorted.replace(DeferDrop::new(Vec::new()));
+            self.sub_vectors.borrow_mut().push(DeferDrop::into_inner(old_vec));
         } else {
             self.sort_vector(&mut sorted, true);
         }
+
+        trace!("orderedvec done append: sub_vector size: {}", self.sub_vectors.borrow().len());
     }
 
     fn sort_vector(&self, vec: &mut Vec<T>, asc: bool) {
@@ -151,8 +156,8 @@ impl<T: Send> OrderedVec<T> {
     }
 
     pub fn clear(&mut self) {
-        self.sub_vectors.borrow_mut().clear();
-        self.sorted.borrow_mut().clear();
+        self.sub_vectors.replace(DeferDrop::new(Vec::new()));
+        self.sorted.replace(DeferDrop::new(Vec::new()));
     }
 
     pub fn is_empty(&self) -> bool {
@@ -168,12 +173,12 @@ impl<T: Send> OrderedVec<T> {
     }
 }
 
-struct OrderedVecIter<'a, T: Send> {
+struct OrderedVecIter<'a, T: Send + 'static> {
     ordered_vec: &'a OrderedVec<T>,
     index: usize,
 }
 
-impl<'a, T: Send> Iterator for OrderedVecIter<'a, T> {
+impl<'a, T: Send + 'static> Iterator for OrderedVecIter<'a, T> {
     type Item = Ref<'a, T>;
 
     fn next(&mut self) -> Option<Self::Item> {

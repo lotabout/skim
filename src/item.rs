@@ -240,6 +240,8 @@ impl ItemPool {
     }
 
     pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) {
+        let len = items.len();
+        trace!("item pool, append {} items", len);
         let mut pool = self.pool.lock();
         let mut header_items = self.reserved_items.lock();
 
@@ -252,6 +254,7 @@ impl ItemPool {
             pool.append(&mut items);
         }
         self.length.store(pool.len(), Ordering::SeqCst);
+        trace!("item pool, done append {} items", len);
     }
 
     pub fn take(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {

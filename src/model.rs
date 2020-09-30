@@ -27,6 +27,7 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
+use defer_drop::DeferDrop;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -50,7 +51,7 @@ pub struct Model {
 
     term: Arc<Term>,
 
-    item_pool: Arc<ItemPool>,
+    item_pool: Arc<DeferDrop<ItemPool>>,
 
     rx: EventReceiver,
     tx: EventSender,
@@ -112,7 +113,7 @@ impl Model {
             Matcher::builder(fuzzy_engine_factory).case(options.case).build()
         };
 
-        let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
+        let item_pool = Arc::new(DeferDrop::new(ItemPool::new().lines_to_reserve(options.header_lines)));
         let header = Header::empty()
             .with_options(options)
             .item_pool(item_pool.clone())
@@ -483,6 +484,7 @@ impl Model {
                     if let Some(ctrl) = self.matcher_control.take() {
                         ctrl.kill();
                     }
+
                     return None;
                 }
 

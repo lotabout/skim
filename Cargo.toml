@@ -39,6 +39,10 @@ timer = "0.2.0"
 chrono = "0.4"
 crossbeam = "0.7.3"
 beef = "0.4.4" # compact cow
+defer-drop = "1.0.1"
+
+[fuzzy-matcher]
+compact = true
 
 [features]
 default = []
