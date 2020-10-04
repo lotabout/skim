@@ -129,13 +129,56 @@ impl SkimItem for DefaultSkimItem {
 pub type ItemIndex = (u32, u32);
 
 //------------------------------------------------------------------------------
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub struct Rank {
-    pub score: i64,
-    pub begin: i64,
-    pub end: i64,
+pub type Rank = [i32; 4];
+
+#[derive(Debug)]
+pub struct RankBuilder {
+    criterion: Vec<RankCriteria>,
 }
 
+impl Default for RankBuilder {
+    fn default() -> Self {
+        Self {
+            criterion: vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End],
+        }
+    }
+}
+
+impl RankBuilder {
+    pub fn new(mut criterion: Vec<RankCriteria>) -> Self {
+        criterion.dedup();
+        Self { criterion }
+    }
+
+    /// score: the greater the better
+    pub fn build_rank(&self, score: i32, begin: usize, end: usize, length: usize) -> Rank {
+        let mut index = 0;
+        let mut rank = [0; 4];
+        let begin = begin as i32;
+        let end = end as i32;
+        let length = length as i32;
+
+        for criteria in self.criterion.iter().take(4) {
+            let value = match criteria {
+                RankCriteria::Score => -score,
+                RankCriteria::Begin => begin,
+                RankCriteria::End => end,
+                RankCriteria::NegScore => score,
+                RankCriteria::NegBegin => -begin,
+                RankCriteria::NegEnd => -end,
+                RankCriteria::Length => length,
+                RankCriteria::NegLength => -length,
+            };
+
+            rank[index] = value;
+            index += 1;
+        }
+
+        rank
+    }
+}
+
+//------------------------------------------------------------------------------
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
 pub enum MatchedRange {
@@ -155,7 +198,7 @@ impl MatchedItem {
     pub fn builder(item: Arc<dyn SkimItem>) -> Self {
         MatchedItem {
             item,
-            rank: Rank::default(),
+            rank: Default::default(),
             matched_range: None,
         }
     }
@@ -183,6 +226,28 @@ impl MatchedItem {
             }
             MatchedRange::Chars(vec) => vec.clone(),
         })
+    }
+}
+
+use std::cmp::Ordering as CmpOrd;
+
+impl PartialEq for MatchedItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.rank.eq(&other.rank)
+    }
+}
+
+impl std::cmp::Eq for MatchedItem {}
+
+impl PartialOrd for MatchedItem {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrd> {
+        self.rank.partial_cmp(&other.rank)
+    }
+}
+
+impl Ord for MatchedItem {
+    fn cmp(&self, other: &Self) -> CmpOrd {
+        self.rank.cmp(&other.rank)
     }
 }
 
@@ -240,6 +305,8 @@ impl ItemPool {
     }
 
     pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) {
+        let len = items.len();
+        trace!("item pool, append {} items", len);
         let mut pool = self.pool.lock();
         let mut header_items = self.reserved_items.lock();
 
@@ -252,6 +319,7 @@ impl ItemPool {
             pool.append(&mut items);
         }
         self.length.store(pool.len(), Ordering::SeqCst);
+        trace!("item pool, done append {} items", len);
     }
 
     pub fn take(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {

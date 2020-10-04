@@ -109,7 +109,7 @@ pub trait SkimItem: AsAny + Send + Sync + 'static {
     /// The content to be displayed on the item list, could contain ANSI properties
     fn display(&self) -> Cow<AnsiString>;
 
-    /// the string to be used for matching(without color)
+    /// The string to be used for matching (without color)
     fn text(&self) -> Cow<str>;
 
     /// Custom preview content, default to `ItemPreview::Global` which will use global preview

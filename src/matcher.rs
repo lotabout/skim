@@ -8,6 +8,7 @@ use rayon::prelude::*;
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
+use defer_drop::DeferDrop;
 use std::rc::Rc;
 
 //==============================================================================
@@ -66,7 +67,7 @@ impl Matcher {
         self
     }
 
-    pub fn run<C>(&self, query: &str, item_pool: Arc<ItemPool>, callback: C) -> MatcherControl
+    pub fn run<C>(&self, query: &str, item_pool: Arc<DeferDrop<ItemPool>>, callback: C) -> MatcherControl
     where
         C: Fn(Arc<SpinLock<Vec<MatchedItem>>>) + Send + 'static,
     {
@@ -88,6 +89,7 @@ impl Matcher {
             // 2. return Err to skip iteration
             //    check https://doc.rust-lang.org/std/result/enum.Result.html#method.from_iter
 
+            trace!("matcher start, total: {}", items.len());
             let result: Result<Vec<_>, _> = items
                 .par_iter()
                 .filter_map(|item| {
@@ -106,6 +108,7 @@ impl Matcher {
             if let Ok(items) = result {
                 let mut pool = matched_items.lock();
                 *pool = items;
+                trace!("matcher stop, total matched: {}", pool.len());
             }
 
             callback(matched_items.clone());

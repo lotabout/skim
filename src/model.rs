@@ -15,7 +15,7 @@ use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, Rege
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::ItemPool;
+use crate::item::{parse_criteria, ItemPool, RankBuilder, RankCriteria};
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -27,6 +27,7 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
+use defer_drop::DeferDrop;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -36,6 +37,8 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+    static ref DEFAULT_CRITERION: Vec<RankCriteria> =
+        vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End,];
 }
 
 pub struct Model {
@@ -50,7 +53,7 @@ pub struct Model {
 
     term: Arc<Term>,
 
-    item_pool: Arc<ItemPool>,
+    item_pool: Arc<DeferDrop<ItemPool>>,
 
     rx: EventReceiver,
     tx: EventSender,
@@ -98,8 +101,17 @@ impl Model {
             .theme(theme.clone())
             .build();
 
+        let criterion = if let Some(ref tie_breaker) = options.tiebreak {
+            tie_breaker.split(',').filter_map(parse_criteria).collect()
+        } else {
+            DEFAULT_CRITERION.clone()
+        };
+
+        let rank_builder = Arc::new(RankBuilder::new(criterion));
+
         let selection = Selection::with_options(options).theme(theme.clone());
-        let regex_engine: Rc<dyn MatchEngineFactory> = Rc::new(RegexEngineFactory::new());
+        let regex_engine: Rc<dyn MatchEngineFactory> =
+            Rc::new(RegexEngineFactory::builder().rank_builder(rank_builder.clone()).build());
         let regex_matcher = Matcher::builder(regex_engine).build();
 
         let matcher = if let Some(engine_factory) = options.engine_factory.as_ref() {
@@ -107,12 +119,15 @@ impl Model {
             Matcher::builder(engine_factory.clone()).case(options.case).build()
         } else {
             let fuzzy_engine_factory: Rc<dyn MatchEngineFactory> = Rc::new(AndOrEngineFactory::new(
-                ExactOrFuzzyEngineFactory::builder().exact_mode(options.exact).build(),
+                ExactOrFuzzyEngineFactory::builder()
+                    .exact_mode(options.exact)
+                    .rank_builder(rank_builder.clone())
+                    .build(),
             ));
             Matcher::builder(fuzzy_engine_factory).case(options.case).build()
         };
 
-        let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
+        let item_pool = Arc::new(DeferDrop::new(ItemPool::new().lines_to_reserve(options.header_lines)));
         let header = Header::empty()
             .with_options(options)
             .item_pool(item_pool.clone())
@@ -483,6 +498,7 @@ impl Model {
                     if let Some(ctrl) = self.matcher_control.take() {
                         ctrl.kill();
                     }
+
                     return None;
                 }
 

@@ -10,9 +10,8 @@ use tuikit::prelude::{Event as TermEvent, *};
 ///! Handle the selections of items
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::global::current_run_num;
-use crate::item::{parse_criteria, ItemIndex, RankCriteria};
+use crate::item::ItemIndex;
 use crate::item::{MatchedItem, MatchedRange};
-use crate::orderedvec::CompareFunction;
 use crate::orderedvec::OrderedVec;
 use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
@@ -20,11 +19,6 @@ use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{SkimItem, SkimOptions};
 
 const DOUBLE_CLICK_DURATION: u128 = 300;
-
-lazy_static! {
-    static ref DEFAULT_CRITERION: Vec<RankCriteria> =
-        vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End,];
-}
 
 pub struct Selection {
     // all items
@@ -64,7 +58,7 @@ pub struct Selection {
 impl Selection {
     pub fn new() -> Self {
         Selection {
-            items: OrderedVec::new(build_compare_function(DEFAULT_CRITERION.clone())),
+            items: OrderedVec::new(),
             selected: BTreeMap::new(),
             item_cursor: 0,
             line_cursor: 0,
@@ -103,11 +97,6 @@ impl Selection {
         if let Some(tabstop_str) = options.tabstop {
             let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
             self.tabstop = max(1, tabstop);
-        }
-
-        if let Some(ref tie_breaker) = options.tiebreak {
-            let criterion = tie_breaker.split(',').filter_map(parse_criteria).collect();
-            self.items = OrderedVec::new(build_compare_function(criterion));
         }
 
         if options.tac {
@@ -513,71 +502,4 @@ impl Widget<Event> for Selection {
         }
         ret
     }
-}
-
-fn build_compare_function(criterion: Vec<RankCriteria>) -> CompareFunction<MatchedItem> {
-    use std::cmp::Ordering as CmpOrd;
-    Box::new(move |a: &MatchedItem, b: &MatchedItem| {
-        for &criteria in criterion.iter() {
-            match criteria {
-                RankCriteria::Begin => {
-                    if a.rank.begin == b.rank.begin {
-                        continue;
-                    } else {
-                        return a.rank.begin.cmp(&b.rank.begin);
-                    }
-                }
-                RankCriteria::NegBegin => {
-                    if a.rank.begin == b.rank.begin {
-                        continue;
-                    } else {
-                        return b.rank.begin.cmp(&a.rank.begin);
-                    }
-                }
-                RankCriteria::End => {
-                    if a.rank.end == b.rank.end {
-                        continue;
-                    } else {
-                        return a.rank.end.cmp(&b.rank.end);
-                    }
-                }
-                RankCriteria::NegEnd => {
-                    if a.rank.end == b.rank.end {
-                        continue;
-                    } else {
-                        return b.rank.end.cmp(&a.rank.end);
-                    }
-                }
-                RankCriteria::Score => {
-                    if a.rank.score == b.rank.score {
-                        continue;
-                    } else {
-                        return a.rank.score.cmp(&b.rank.score);
-                    }
-                }
-                RankCriteria::NegScore => {
-                    if a.rank.score == b.rank.score {
-                        continue;
-                    } else {
-                        return b.rank.score.cmp(&a.rank.score);
-                    }
-                }
-                RankCriteria::Length => {
-                    if a.item.text().len() == b.item.text().len() {
-                        continue;
-                    } else {
-                        return a.item.text().len().cmp(&b.item.text().len());
-                    }
-                }
-                RankCriteria::NegLength => {
-                    if a.item.text().len() == b.item.text().len() {
-                        continue;
-                    } else {
-                        return b.item.text().len().cmp(&a.item.text().len());
-                    }
-                }
-            }
-        }
-        CmpOrd::Equal
-    })
 }
