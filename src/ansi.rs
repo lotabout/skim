@@ -3,6 +3,7 @@ use std::default::Default;
 use std::mem;
 
 use beef::lean::Cow;
+use std::str::Chars;
 use tuikit::prelude::*;
 use vte::Perform;
 
@@ -208,14 +209,14 @@ impl ANSIParser {
 
         let stripped = mem::replace(&mut self.stripped, String::new());
         let fragments = mem::replace(&mut self.fragments, Vec::new());
-        AnsiString::new(stripped, fragments)
+        AnsiString::new_string(stripped, fragments)
     }
 }
 
-#[derive(Clone, Debug)]
 /// A String that contains ANSI state (e.g. colors)
 ///
 /// It is internally represented as Vec<(attr, string)>
+#[derive(Clone, Debug)]
 pub struct AnsiString<'a> {
     stripped: Cow<'a, str>,
     // attr: start, end
@@ -230,21 +231,29 @@ impl<'a> AnsiString<'a> {
         }
     }
 
-    fn new_string(string: String) -> Self {
+    fn new_raw_string(string: String) -> Self {
         Self {
             stripped: Cow::owned(string),
             fragments: None,
         }
     }
 
-    fn new_str(str_ref: &'a str) -> Self {
+    fn new_raw_str(str_ref: &'a str) -> Self {
         Self {
             stripped: Cow::borrowed(str_ref),
             fragments: None,
         }
     }
 
-    fn new(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
+    pub fn new_str(stripped: &'a str, fragments: Vec<(Attr, (u32, u32))>) -> Self {
+        let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
+        Self {
+            stripped: Cow::borrowed(stripped),
+            fragments: if fragments_empty { None } else { Some(fragments) },
+        }
+    }
+
+    pub fn new_string(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
             stripped: Cow::owned(stripped),
@@ -289,13 +298,24 @@ impl<'a> AnsiString<'a> {
 
 impl<'a> From<&'a str> for AnsiString<'a> {
     fn from(s: &'a str) -> AnsiString<'a> {
-        AnsiString::new_str(s)
+        AnsiString::new_raw_str(s)
     }
 }
 
 impl From<String> for AnsiString<'static> {
     fn from(s: String) -> Self {
-        AnsiString::new_string(s)
+        AnsiString::new_raw_string(s)
+    }
+}
+
+// (text, indices, highlight attribute) -> AnsiString
+impl<'a> From<(&'a str, &'a [usize], Attr)> for AnsiString<'a> {
+    fn from((text, indices, attr): (&'a str, &'a [usize], Attr)) -> Self {
+        let fragments = indices
+            .iter()
+            .map(|&idx| (attr, (idx as u32, 1 + idx as u32)))
+            .collect();
+        AnsiString::new_str(text, fragments)
     }
 }
 
@@ -321,23 +341,32 @@ impl<'a> Iterator for AnsiStringIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.chars_iter.next() {
-            Some((byte_idx, char)) => {
+            Some((char_idx, char)) => {
                 // update fragment_idx
                 loop {
                     if self.fragment_idx >= self.fragments.len() {
-                        return None;
+                        break;
                     }
 
                     let (_attr, (_start, end)) = self.fragments[self.fragment_idx];
-                    if byte_idx < (end as usize) {
+                    if char_idx < (end as usize) {
                         break;
                     } else {
                         self.fragment_idx += 1;
                     }
                 }
 
-                let (attr, _) = self.fragments[self.fragment_idx];
-                Some((char, attr))
+                let (attr, (start, end)) = if self.fragment_idx >= self.fragments.len() {
+                    (Attr::default(), (char_idx as u32, 1 + char_idx as u32))
+                } else {
+                    self.fragments[self.fragment_idx]
+                };
+
+                if (start as usize) <= char_idx && char_idx < (end as usize) {
+                    Some((char, attr))
+                } else {
+                    Some((char, Attr::default()))
+                }
             }
             None => None,
         }
@@ -363,6 +392,25 @@ mod tests {
         assert_eq!(Some(('i', attr)), it.next());
         assert_eq!(None, it.next());
         assert_eq!(ansistring.stripped(), "hi");
+    }
+
+    #[test]
+    fn test_highlight_indices() {
+        let text = "abc";
+        let indices: Vec<usize> = vec![1];
+        let attr = Attr {
+            fg: Color::Rgb(70, 130, 180),
+            bg: Color::Rgb(5, 10, 15),
+            ..Attr::default()
+        };
+
+        let ansistring = AnsiString::from((text, &indices as &[usize], attr));
+        let mut it = ansistring.iter();
+
+        assert_eq!(Some(('a', Attr::default())), it.next());
+        assert_eq!(Some(('b', attr)), it.next());
+        assert_eq!(Some(('c', Attr::default())), it.next());
+        assert_eq!(None, it.next());
     }
 
     #[test]
