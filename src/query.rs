@@ -131,6 +131,13 @@ impl Query {
         self.cmd_history_before = options.cmd_history.to_vec();
     }
 
+    pub fn in_query_mode(&self) -> bool {
+        match self.mode {
+            QueryMode::CMD => false,
+            QueryMode::QUERY => true,
+        }
+    }
+
     pub fn get_fz_query(&self) -> String {
         self.fz_query_before
             .iter()

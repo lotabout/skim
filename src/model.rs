@@ -425,6 +425,7 @@ impl Model {
             cmd: self.query.get_cmd(),
             query: self.query.get_fz_query(),
             cmd_query: self.query.get_cmd_query(),
+            in_query_mode: self.query.in_query_mode(),
             clear_selection: ClearStrategy::DontClear,
         };
 
@@ -503,7 +504,7 @@ impl Model {
                 }
 
                 Event::EvActDeleteCharEOF => {
-                    if env.query.is_empty() {
+                    if env.in_query_mode && env.query.is_empty() || !env.in_query_mode && env.cmd_query.is_empty() {
                         next_event = Some(Event::EvActAbort);
                         continue;
                     }
@@ -754,6 +755,7 @@ struct ModelEnv {
     pub query: String,
     pub cmd_query: String,
     pub clear_selection: ClearStrategy,
+    pub in_query_mode: bool,
 }
 
 #[derive(Clone)]
