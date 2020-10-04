@@ -362,13 +362,14 @@ impl Query {
     }
 
     pub fn act_kill_line(&mut self) {
-        let after = mem::replace(&mut self.fz_query_after, Vec::new());
+        let (_, after) = self.get_query_ref();
+        let after = mem::replace(after, Vec::new());
         self.save_yank(after, false);
     }
 
     pub fn act_line_discard(&mut self) {
-        let before = mem::replace(&mut self.fz_query_before, Vec::new());
-        self.fz_query_before = Vec::new();
+        let (before, _) = self.get_query_ref();
+        let before = mem::replace(before, Vec::new());
         self.save_yank(before, false);
     }
 
