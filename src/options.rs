@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use derive_builder::Builder;
 
-use crate::helper::item_collector::DefaultSkimCollector;
+use crate::helper::item_reader::SkimItemReader;
 use crate::reader::CommandCollector;
 use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory};
 use std::cell::RefCell;
@@ -91,7 +91,7 @@ impl<'a> Default for SkimOptions<'a> {
             engine_factory: None,
             query_history: &[],
             cmd_history: &[],
-            cmd_collector: Rc::new(RefCell::new(DefaultSkimCollector::new(Default::default()))),
+            cmd_collector: Rc::new(RefCell::new(SkimItemReader::new(Default::default()))),
         }
     }
 }

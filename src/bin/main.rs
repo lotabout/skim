@@ -233,7 +233,7 @@ fn real_main() -> Result<i32, std::io::Error> {
     }
     //------------------------------------------------------------------------------
     // initialize collector
-    let collector_option = CollectorOption::default()
+    let item_reader_option = SkimItemReaderOption::default()
         .ansi(opts.is_present("ansi"))
         .delimiter(opts.values_of("delimiter").and_then(|vals| vals.last()).unwrap_or(""))
         .with_nth(opts.values_of("with-nth").and_then(|vals| vals.last()).unwrap_or(""))
@@ -241,7 +241,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .read0(opts.is_present("read0"))
         .build();
 
-    let cmd_collector = Rc::new(RefCell::new(DefaultSkimCollector::new(collector_option)));
+    let cmd_collector = Rc::new(RefCell::new(SkimItemReader::new(item_reader_option)));
 
     //------------------------------------------------------------------------------
     // read in the history file
@@ -274,10 +274,9 @@ fn real_main() -> Result<i32, std::io::Error> {
     //------------------------------------------------------------------------------
     // read from pipe or command
     let stdin = std::io::stdin();
-    let components_to_stop = Arc::new(AtomicUsize::new(0));
     let rx_item = match isatty(stdin.as_raw_fd()) {
         Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => {
-            let (rx_item, _) = cmd_collector.borrow().read_and_collect_from_command(components_to_stop, CollectorInput::Pipe(Box::new(BufReader::new(stdin))));
+            let rx_item = cmd_collector.borrow().of_bufread(BufReader::new(stdin));
             Some(rx_item)
         }
         Ok(true) | Err(_) => None,

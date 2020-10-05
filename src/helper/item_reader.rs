@@ -1,3 +1,4 @@
+/// helper for turn a BufRead into a skim stream
 use crate::field::FieldRange;
 use crate::helper::item::DefaultSkimItem;
 use crate::reader::CommandCollector;
@@ -17,8 +18,13 @@ const ITEM_CHANNEL_SIZE: usize = 10240;
 const DELIMITER_STR: &str = r"[\t\n ]+";
 const READ_BUFFER_SIZE: usize = 1024;
 
-#[derive(Clone, Debug)]
-pub struct CollectorOption {
+pub enum CollectorInput {
+    Pipe(Box<dyn BufRead + Send>),
+    Command(String),
+}
+
+pub struct SkimItemReaderOption {
+    buf_size: usize,
     use_ansi_color: bool,
     transform_fields: Vec<FieldRange>,
     matching_fields: Vec<FieldRange>,
@@ -26,19 +32,30 @@ pub struct CollectorOption {
     line_ending: u8,
 }
 
-impl Default for CollectorOption {
+impl Default for SkimItemReaderOption {
     fn default() -> Self {
         Self {
+            buf_size: READ_BUFFER_SIZE,
+            line_ending: b'\n',
             use_ansi_color: false,
             transform_fields: Vec::new(),
             matching_fields: Vec::new(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            line_ending: b'\n',
         }
     }
 }
 
-impl CollectorOption {
+impl SkimItemReaderOption {
+    pub fn buf_size(mut self, buf_size: usize) -> Self {
+        self.buf_size = buf_size;
+        self
+    }
+
+    pub fn line_ending(mut self, line_ending: u8) -> Self {
+        self.line_ending = line_ending;
+        self
+    }
+
     pub fn ansi(mut self, enable: bool) -> Self {
         self.use_ansi_color = enable;
         self
@@ -93,27 +110,85 @@ impl CollectorOption {
     pub fn build(self) -> Self {
         self
     }
+
+    pub fn is_simple(&self) -> bool {
+        !self.use_ansi_color && self.matching_fields.is_empty() && self.transform_fields.is_empty()
+    }
 }
 
-pub enum CollectorInput {
-    Pipe(Box<dyn BufRead + Send>),
-    Command(String),
+pub struct SkimItemReader {
+    option: Arc<SkimItemReaderOption>,
 }
 
-pub struct DefaultSkimCollector {
-    option: Arc<CollectorOption>,
+impl Default for SkimItemReader {
+    fn default() -> Self {
+        Self {
+            option: Arc::new(Default::default()),
+        }
+    }
 }
 
-impl DefaultSkimCollector {
-    pub fn new(option: CollectorOption) -> Self {
+impl SkimItemReader {
+    pub fn new(option: SkimItemReaderOption) -> Self {
         Self {
             option: Arc::new(option),
         }
     }
 
+    pub fn option(mut self, option: SkimItemReaderOption) -> Self {
+        self.option = Arc::new(option);
+        self
+    }
+}
+
+impl SkimItemReader {
+    pub fn of_bufread(&self, source: impl BufRead + Send + 'static) -> SkimItemReceiver {
+        if self.option.is_simple() {
+            self.raw_bufread(source)
+        } else {
+            self.read_and_collect_from_command(Arc::new(AtomicUsize::new(0)), CollectorInput::Pipe(Box::new(source)))
+                .0
+        }
+    }
+
+    /// helper: convert bufread into SkimItemReceiver
+    fn raw_bufread(&self, mut source: impl BufRead + Send + 'static) -> SkimItemReceiver {
+        let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(self.option.buf_size);
+        let line_ending = self.option.line_ending;
+        thread::spawn(move || {
+            let mut buffer = Vec::with_capacity(1024);
+            loop {
+                buffer.clear();
+                // start reading
+                match source.read_until(line_ending, &mut buffer) {
+                    Ok(n) => {
+                        if n == 0 {
+                            break;
+                        }
+
+                        if buffer.ends_with(&[b'\r', b'\n']) {
+                            buffer.pop();
+                            buffer.pop();
+                        } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
+                            buffer.pop();
+                        }
+
+                        let string = String::from_utf8_lossy(&buffer);
+                        let result = tx_item.send(Arc::new(string.into_owned()));
+                        if result.is_err() {
+                            break;
+                        }
+                    }
+                    Err(_err) => {} // String not UTF8 or other error, skip.
+                }
+            }
+        });
+        rx_item
+    }
+
     /// components_to_stop == 0 => all the threads have been stopped
     /// return (channel_for_receive_item, channel_to_stop_command)
-    pub fn read_and_collect_from_command(
+    fn read_and_collect_from_command(
         &self,
         components_to_stop: Arc<AtomicUsize>,
         input: CollectorInput,
@@ -129,7 +204,6 @@ impl DefaultSkimCollector {
         let started = Arc::new(AtomicBool::new(false));
         let started_clone = started.clone();
         let components_to_stop_clone = components_to_stop.clone();
-        let option = self.option.clone();
         // listening to close signal and kill command if needed
         thread::spawn(move || {
             debug!("collector: command killer start");
@@ -154,12 +228,13 @@ impl DefaultSkimCollector {
         let started = Arc::new(AtomicBool::new(false));
         let started_clone = started.clone();
         let tx_interrupt_clone = tx_interrupt.clone();
+        let option = self.option.clone();
         thread::spawn(move || {
             debug!("collector: command collector start");
             components_to_stop.fetch_add(1, Ordering::SeqCst);
             started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
-            let mut buffer = Vec::with_capacity(READ_BUFFER_SIZE);
+            let mut buffer = Vec::with_capacity(option.buf_size);
             loop {
                 buffer.clear();
 
@@ -212,7 +287,7 @@ impl DefaultSkimCollector {
     }
 }
 
-impl CommandCollector for DefaultSkimCollector {
+impl CommandCollector for SkimItemReader {
     fn invoke(&mut self, cmd: &str, components_to_stop: Arc<AtomicUsize>) -> (SkimItemReceiver, Sender<i32>) {
         self.read_and_collect_from_command(components_to_stop, CollectorInput::Command(cmd.to_string()))
     }
