@@ -7,6 +7,7 @@ use crate::engine::util::regex_match;
 use crate::item::{MatchedItem, MatchedRange, RankBuilder};
 use crate::SkimItem;
 use crate::{CaseMatching, MatchEngine};
+use std::cmp::min;
 
 //------------------------------------------------------------------------------
 // Regular Expression engine
@@ -50,6 +51,8 @@ impl MatchEngine for RegexEngine {
         let item_text = item.text();
         let default_range = [(0, item_text.len())];
         for &(start, end) in item.get_matching_ranges().unwrap_or(&default_range) {
+            let start = min(start, item_text.len());
+            let end = min(end, item_text.len());
             if self.query_regex.is_none() {
                 matched_result = Some((0, 0));
                 break;

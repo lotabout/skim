@@ -2,6 +2,7 @@ use crate::engine::util::{contains_upper, regex_match};
 use crate::item::{MatchedItem, MatchedRange, RankBuilder};
 use crate::{CaseMatching, MatchEngine, SkimItem};
 use regex::{escape, Regex};
+use std::cmp::min;
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
 
@@ -77,6 +78,8 @@ impl MatchEngine for ExactEngine {
         let item_text = item.text();
         let default_range = [(0, item_text.len())];
         for &(start, end) in item.get_matching_ranges().unwrap_or(&default_range) {
+            let start = min(start, item_text.len());
+            let end = min(end, item_text.len());
             if self.query_regex.is_none() {
                 matched_result = Some((0, 0));
                 break;
