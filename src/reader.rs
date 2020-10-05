@@ -2,16 +2,28 @@ use crate::global::mark_new_run;
 ///! Reader is used for reading items from datasource (e.g. stdin or command output)
 ///!
 ///! After reading in a line, reader will save an item into the pool(items)
-use crate::item_collector::{read_and_collect_from_command, CollectorInput, CollectorOption};
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
 use crate::{SkimItem, SkimItemReceiver};
 use crossbeam::channel::{bounded, select, Sender};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 
 const CHANNEL_SIZE: usize = 1024;
+
+pub trait CommandCollector {
+    /// execute the `cmd` and produce a
+    /// - skim item producer
+    /// - a channel sender, any message send would mean to terminate the `cmd` process (for now).
+    ///
+    /// Internally, the command collector may start several threads(components), the collector
+    /// should add `1` on every thread creation and sub `1` on thread termination. reader would use
+    /// this information to determine whether the collector had stopped or not.
+    fn invoke(&mut self, cmd: &str, components_to_stop: Arc<AtomicUsize>) -> (SkimItemReceiver, Sender<i32>);
+}
 
 pub struct ReaderControl {
     tx_interrupt: Sender<i32>,
@@ -46,14 +58,14 @@ impl ReaderControl {
 }
 
 pub struct Reader {
-    option: CollectorOption,
+    cmd_collector: Rc<RefCell<dyn CommandCollector>>,
     rx_item: Option<SkimItemReceiver>,
 }
 
 impl Reader {
     pub fn with_options(options: &SkimOptions) -> Self {
         Self {
-            option: CollectorOption::with_options(&options),
+            cmd_collector: options.cmd_collector.clone(),
             rx_item: None,
         }
     }
@@ -69,13 +81,10 @@ impl Reader {
         let components_to_stop: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(0));
         let items = Arc::new(SpinLock::new(Vec::new()));
         let items_clone = items.clone();
-        let option_clone = self.option.clone();
-        let cmd = cmd.to_string();
 
         let (rx_item, tx_interrupt_cmd) = self.rx_item.take().map(|rx| (rx, None)).unwrap_or_else(|| {
             let components_to_stop_clone = components_to_stop.clone();
-            let (rx_item, tx_interrupt_cmd) =
-                read_and_collect_from_command(components_to_stop_clone, CollectorInput::Command(cmd), option_clone);
+            let (rx_item, tx_interrupt_cmd) = self.cmd_collector.borrow_mut().invoke(cmd, components_to_stop_clone);
             (rx_item, Some(tx_interrupt_cmd))
         });
 

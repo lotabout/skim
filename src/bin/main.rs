@@ -6,6 +6,7 @@ extern crate shlex;
 extern crate skim;
 extern crate time;
 
+use derive_builder::Builder;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -226,17 +227,25 @@ fn real_main() -> Result<i32, std::io::Error> {
         writeln!(stdout, "{}", VERSION)?;
         return Ok(0);
     }
+    //------------------------------------------------------------------------------
+    // initialize collector
+    let collector_option = CollectorOption::default()
+        .ansi(opts.is_present("ansi"))
+        .delimiter(opts.values_of("delimiter").and_then(|vals| vals.last()).unwrap_or(""))
+        .with_nth(opts.values_of("with-nth").and_then(|vals| vals.last()).unwrap_or(""))
+        .nth(opts.values_of("nth").and_then(|vals| vals.last()).unwrap_or(""))
+        .read0(opts.is_present("read0"))
+        .replace_str(opts.values_of("replstr").and_then(|vals| vals.last()).unwrap_or(""))
+        .build();
+
+    let cmd_collector = Rc::new(RefCell::new(DefaultSkimCollector::new(collector_option)));
 
     //------------------------------------------------------------------------------
     // read in the history file
     let fz_query_histories = opts.values_of("history").and_then(|vals| vals.last());
     let cmd_query_histories = opts.values_of("cmd-history").and_then(|vals| vals.last());
-    debug!("query_history_file: {:?}", fz_query_histories);
-    debug!("cmd_history_file: {:?}", cmd_query_histories);
     let query_history = fz_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
     let cmd_history = cmd_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
-    debug!("query_history: {:?}", query_history);
-    debug!("cmd_history: {:?}", query_history);
 
     let mut options = parse_options(&opts);
     if fz_query_histories.is_some() || cmd_query_histories.is_some() {
@@ -246,7 +255,18 @@ fn real_main() -> Result<i32, std::io::Error> {
         options.bind.insert(0, "ctrl-p:previous-history,ctrl-n:next-history");
     }
 
+    options.cmd_collector = cmd_collector.clone();
+
     let options = options;
+
+    //------------------------------------------------------------------------------
+    let bin_options = BinOptionsBuilder::default()
+        .filter(opts.values_of("filter").and_then(|vals| vals.last()))
+        .print_query(opts.is_present("print_query"))
+        .print_cmd(opts.is_present("print_cmd"))
+        .output_ending(if opts.is_present("print0") { "\0" } else { "\n" })
+        .build()
+        .expect("");
 
     //------------------------------------------------------------------------------
     // read from pipe or command
@@ -254,8 +274,7 @@ fn real_main() -> Result<i32, std::io::Error> {
     let components_to_stop = Arc::new(AtomicUsize::new(0));
     let rx_item = match isatty(stdin.as_raw_fd()) {
         Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => {
-            let collector_option = CollectorOption::with_options(&options);
-            let (rx_item, _) = read_and_collect_from_command(components_to_stop, CollectorInput::Pipe(Box::new(BufReader::new(stdin))), collector_option);
+            let (rx_item, _) = cmd_collector.borrow().read_and_collect_from_command(components_to_stop, CollectorInput::Pipe(Box::new(BufReader::new(stdin))));
             Some(rx_item)
         }
         Ok(true) | Err(_) => None,
@@ -264,12 +283,10 @@ fn real_main() -> Result<i32, std::io::Error> {
     //------------------------------------------------------------------------------
     // filter mode
     if opts.is_present("filter") {
-        return filter(&options, rx_item);
+        return filter(&bin_options, &options, rx_item);
     }
 
     //------------------------------------------------------------------------------
-    let output_ending = if options.print0 { "\0" } else { "\n" };
-
     let output = Skim::run_with(&options, rx_item);
     if output.is_none() {
         return Ok(130);
@@ -280,20 +297,20 @@ fn real_main() -> Result<i32, std::io::Error> {
     let output = output.unwrap();
 
     // output query
-    if options.print_query {
-        write!(stdout, "{}{}", output.query, output_ending)?;
+    if bin_options.print_query {
+        write!(stdout, "{}{}", output.query, bin_options.output_ending)?;
     }
 
-    if options.print_cmd {
-        write!(stdout, "{}{}", output.cmd, output_ending)?;
+    if bin_options.print_cmd {
+        write!(stdout, "{}{}", output.cmd, bin_options.output_ending)?;
     }
 
     if let Some(key) = output.accept_key {
-        write!(stdout, "{}{}", key, output_ending)?;
+        write!(stdout, "{}{}", key, bin_options.output_ending)?;
     }
 
     for item in output.selected_items.iter() {
-        write!(stdout, "{}{}", item.output(), output_ending)?;
+        write!(stdout, "{}{}", item.output(), bin_options.output_ending)?;
     }
 
     //------------------------------------------------------------------------------
@@ -327,15 +344,9 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .cmd(options.values_of("cmd").and_then(|vals| vals.last()))
         .query(options.values_of("query").and_then(|vals| vals.last()))
         .cmd_query(options.values_of("cmd-query").and_then(|vals| vals.last()))
-        .replstr(options.values_of("replstr").and_then(|vals| vals.last()))
         .interactive(options.is_present("interactive"))
         .prompt(options.values_of("prompt").and_then(|vals| vals.last()))
         .cmd_prompt(options.values_of("cmd-prompt").and_then(|vals| vals.last()))
-        .ansi(options.is_present("ansi"))
-        .delimiter(options.values_of("delimiter").and_then(|vals| vals.last()))
-        .with_nth(options.values_of("with-nth").and_then(|vals| vals.last()))
-        .nth(options.values_of("nth").and_then(|vals| vals.last()))
-        .read0(options.is_present("read0"))
         .bind(
             options
                 .values_of("bind")
@@ -350,9 +361,6 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         })
         .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
         .reverse(options.is_present("reverse"))
-        .print0(options.is_present("print0"))
-        .print_query(options.is_present("print-query"))
-        .print_cmd(options.is_present("print-cmd"))
         .no_hscroll(options.is_present("no-hscroll"))
         .no_mouse(options.is_present("no-mouse"))
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
@@ -371,7 +379,6 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
                 .unwrap_or(0),
         )
         .layout(options.values_of("layout").and_then(|vals| vals.last()).unwrap_or(""))
-        .filter(options.values_of("filter").and_then(|vals| vals.last()).unwrap_or(""))
         .algorithm(FuzzyAlgorithm::of(
             options.values_of("algorithm").and_then(|vals| vals.last()).unwrap(),
         ))
@@ -417,24 +424,35 @@ fn write_history_to_file(
     Ok(())
 }
 
-pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result<i32, std::io::Error> {
+#[derive(Builder)]
+pub struct BinOptions<'a> {
+    filter: Option<&'a str>,
+    output_ending: &'a str,
+    print_query: bool,
+    print_cmd: bool,
+}
+
+pub fn filter(
+    bin_option: &BinOptions,
+    options: &SkimOptions,
+    source: Option<SkimItemReceiver>,
+) -> Result<i32, std::io::Error> {
     let mut stdout = std::io::stdout();
 
-    let output_ending = if options.print0 { "\0" } else { "\n" };
-    let query = options.filter;
     let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
         Ok("") | Err(_) => "find .".to_owned(),
         Ok(val) => val.to_owned(),
     };
+    let query = bin_option.filter.unwrap_or(&"");
     let cmd = options.cmd.unwrap_or(&default_command);
 
     // output query
-    if options.print_query {
-        write!(stdout, "{}{}", query, output_ending)?;
+    if bin_option.print_query {
+        write!(stdout, "{}{}", query, bin_option.output_ending)?;
     }
 
-    if options.print_cmd {
-        write!(stdout, "{}{}", cmd, output_ending)?;
+    if bin_option.print_cmd {
+        write!(stdout, "{}{}", cmd, bin_option.output_ending)?;
     }
 
     //------------------------------------------------------------------------------
@@ -454,11 +472,10 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
     //------------------------------------------------------------------------------
     // start
     let components_to_stop = Arc::new(AtomicUsize::new(0));
-    let collector_option = CollectorOption::with_options(&options);
 
     let stream_of_item = source.unwrap_or_else(|| {
-        let collector_input = CollectorInput::Command(cmd.to_string());
-        let (ret, _control) = read_and_collect_from_command(components_to_stop, collector_input, collector_option);
+        let cmd_collector = options.cmd_collector.clone();
+        let (ret, _control) = cmd_collector.borrow_mut().invoke(cmd, components_to_stop);
         ret
     });
 
@@ -468,7 +485,7 @@ pub fn filter(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Result
         .filter_map(|item| engine.match_item(item))
         .try_for_each(|matched| {
             num_matched += 1;
-            write!(stdout, "{}{}", matched.item.output(), output_ending)
+            write!(stdout, "{}{}", matched.item.output(), bin_option.output_ending)
         })?;
 
     Ok(if num_matched == 0 { 1 } else { 0 })

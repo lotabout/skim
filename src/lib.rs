@@ -25,12 +25,13 @@ use crate::reader::Reader;
 mod ansi;
 mod engine;
 mod event;
-mod field;
+/// provide default implementation
+pub mod field;
 mod global;
 mod header;
+mod helper;
 mod input;
 mod item;
-mod item_collector;
 mod matcher;
 mod model;
 mod options;
