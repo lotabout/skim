@@ -23,7 +23,6 @@ pub struct CollectorOption {
     transform_fields: Vec<FieldRange>,
     matching_fields: Vec<FieldRange>,
     delimiter: Regex,
-    replace_str: String,
     line_ending: u8,
 }
 
@@ -34,7 +33,6 @@ impl Default for CollectorOption {
             transform_fields: Vec::new(),
             matching_fields: Vec::new(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            replace_str: "{}".to_string(),
             line_ending: b'\n',
         }
     }
@@ -80,13 +78,6 @@ impl CollectorOption {
 
     pub fn matching_fields(mut self, matching_fields: Vec<FieldRange>) -> Self {
         self.matching_fields = matching_fields;
-        self
-    }
-
-    pub fn replace_str(mut self, replace_str: &str) -> Self {
-        if !replace_str.is_empty() {
-            self.replace_str = replace_str.to_string();
-        }
         self
     }
 

@@ -48,7 +48,6 @@ Usage: sk [options]
     --no-multi           Disable Multiple Selection
     --no-mouse           Disable mouse events
     -c, --cmd ag         command to invoke dynamically
-    -I replstr           replace `replstr` with the selected item
     -i, --interactive    Start skim in interactive(command) mode
     --color [BASE][,COLOR:ANSI]
                          change color theme
@@ -101,6 +100,9 @@ Usage: sk [options]
     SKIM_DEFAULT_OPTIONS Default options (e.g. '--ansi --regex')
                          You should not include other environment variables
                          (e.g. '-c \"$HOME/bin/ag\"')
+
+  Removed
+    -I replstr           replace `replstr` with the selected item
 
   Reserved (not used for now)
     --extended
@@ -237,7 +239,6 @@ fn real_main() -> Result<i32, std::io::Error> {
         .with_nth(opts.values_of("with-nth").and_then(|vals| vals.last()).unwrap_or(""))
         .nth(opts.values_of("nth").and_then(|vals| vals.last()).unwrap_or(""))
         .read0(opts.is_present("read0"))
-        .replace_str(opts.values_of("replstr").and_then(|vals| vals.last()).unwrap_or(""))
         .build();
 
     let cmd_collector = Rc::new(RefCell::new(DefaultSkimCollector::new(collector_option)));
