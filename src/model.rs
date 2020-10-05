@@ -31,8 +31,9 @@ use defer_drop::DeferDrop;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
-const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
+// const SPINNERS: [char; 8] = ['-', '\\', '|', '/', '-', '\\', '|', '/'];
 const SPINNERS_INLINE: [char; 2] = ['-', '<'];
+const SPINNERS_UNICODE: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
@@ -801,7 +802,11 @@ impl Draw for Status {
         let a_while_since_match = self.time_since_match > Duration::from_millis(50);
 
         let mut col = 0;
-        let spinner_set: &[char] = if self.inline_info { &SPINNERS_INLINE } else { &SPINNERS };
+        let spinner_set: &[char] = if self.inline_info {
+            &SPINNERS_INLINE
+        } else {
+            &SPINNERS_UNICODE
+        };
 
         if self.inline_info {
             col += canvas.put_char_with_attr(0, col, ' ', info_attr)?;
