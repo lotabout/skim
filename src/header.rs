@@ -1,11 +1,11 @@
 ///! header of the items
-use crate::ansi::AnsiString;
+use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::UpdateScreen;
 use crate::event::{Event, EventHandler};
 use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
-use crate::util::{print_item, LinePrinter};
+use crate::util::{print_item, str_lines, LinePrinter};
 use crate::{DisplayContext, Matches, SkimOptions};
 use defer_drop::DeferDrop;
 use std::cmp::max;
@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tuikit::prelude::*;
 
 pub struct Header {
-    header: AnsiString<'static>,
+    header: Vec<AnsiString<'static>>,
     tabstop: usize,
     hscroll_offset: usize,
     reverse: bool,
@@ -26,7 +26,7 @@ pub struct Header {
 impl Header {
     pub fn empty() -> Self {
         Self {
-            header: AnsiString::new_empty(),
+            header: vec![],
             tabstop: 8,
             hscroll_offset: 0,
             reverse: false,
@@ -59,14 +59,11 @@ impl Header {
             None => {}
             Some("") => {}
             Some(header) => {
-                self.header = AnsiString::parse(header);
+                let mut parser = ANSIParser::default();
+                self.header = str_lines(header).into_iter().map(|l| parser.parse_ansi(l)).collect();
             }
         }
         self
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.header.is_empty()
     }
 
     pub fn act_scroll(&mut self, offset: i32) {
@@ -77,8 +74,15 @@ impl Header {
     }
 
     fn lines_of_header(&self) -> usize {
-        let fixed = if self.header.is_empty() { 0 } else { 1 };
-        fixed + self.item_pool.reserved().len()
+        self.header.len() + self.item_pool.reserved().len()
+    }
+
+    fn adjust_row(&self, index: usize, screen_height: usize) -> usize {
+        if self.reverse {
+            index
+        } else {
+            screen_height - index - 1
+        }
     }
 }
 
@@ -95,10 +99,10 @@ impl Draw for Header {
 
         canvas.clear()?;
 
-        if !self.is_empty() {
+        for (idx, header) in self.header.iter().enumerate() {
             // print fixed header(specified by --header)
             let mut printer = LinePrinter::builder()
-                .row(if self.reverse { 0 } else { screen_height - 1 })
+                .row(self.adjust_row(idx, screen_height))
                 .col(2)
                 .tabstop(self.tabstop)
                 .container_width(screen_width - 2)
@@ -107,23 +111,17 @@ impl Draw for Header {
                 .hscroll_offset(self.hscroll_offset)
                 .build();
 
-            for (ch, _attr) in self.header.iter() {
+            for (ch, _attr) in header.iter() {
                 printer.print_char(canvas, ch, self.theme.header(), false);
             }
         }
 
-        let lines_used = if !self.is_empty() { 1 } else { 0 };
+        let lines_used = self.header.len();
 
         // print "reserved" header lines (--header-lines)
         for (idx, item) in self.item_pool.reserved().iter().enumerate() {
-            let row = if self.reverse {
-                idx + lines_used
-            } else {
-                screen_height - lines_used - idx - 1
-            };
-
             let mut printer = LinePrinter::builder()
-                .row(row)
+                .row(self.adjust_row(idx + lines_used, screen_height))
                 .col(2)
                 .tabstop(self.tabstop)
                 .container_width(screen_width - 2)

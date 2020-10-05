@@ -393,6 +393,10 @@ pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, s
     })
 }
 
+pub fn str_lines(string: &str) -> Vec<&str> {
+    string.trim_end().split("\n").collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
