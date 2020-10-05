@@ -249,7 +249,15 @@ impl Skim {
             .expect("height should have default values");
 
         let (tx, rx): (EventSender, EventReceiver) = channel();
-        let term = Arc::new(Term::with_options(TermOptions::default().min_height(min_height).height(height)).unwrap());
+        let term = Arc::new(
+            Term::with_options(
+                TermOptions::default()
+                    .min_height(min_height)
+                    .height(height)
+                    .clear_on_exit(!options.no_clear),
+            )
+            .unwrap(),
+        );
         if !options.no_mouse {
             let _ = term.enable_mouse_support();
         }
@@ -285,7 +293,6 @@ impl Skim {
         let ret = model.start();
         let _ = term.send_event(TermEvent::User1); // interrupt the input thread
         let _ = input_thread.join();
-        let _ = term.pause();
         ret
     }
 
