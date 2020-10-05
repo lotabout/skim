@@ -121,7 +121,7 @@ impl Model {
             let fuzzy_engine_factory: Rc<dyn MatchEngineFactory> = Rc::new(AndOrEngineFactory::new(
                 ExactOrFuzzyEngineFactory::builder()
                     .exact_mode(options.exact)
-                    .rank_builder(rank_builder.clone())
+                    .rank_builder(rank_builder)
                     .build(),
             ));
             Matcher::builder(fuzzy_engine_factory).case(options.case).build()

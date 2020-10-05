@@ -348,7 +348,7 @@ pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, s
         let range = &range[1..range.len() - 1];
         let range = range.trim();
 
-        if range.starts_with("+") {
+        if range.starts_with('+') {
             let current_selection = vec![context.current_selection];
             let selections = if context.selections.is_empty() {
                 &current_selection
@@ -382,7 +382,7 @@ pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, s
         let index_str = format!("{}", context.current_index);
         let replacement = match range {
             "" => context.current_selection,
-            x if x.starts_with("+") => unreachable!(),
+            x if x.starts_with('+') => unreachable!(),
             "n" => &index_str,
             "q" => context.query,
             "cq" => context.cmd_query,

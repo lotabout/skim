@@ -140,8 +140,8 @@ impl Previewer {
             .as_ref()
             .map(|item| item.output())
             .unwrap_or_else(|| "".into());
-        let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
-        let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
+        let query = self.prev_query.as_ref().map(String::as_str).unwrap_or("");
+        let cmd_query = self.prev_cmd_query.as_ref().map(String::as_str).unwrap_or("");
 
         let (indices, selections) = get_selected_items();
         let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
@@ -185,13 +185,13 @@ impl Previewer {
                     if depends_on_items(&cmd) && self.prev_item.is_none() {
                         debug!("the command for preview refers to items and currently there is no item");
                         debug!("command to execute: [{}]", cmd);
-                        PreviewEvent::PreviewPlainText("no item matched".to_string());
+                        PreviewEvent::PreviewPlainText("no item matched".to_string())
+                    } else {
+                        let cmd = inject_command(&cmd, inject_context).to_string();
+                        let preview_command = PreviewCommand { cmd, columns, lines };
+
+                        PreviewEvent::PreviewCommand(preview_command)
                     }
-
-                    let cmd = inject_command(&cmd, inject_context).to_string();
-                    let preview_command = PreviewCommand { cmd, columns, lines };
-
-                    PreviewEvent::PreviewCommand(preview_command)
                 }
             },
             None => PreviewEvent::PreviewPlainText("".to_string()),

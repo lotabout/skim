@@ -36,6 +36,7 @@ pub struct DefaultSkimItem {
     text: AnsiString<'static>,
 
     // Option<Box<_>> to reduce memory use in normal cases where no matching ranges are specified.
+    #[allow(clippy::box_vec)]
     matching_ranges: Option<Box<Vec<(usize, usize)>>>,
 }
 
@@ -147,13 +148,12 @@ impl RankBuilder {
 
     /// score: the greater the better
     pub fn build_rank(&self, score: i32, begin: usize, end: usize, length: usize) -> Rank {
-        let mut index = 0;
         let mut rank = [0; 4];
         let begin = begin as i32;
         let end = end as i32;
         let length = length as i32;
 
-        for criteria in self.criterion.iter().take(4) {
+        for (index, criteria) in self.criterion.iter().take(4).enumerate() {
             let value = match criteria {
                 RankCriteria::Score => -score,
                 RankCriteria::Begin => begin,
@@ -166,7 +166,6 @@ impl RankBuilder {
             };
 
             rank[index] = value;
-            index += 1;
         }
 
         rank

@@ -257,7 +257,7 @@ impl Skim {
         // input
         let mut input = input::Input::new();
         input.parse_keymaps(&options.bind);
-        input.parse_expect_keys(options.expect.as_ref().map(|x| &**x));
+        input.parse_expect_keys(options.expect.as_ref().map(String::as_str));
 
         let tx_clone = tx.clone();
         let term_clone = term.clone();

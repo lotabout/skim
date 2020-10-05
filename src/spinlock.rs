@@ -43,9 +43,10 @@ impl<T> SpinLock<T> {
 
 impl<T: ?Sized> SpinLock<T> {
     pub fn lock(&self) -> SpinLockGuard<T> {
-        while let Err(_) = self
+        while self
             .locked
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
         {}
         SpinLockGuard::new(self)
     }
@@ -68,10 +69,11 @@ impl<'mutex, T: ?Sized> DerefMut for SpinLockGuard<'mutex, T> {
 impl<'a, T: ?Sized> Drop for SpinLockGuard<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        while let Err(_) = self
+        while self
             .__lock
             .locked
             .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
         {}
     }
 }

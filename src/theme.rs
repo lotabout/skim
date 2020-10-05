@@ -169,6 +169,7 @@ impl ColorTheme {
         }
     }
 
+    #[allow(clippy::wildcard_in_or_patterns)]
     fn from_options(color: &str) -> Self {
         let mut theme = ColorTheme::dark256();
         for pair in color.split(',') {
