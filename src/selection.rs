@@ -132,6 +132,7 @@ impl Selection {
         self.items.clear();
     }
 
+    // > 0 means move up, < 0 means move down
     pub fn act_move_line_cursor(&mut self, diff: i32) {
         let diff = if self.reverse { -diff } else { diff };
 
@@ -145,7 +146,7 @@ impl Selection {
         if line_cursor >= height {
             item_cursor += line_cursor - height + 1;
             item_cursor = max(0, min(item_cursor, item_len - height));
-            line_cursor = min(height - 1, item_len - item_cursor);
+            line_cursor = min(height - 1, item_len - item_cursor - 1);
         } else if line_cursor < 0 {
             item_cursor += line_cursor;
             item_cursor = max(item_cursor, 0);
@@ -162,14 +163,12 @@ impl Selection {
 
     pub fn act_select_screen_row(&mut self, rows_to_top: usize) {
         let height = self.height.load(Ordering::Relaxed);
-        self.line_cursor = if self.reverse {
-            // rows from top
-            rows_to_top
+        let diff = if self.reverse {
+            self.line_cursor as i32 - rows_to_top as i32
         } else {
-            // rows from bottom
-            let fallback = rows_to_top + 1;
-            max(height, fallback) - rows_to_top - 1
+            height as i32 - rows_to_top as i32 - 1 - self.line_cursor as i32
         };
+        self.act_move_line_cursor(diff);
     }
 
     #[allow(clippy::map_entry)]
