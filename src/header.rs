@@ -6,7 +6,7 @@ use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
 use crate::util::{print_item, LinePrinter};
-use crate::SkimOptions;
+use crate::{DisplayContext, Matches, SkimOptions};
 use defer_drop::DeferDrop;
 use std::cmp::max;
 use std::sync::Arc;
@@ -131,7 +131,16 @@ impl Draw for Header {
                 .text_width(screen_width - 2)
                 .hscroll_offset(self.hscroll_offset)
                 .build();
-            print_item(canvas, &mut printer, item, self.theme.header());
+
+            let context = DisplayContext {
+                text: &item.text(),
+                score: 0,
+                matches: Matches::None,
+                container_width: screen_width - 2,
+                highlight_attr: self.theme.header(),
+            };
+
+            print_item(canvas, &mut printer, item, context, self.theme.header());
         }
 
         Ok(())

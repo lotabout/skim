@@ -64,7 +64,7 @@ impl<T: Any> AsAny for T {
 /// A `SkimItem` defines what's been processed(fetched, matched, previewed and returned) by skim
 ///
 /// # Downcast Example
-/// Normally skim will return the item back, but in `Arc<dyn SkimItem>`. You might want a reference
+/// Skim will return the item back, but in `Arc<dyn SkimItem>` form. We might want a reference
 /// to the concrete type instead of trait object. Skim provide a somehow "complicated" way to
 /// `downcast` it back to the reference of the original concrete type.
 ///
@@ -73,10 +73,6 @@ impl<T: Any> AsAny for T {
 ///
 /// struct MyItem {}
 /// impl SkimItem for MyItem {
-///     fn display(&self) -> Cow<AnsiString> {
-///         unimplemented!()
-///     }
-///
 ///     fn text(&self) -> Cow<str> {
 ///         unimplemented!()
 ///     }
@@ -107,7 +103,9 @@ impl<T: Any> AsAny for T {
 /// ```
 pub trait SkimItem: AsAny + Send + Sync + 'static {
     /// The content to be displayed on the item list, could contain ANSI properties
-    fn display(&self) -> Cow<AnsiString>;
+    fn display<'a>(&'a self, context: DisplayContext<'a>) -> AnsiString<'a> {
+        AnsiString::from(context)
+    }
 
     /// The string to be used for matching (without color)
     fn text(&self) -> Cow<str>;
@@ -133,13 +131,46 @@ pub trait SkimItem: AsAny + Send + Sync + 'static {
     }
 }
 
-impl<T: AsRef<str> + Send + Sync + 'static> SkimItem for T {
-    fn display(&self) -> Cow<AnsiString> {
-        Cow::Owned(self.as_ref().into())
-    }
+//------------------------------------------------------------------------------
+// Implement SkimItem for raw strings
 
+impl<T: AsRef<str> + Send + Sync + 'static> SkimItem for T {
     fn text(&self) -> Cow<str> {
         Cow::Borrowed(self.as_ref())
+    }
+}
+
+//------------------------------------------------------------------------------
+// Display Context
+pub enum Matches<'a> {
+    None,
+    CharIndices(&'a [usize]),
+    CharRange(usize, usize),
+    ByteRange(usize, usize),
+}
+
+pub struct DisplayContext<'a> {
+    pub text: &'a str,
+    pub score: i32,
+    pub matches: Matches<'a>,
+    pub container_width: usize,
+    pub highlight_attr: Attr,
+}
+
+impl<'a> From<DisplayContext<'a>> for AnsiString<'a> {
+    fn from(context: DisplayContext<'a>) -> Self {
+        match context.matches {
+            Matches::CharIndices(indices) => AnsiString::from((context.text, indices, context.highlight_attr)),
+            Matches::CharRange(start, end) => {
+                AnsiString::new_str(context.text, vec![(context.highlight_attr, (start as u32, end as u32))])
+            }
+            Matches::ByteRange(start, end) => {
+                let start = context.text[..start].chars().count();
+                let end = start + context.text[start..end].chars().count();
+                AnsiString::new_str(context.text, vec![(context.highlight_attr, (start as u32, end as u32))])
+            }
+            Matches::None => AnsiString::new_str(context.text, vec![]),
+        }
     }
 }
 

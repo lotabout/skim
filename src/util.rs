@@ -7,7 +7,7 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
-use crate::SkimItem;
+use crate::{DisplayContext, SkimItem};
 use std::sync::Arc;
 
 lazy_static! {
@@ -179,8 +179,14 @@ impl LinePrinter {
     }
 }
 
-pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, item: &Arc<dyn SkimItem>, default_attr: Attr) {
-    for (ch, attr) in item.display().iter() {
+pub fn print_item(
+    canvas: &mut dyn Canvas,
+    printer: &mut LinePrinter,
+    item: &Arc<dyn SkimItem>,
+    context: DisplayContext,
+    default_attr: Attr,
+) {
+    for (ch, attr) in item.display(context).iter() {
         printer.print_char(canvas, ch, default_attr.extend(attr), false);
     }
 }

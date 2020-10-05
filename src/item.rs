@@ -97,11 +97,6 @@ impl<'a> DefaultSkimItem {
 
 impl SkimItem for DefaultSkimItem {
     #[inline]
-    fn display(&self) -> Cow<AnsiString> {
-        Cow::Borrowed(&self.text)
-    }
-
-    #[inline]
     fn text(&self) -> Cow<str> {
         Cow::Borrowed(self.text.stripped())
     }

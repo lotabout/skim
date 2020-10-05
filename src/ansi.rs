@@ -3,7 +3,6 @@ use std::default::Default;
 use std::mem;
 
 use beef::lean::Cow;
-use std::str::Chars;
 use tuikit::prelude::*;
 use vte::Perform;
 

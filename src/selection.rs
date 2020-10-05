@@ -16,7 +16,7 @@ use crate::orderedvec::OrderedVec;
 use crate::spinlock::SpinLock;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
-use crate::{SkimItem, SkimOptions};
+use crate::{DisplayContext, Matches, SkimItem, SkimOptions};
 
 const DOUBLE_CLICK_DURATION: u128 = 300;
 
@@ -404,36 +404,22 @@ impl Selection {
             .hscroll_offset(self.hscroll_offset)
             .build();
 
+        let matches = match matched_item.matched_range {
+            Some(MatchedRange::Chars(ref matched_indices)) => Matches::CharIndices(matched_indices),
+            Some(MatchedRange::ByteRange(start, end)) => Matches::ByteRange(start, end),
+            _ => Matches::None,
+        };
+
+        let context = DisplayContext {
+            text: &item.text(),
+            score: 0,
+            matches,
+            container_width,
+            highlight_attr: matched_attr,
+        };
+
         // print out the original content
-        print_item(canvas, &mut printer, &item, default_attr);
-
-        // print the highlighted content
-        printer.reset();
-        match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indices)) => {
-                let mut matched_indices_iter = matched_indices.iter().peekable();
-
-                for (ch_idx, ch) in text.chars().enumerate() {
-                    match matched_indices_iter.peek() {
-                        Some(&&match_idx) if ch_idx == match_idx => {
-                            printer.print_char(canvas, ch, matched_attr, false);
-                            let _ = matched_indices_iter.next();
-                        }
-                        Some(_) | None => {
-                            printer.print_char(canvas, ch, default_attr, true);
-                        }
-                    }
-                }
-            }
-
-            Some(MatchedRange::ByteRange(start, end)) => {
-                for (idx, ch) in text.char_indices() {
-                    printer.print_char(canvas, ch, matched_attr, !(idx >= start && idx < end));
-                }
-            }
-
-            _ => {}
-        }
+        print_item(canvas, &mut printer, &item, context, default_attr);
 
         Ok(())
     }
