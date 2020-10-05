@@ -265,8 +265,8 @@ fn real_main() -> Result<i32, std::io::Error> {
     //------------------------------------------------------------------------------
     let bin_options = BinOptionsBuilder::default()
         .filter(opts.values_of("filter").and_then(|vals| vals.last()))
-        .print_query(opts.is_present("print_query"))
-        .print_cmd(opts.is_present("print_cmd"))
+        .print_query(opts.is_present("print-query"))
+        .print_cmd(opts.is_present("print-cmd"))
         .output_ending(if opts.is_present("print0") { "\0" } else { "\n" })
         .build()
         .expect("");
@@ -372,6 +372,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .nosort(options.is_present("no-sort"))
         .exact(options.is_present("exact"))
         .regex(options.is_present("regex"))
+        .delimiter(options.values_of("delimiter").and_then(|vals| vals.last()))
         .inline_info(options.is_present("inline-info"))
         .header(options.values_of("header").and_then(|vals| vals.last()))
         .header_lines(
