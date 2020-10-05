@@ -112,7 +112,7 @@ pub trait SkimItem: AsAny + Send + Sync + 'static {
 
     /// Custom preview content, default to `ItemPreview::Global` which will use global preview
     /// setting(i.e. the command set by `preview` option)
-    fn preview(&self) -> ItemPreview {
+    fn preview(&self, _context: PreviewContext) -> ItemPreview {
         ItemPreview::Global
     }
 
@@ -175,8 +175,23 @@ impl<'a> From<DisplayContext<'a>> for AnsiString<'a> {
 }
 
 //------------------------------------------------------------------------------
-// Preview
+// Preview Context
 
+pub struct PreviewContext<'a> {
+    pub query: &'a str,
+    pub cmd_query: &'a str,
+    pub width: usize,
+    pub height: usize,
+    pub current_index: usize,
+    pub current_selection: &'a str,
+    /// selected item indices (may or may not include current item)
+    pub selected_indices: &'a [usize],
+    /// selected item texts (may or may not include current item)
+    pub selections: &'a [&'a str],
+}
+
+//------------------------------------------------------------------------------
+// Preview
 pub enum ItemPreview {
     /// execute the command and print the command's output
     Command(String),

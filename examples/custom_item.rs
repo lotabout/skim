@@ -10,7 +10,7 @@ impl SkimItem for MyItem {
         Cow::Borrowed(&self.inner)
     }
 
-    fn preview(&self) -> ItemPreview {
+    fn preview(&self, _context: PreviewContext) -> ItemPreview {
         if self.inner.starts_with("color") {
             ItemPreview::AnsiText(format!("\x1b[31mhello:\x1b[m\n{}", self.inner))
         } else {

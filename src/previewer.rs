@@ -17,7 +17,7 @@ use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::spinlock::SpinLock;
 use crate::util::{depends_on_items, inject_command, InjectContext};
-use crate::{ItemPreview, SkimItem};
+use crate::{ItemPreview, PreviewContext, SkimItem};
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -133,8 +133,46 @@ impl Previewer {
         self.prev_cmd_query = new_cmd_query;
         self.prev_num_selected = num_selected;
 
+        // prepare preview context
+
+        let current_selection = self
+            .prev_item
+            .as_ref()
+            .map(|item| item.output())
+            .unwrap_or_else(|| "".into());
+        let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
+        let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
+
+        let (indices, selections) = get_selected_items();
+        let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
+        let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
+
+        let columns = self.width.load(Ordering::Relaxed);
+        let lines = self.height.load(Ordering::Relaxed);
+
+        let inject_context = InjectContext {
+            current_index: new_item_index,
+            delimiter: &self.delimiter,
+            current_selection: &current_selection,
+            selections: &selected_texts,
+            indices: &indices,
+            query: &query,
+            cmd_query: &cmd_query,
+        };
+
+        let preview_context = PreviewContext {
+            query,
+            cmd_query,
+            width: columns,
+            height: lines,
+            current_index: new_item_index,
+            current_selection: &current_selection,
+            selected_indices: &indices,
+            selections: &selected_texts,
+        };
+
         let preview_event = match new_item {
-            Some(item) => match item.preview() {
+            Some(item) => match item.preview(preview_context) {
                 ItemPreview::Text(text) => PreviewEvent::PreviewPlainText(text),
                 ItemPreview::AnsiText(text) => PreviewEvent::PreviewAnsiText(text),
                 preview => {
@@ -150,32 +188,7 @@ impl Previewer {
                         PreviewEvent::PreviewPlainText("no item matched".to_string());
                     }
 
-                    let current_selection = self
-                        .prev_item
-                        .as_ref()
-                        .map(|item| item.output())
-                        .unwrap_or_else(|| "".into());
-                    let query = self.prev_query.as_ref().map(|s| &**s).unwrap_or("");
-                    let cmd_query = self.prev_cmd_query.as_ref().map(|s| &**s).unwrap_or("");
-
-                    let (indices, selections) = get_selected_items();
-                    let tmp: Vec<Cow<str>> = selections.iter().map(|item| item.text()).collect();
-                    let selected_texts: Vec<&str> = tmp.iter().map(|cow| cow.as_ref()).collect();
-
-                    let context = InjectContext {
-                        current_index: new_item_index,
-                        delimiter: &self.delimiter,
-                        current_selection: &current_selection,
-                        selections: &selected_texts,
-                        indices: &indices,
-                        query: &query,
-                        cmd_query: &cmd_query,
-                    };
-
-                    let cmd = inject_command(&cmd, context).to_string();
-
-                    let columns = self.width.load(Ordering::Relaxed);
-                    let lines = self.height.load(Ordering::Relaxed);
+                    let cmd = inject_command(&cmd, inject_context).to_string();
                     let preview_command = PreviewCommand { cmd, columns, lines };
 
                     PreviewEvent::PreviewCommand(preview_command)
