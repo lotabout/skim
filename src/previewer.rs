@@ -296,8 +296,8 @@ impl Widget<Event> for Previewer {
     fn on_event(&self, event: TermEvent, _rect: Rectangle) -> Vec<Event> {
         let mut ret = vec![];
         match event {
-            TermEvent::Key(Key::MousePress(MouseButton::WheelUp, ..)) => ret.push(Event::EvActPreviewUp(1)),
-            TermEvent::Key(Key::MousePress(MouseButton::WheelDown, ..)) => ret.push(Event::EvActPreviewDown(1)),
+            TermEvent::Key(Key::WheelUp(.., count)) => ret.push(Event::EvActPreviewUp(count as i32)),
+            TermEvent::Key(Key::WheelDown(.., count)) => ret.push(Event::EvActPreviewDown(count as i32)),
             _ => {}
         }
         ret
