@@ -1,8 +1,9 @@
 use crate::ansi::ANSIParser;
 use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
-use crate::{AnsiString, SkimItem};
+use crate::{AnsiString, DisplayContext, Matches, SkimItem};
 use regex::Regex;
 use std::borrow::Cow;
+use tuikit::prelude::Attr;
 
 //------------------------------------------------------------------------------
 /// An item will store everything that one line input will need to be operated and displayed.
@@ -108,5 +109,24 @@ impl SkimItem for DefaultSkimItem {
 
     fn get_matching_ranges(&self) -> Option<&[(usize, usize)]> {
         self.matching_ranges.as_ref().map(|vec| vec as &[(usize, usize)])
+    }
+
+    fn display<'a>(&'a self, context: DisplayContext<'a>) -> AnsiString<'a> {
+        let new_fragments: Vec<(Attr, (u32, u32))> = match context.matches {
+            Matches::CharIndices(indices) => indices
+                .iter()
+                .map(|&idx| (context.highlight_attr, (idx as u32, idx as u32 + 1)))
+                .collect(),
+            Matches::CharRange(start, end) => vec![(context.highlight_attr, (start as u32, end as u32))],
+            Matches::ByteRange(start, end) => {
+                let start = context.text[..start].chars().count();
+                let end = start + context.text[start..end].chars().count();
+                vec![(context.highlight_attr, (start as u32, end as u32))]
+            }
+            Matches::None => vec![],
+        };
+        let mut ret = self.text.clone();
+        ret.override_attrs(new_fragments);
+        ret
     }
 }

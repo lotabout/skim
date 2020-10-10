@@ -23,6 +23,7 @@ pub enum CollectorInput {
     Command(String),
 }
 
+#[derive(Debug)]
 pub struct SkimItemReaderOption {
     buf_size: usize,
     use_ansi_color: bool,

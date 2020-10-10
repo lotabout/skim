@@ -454,9 +454,11 @@ impl Widget<Event> for Selection {
         match event {
             TermEvent::Key(Key::WheelUp(.., count)) => ret.push(Event::EvActUp(count as i32)),
             TermEvent::Key(Key::WheelDown(.., count)) => ret.push(Event::EvActDown(count as i32)),
-            TermEvent::Key(Key::SingleClick(MouseButton::Left, row, _)) => ret.push(Event::EvActSelectRow(row as usize)),
-            TermEvent::Key(Key::DoubleClick(MouseButton::Left,..)) => ret.push(Event::EvActAccept(None)),
-            TermEvent::Key(Key::SingleClick(MouseButton::Right, row, _)) =>  {
+            TermEvent::Key(Key::SingleClick(MouseButton::Left, row, _)) => {
+                ret.push(Event::EvActSelectRow(row as usize))
+            }
+            TermEvent::Key(Key::DoubleClick(MouseButton::Left, ..)) => ret.push(Event::EvActAccept(None)),
+            TermEvent::Key(Key::SingleClick(MouseButton::Right, row, _)) => {
                 ret.push(Event::EvActSelectRow(row as usize));
                 ret.push(Event::EvActToggle);
             }

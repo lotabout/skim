@@ -3,6 +3,7 @@ use std::default::Default;
 use std::mem;
 
 use beef::lean::Cow;
+use std::cmp::max;
 use tuikit::prelude::*;
 use vte::Perform;
 
@@ -244,6 +245,7 @@ impl<'a> AnsiString<'a> {
         }
     }
 
+    /// assume the fragments are ordered by (start, end) while end is exclusive
     pub fn new_str(stripped: &'a str, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
@@ -252,6 +254,7 @@ impl<'a> AnsiString<'a> {
         }
     }
 
+    /// assume the fragments are ordered by (start, end) while end is exclusive
     pub fn new_string(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
@@ -292,6 +295,18 @@ impl<'a> AnsiString<'a> {
     #[inline]
     pub fn stripped(&self) -> &str {
         &self.stripped
+    }
+
+    pub fn override_attrs(&mut self, attrs: Vec<(Attr, (u32, u32))>) {
+        if attrs.is_empty() {
+            // pass
+        } else if self.fragments.is_none() {
+            self.fragments = Some(attrs);
+        } else {
+            let current_fragments = self.fragments.take().expect("unreachable");
+            let new_fragments = merge_fragments(&current_fragments, &attrs);
+            self.fragments.replace(new_fragments);
+        }
     }
 }
 
@@ -372,6 +387,52 @@ impl<'a> Iterator for AnsiStringIterator<'a> {
     }
 }
 
+fn merge_fragments(old: &[(Attr, (u32, u32))], new: &[(Attr, (u32, u32))]) -> Vec<(Attr, (u32, u32))> {
+    let mut ret = vec![];
+    let mut i = 0;
+    let mut j = 0;
+    let mut os = 0;
+
+    while i < old.len() && j < new.len() {
+        let (oa, (o_start, oe)) = old[i];
+        let (na, (ns, ne)) = new[j];
+        os = max(os, o_start);
+
+        if ns <= os && ne >= oe {
+            //   [--old--]   | [--old--]   |   [--old--] | [--old--]
+            // [----new----] | [---new---] | [---new---] | [--new--]
+            i += 1; // skip old
+        } else if ns <= os {
+            //           [--old--] |         [--old--] |   [--old--] |   [---old---]
+            // [--new--]           | [--new--]         | [--new--]   |   [--new--]
+            ret.push((na, (ns, ne)));
+            os = ne;
+            j += 1;
+        } else if ns >= oe {
+            // [--old--]         | [--old--]
+            //         [--new--] |           [--new--]
+            ret.push((oa, (os, oe)));
+            i += 1;
+        } else {
+            // [---old---] | [---old---] | [--old--]
+            //  [--new--]  |   [--new--] |      [--new--]
+            ret.push((oa, (os, ns)));
+            os = ns;
+        }
+    }
+
+    if i < old.len() {
+        for &(oa, (s, e)) in old[i..].iter() {
+            ret.push((oa, (max(os, s), e)))
+        }
+    }
+    if j < new.len() {
+        ret.extend_from_slice(&new[i..]);
+    }
+
+    ret
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,5 +511,74 @@ mod tests {
         let ansistring = ANSIParser::default().parse_ansi(input);
         assert_eq!(ansistring.fragments.as_ref().map(|x| x.len()).unwrap(), 2);
         assert_eq!(ansistring.stripped(), "AB");
+    }
+
+    #[test]
+    fn test_merge_fragments() {
+        let ao = Attr::default();
+        let an = Attr::default().bg(Color::BLUE);
+
+        assert_eq!(
+            merge_fragments(&[(ao, (0, 1)), (ao, (1, 2))], &[]),
+            vec![(ao, (0, 1)), (ao, (1, 2))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[], &[(an, (0, 1)), (an, (1, 2))]),
+            vec![(an, (0, 1)), (an, (1, 2))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 6)), (ao, (9, 10))], &[(an, (0, 1))]),
+            vec![(an, (0, 1)), (ao, (1, 3)), (ao, (5, 6)), (ao, (9, 10))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (0, 2))]),
+            vec![(an, (0, 2)), (ao, (2, 3)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (0, 3))]),
+            vec![(an, (0, 3)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(
+                &[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))],
+                &[(an, (0, 6)), (an, (6, 7))]
+            ),
+            vec![(an, (0, 6)), (an, (6, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (1, 2))]),
+            vec![(an, (1, 2)), (ao, (2, 3)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (1, 3))]),
+            vec![(an, (1, 3)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (1, 4))]),
+            vec![(an, (1, 4)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (2, 3))]),
+            vec![(ao, (1, 2)), (an, (2, 3)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (2, 4))]),
+            vec![(ao, (1, 2)), (an, (2, 4)), (ao, (5, 7)), (ao, (9, 11))]
+        );
+
+        assert_eq!(
+            merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (2, 6))]),
+            vec![(ao, (1, 2)), (an, (2, 6)), (ao, (6, 7)), (ao, (9, 11))]
+        );
     }
 }
