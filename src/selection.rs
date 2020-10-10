@@ -15,7 +15,6 @@ use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{DisplayContext, Matches, SkimItem, SkimOptions};
-use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
 pub struct Selection {
@@ -39,6 +38,7 @@ pub struct Selection {
     // line No.
     line_cursor: usize,
     hscroll_offset: usize,
+    keep_right: bool,
     height: AtomicUsize,
     tabstop: usize,
 
@@ -57,6 +57,7 @@ impl Selection {
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
+            keep_right: false,
             height: AtomicUsize::new(0),
             tabstop: 8,
             multi_selection: false,
@@ -97,6 +98,8 @@ impl Selection {
         if options.nosort {
             self.items.nosort(true);
         }
+
+        self.keep_right = options.keep_right;
     }
 
     pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
@@ -382,8 +385,8 @@ impl Selection {
 
         let display_content = item.display(context);
 
-        // need to display the match content
         let mut printer = if display_content.stripped() == item_text {
+            // need to display the match content
             let (match_start_char, match_end_char) = match matched_item.matched_range {
                 Some(MatchedRange::Chars(ref matched_indices)) => {
                     if !matched_indices.is_empty() {
@@ -400,7 +403,7 @@ impl Selection {
                 None => (0, 0),
             };
 
-            let (mut shift, full_width) = reshape_string(
+            let (shift, full_width) = reshape_string(
                 &item_text,
                 container_width,
                 match_start_char,
@@ -408,12 +411,20 @@ impl Selection {
                 self.tabstop,
             );
 
+            let shift = if self.no_hscroll {
+                0
+            } else if self.keep_right && match_start_char == 0 && match_end_char == 0 {
+                max(full_width, container_width) - container_width
+            } else {
+                shift
+            };
+
             LinePrinter::builder()
                 .row(row)
                 .col(2)
                 .tabstop(self.tabstop)
                 .container_width(container_width)
-                .shift(if self.no_hscroll { 0 } else { shift })
+                .shift(shift)
                 .text_width(full_width)
                 .hscroll_offset(self.hscroll_offset)
                 .build()

@@ -220,6 +220,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("exit-0").long("exit-0").short("0").multiple(true))
         .arg(Arg::with_name("filter").long("filter").short("f").takes_value(true).multiple(true))
         .arg(Arg::with_name("layout").long("layout").multiple(true).takes_value(true).default_value("default"))
+        .arg(Arg::with_name("keep-right").long("keep-right").multiple(true))
         .get_matches_from(args);
 
     if opts.is_present("help") {
@@ -391,6 +392,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
             Some("ignore") => CaseMatching::Ignore,
             _ => CaseMatching::Respect,
         })
+        .keep_right(options.is_present("keep-right"))
         .build()
         .unwrap()
 }

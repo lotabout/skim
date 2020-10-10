@@ -8,7 +8,6 @@ use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
 use crate::AnsiString;
-use std::sync::Arc;
 
 lazy_static! {
     static ref RE_ESCAPE: Regex = Regex::new(r"['\U{00}]").unwrap();

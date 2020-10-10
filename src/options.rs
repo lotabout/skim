@@ -49,6 +49,7 @@ pub struct SkimOptions<'a> {
     pub query_history: &'a [String],
     pub cmd_history: &'a [String],
     pub cmd_collector: Rc<RefCell<dyn CommandCollector>>,
+    pub keep_right: bool,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -92,6 +93,7 @@ impl<'a> Default for SkimOptions<'a> {
             query_history: &[],
             cmd_history: &[],
             cmd_collector: Rc::new(RefCell::new(SkimItemReader::new(Default::default()))),
+            keep_right: false,
         }
     }
 }
