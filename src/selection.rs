@@ -15,6 +15,8 @@ use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{DisplayContext, Matches, SkimItem, SkimOptions};
+use regex::Regex;
+use unicode_width::UnicodeWidthStr;
 
 pub struct Selection {
     // all items
@@ -361,36 +363,8 @@ impl Selection {
         }
 
         let item = &matched_item.item;
-        let text = item.text();
-        let (match_start_char, match_end_char) = match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indices)) => {
-                if !matched_indices.is_empty() {
-                    (matched_indices[0], matched_indices[matched_indices.len() - 1] + 1)
-                } else {
-                    (0, 0)
-                }
-            }
-            Some(MatchedRange::ByteRange(match_start, match_end)) => {
-                let match_start_char = text[..match_start].chars().count();
-                let diff = text[match_start..match_end].chars().count();
-                (match_start_char, match_start_char + diff)
-            }
-            None => (0, 0),
-        };
-
+        let item_text = item.text();
         let container_width = screen_width - 2;
-        let (shift, full_width) =
-            reshape_string(&text, container_width, match_start_char, match_end_char, self.tabstop);
-
-        let mut printer = LinePrinter::builder()
-            .row(row)
-            .col(2)
-            .tabstop(self.tabstop)
-            .container_width(container_width)
-            .shift(if self.no_hscroll { 0 } else { shift })
-            .text_width(full_width)
-            .hscroll_offset(self.hscroll_offset)
-            .build();
 
         let matches = match matched_item.matched_range {
             Some(MatchedRange::Chars(ref matched_indices)) => Matches::CharIndices(matched_indices),
@@ -399,15 +373,63 @@ impl Selection {
         };
 
         let context = DisplayContext {
-            text: &item.text(),
+            text: &item_text,
             score: 0,
             matches,
             container_width,
             highlight_attr: matched_attr,
         };
 
+        let display_content = item.display(context);
+
+        // need to display the match content
+        let mut printer = if display_content.stripped() == item_text {
+            let (match_start_char, match_end_char) = match matched_item.matched_range {
+                Some(MatchedRange::Chars(ref matched_indices)) => {
+                    if !matched_indices.is_empty() {
+                        (matched_indices[0], matched_indices[matched_indices.len() - 1] + 1)
+                    } else {
+                        (0, 0)
+                    }
+                }
+                Some(MatchedRange::ByteRange(match_start, match_end)) => {
+                    let match_start_char = item_text[..match_start].chars().count();
+                    let diff = item_text[match_start..match_end].chars().count();
+                    (match_start_char, match_start_char + diff)
+                }
+                None => (0, 0),
+            };
+
+            let (mut shift, full_width) = reshape_string(
+                &item_text,
+                container_width,
+                match_start_char,
+                match_end_char,
+                self.tabstop,
+            );
+
+            LinePrinter::builder()
+                .row(row)
+                .col(2)
+                .tabstop(self.tabstop)
+                .container_width(container_width)
+                .shift(if self.no_hscroll { 0 } else { shift })
+                .text_width(full_width)
+                .hscroll_offset(self.hscroll_offset)
+                .build()
+        } else {
+            LinePrinter::builder()
+                .row(row)
+                .col(2)
+                .tabstop(self.tabstop)
+                .container_width(container_width)
+                .text_width(display_content.stripped().width_cjk())
+                .hscroll_offset(self.hscroll_offset)
+                .build()
+        };
+
         // print out the original content
-        print_item(canvas, &mut printer, &item, context, default_attr);
+        print_item(canvas, &mut printer, display_content, default_attr);
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use tuikit::prelude::*;
 use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
-use crate::{DisplayContext, SkimItem};
+use crate::AnsiString;
 use std::sync::Arc;
 
 lazy_static! {
@@ -24,7 +24,7 @@ pub fn escape_single_quote(text: &str) -> String {
         .to_string()
 }
 
-/// use to print a single line, properly handle the tabsteop and shift of a string
+/// use to print a single line, properly handle the tabstop and shift of a string
 /// e.g. a long line will be printed as `..some content` or `some content..` or `..some content..`
 /// depends on the container's width and the size of the content.
 ///
@@ -179,14 +179,8 @@ impl LinePrinter {
     }
 }
 
-pub fn print_item(
-    canvas: &mut dyn Canvas,
-    printer: &mut LinePrinter,
-    item: &Arc<dyn SkimItem>,
-    context: DisplayContext,
-    default_attr: Attr,
-) {
-    for (ch, attr) in item.display(context).iter() {
+pub fn print_item(canvas: &mut dyn Canvas, printer: &mut LinePrinter, content: AnsiString, default_attr: Attr) {
+    for (ch, attr) in content.iter() {
         printer.print_char(canvas, ch, default_attr.extend(attr), false);
     }
 }

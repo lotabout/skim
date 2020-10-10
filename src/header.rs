@@ -138,7 +138,7 @@ impl Draw for Header {
                 highlight_attr: self.theme.header(),
             };
 
-            print_item(canvas, &mut printer, item, context, self.theme.header());
+            print_item(canvas, &mut printer, item.display(context), self.theme.header());
         }
 
         Ok(())
