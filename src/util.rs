@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::prelude::v1::*;
 
 use regex::{Captures, Regex};
@@ -49,7 +49,7 @@ pub struct LinePrinter {
     shift: usize,
     text_width: usize,
     container_width: usize,
-    hscroll_offset: usize,
+    hscroll_offset: i64,
 }
 
 impl LinePrinter {
@@ -86,7 +86,7 @@ impl LinePrinter {
         self
     }
 
-    pub fn hscroll_offset(mut self, offset: usize) -> Self {
+    pub fn hscroll_offset(mut self, offset: i64) -> Self {
         self.hscroll_offset = offset;
         self
     }
@@ -115,7 +115,7 @@ impl LinePrinter {
         self.current_pos = 0;
         self.screen_col = self.col;
 
-        self.start = self.shift + self.hscroll_offset;
+        self.start = max(self.shift as i64 + self.hscroll_offset, 0) as usize;
         self.end = self.start + self.container_width;
     }
 
@@ -140,7 +140,7 @@ impl LinePrinter {
 
         if current < self.start || current >= self.end {
             // pass if it is hidden
-        } else if current < self.start + 2 && (self.shift > 0 || self.hscroll_offset > 0) {
+        } else if current < self.start + 2 && self.start > 0 {
             // print left ".."
             for _ in 0..min(w, current - self.start + 1) {
                 self.print_ch_to_canvas(canvas, '.', attr, skip);

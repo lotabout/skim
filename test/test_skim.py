@@ -70,10 +70,10 @@ class Alt(Key):
 class TmuxOutput(list):
     """A list that contains the output of tmux"""
     # match the status line
-    # normal:  `| 10/219 [2]               8.`
-    # inline:  `> query < 10/219 [2]       8.`
-    # preview: `> query < 10/219 [2]       8.│...`
-    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)(\.)?(?: │)? *$')
+    # normal:  `| 10/219 [2]               8/0.`
+    # inline:  `> query < 10/219 [2]       8/0.`
+    # preview: `> query < 10/219 [2]       8/0.│...`
+    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)/(-?[0-9]+)(\.)?(?: │)? *$')
     def __init__(self, iteratable=[]):
         super(TmuxOutput, self).__init__(iteratable)
         self._counts = None
@@ -83,7 +83,7 @@ class TmuxOutput(list):
             return self._counts
 
         # match_count item_count select_count item_cursor matcher_stopped
-        ret = (0, 0, 0, 0, '.')
+        ret = (0, 0, 0, 0, 0, '.')
         for line in self:
             mat = TmuxOutput.RE.match(line)
             if mat is not None:
@@ -104,8 +104,16 @@ class TmuxOutput(list):
         count = self.counts()[2]
         return int(count) if count is not None else None
 
+    def item_index(self):
+        count = self.counts()[3]
+        return int(count) if count is not None else None
+
+    def hscroll(self):
+        count = self.counts()[4]
+        return int(count) if count is not None else None
+
     def matcher_stopped(self):
-        return self.counts()[4] != '.'
+        return self.counts()[5] != '.'
 
     def ready_with_lines(self, lines):
         return self.item_count() == lines and self.matcher_stopped()

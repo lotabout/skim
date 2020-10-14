@@ -37,7 +37,7 @@ pub struct Selection {
     item_cursor: usize,
     // line No.
     line_cursor: usize,
-    hscroll_offset: usize,
+    hscroll_offset: i64,
     keep_right: bool,
     height: AtomicUsize,
     tabstop: usize,
@@ -226,10 +226,7 @@ impl Selection {
     }
 
     pub fn act_scroll(&mut self, offset: i32) {
-        let mut hscroll_offset = self.hscroll_offset as i32;
-        hscroll_offset += offset;
-        hscroll_offset = max(0, hscroll_offset);
-        self.hscroll_offset = hscroll_offset as usize;
+        self.hscroll_offset += offset as i64;
     }
 
     pub fn get_selected_indices_and_items(&self) -> (Vec<usize>, Vec<Arc<dyn SkimItem>>) {
@@ -271,6 +268,10 @@ impl Selection {
     pub fn get_current_item(&self) -> Option<Arc<dyn SkimItem>> {
         let item_idx = self.get_current_item_idx();
         self.items.get(item_idx).map(|item| item.item.clone())
+    }
+
+    pub fn get_hscroll_offset(&self) -> i64 {
+        self.hscroll_offset
     }
 }
 

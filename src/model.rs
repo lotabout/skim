@@ -668,6 +668,7 @@ impl Model {
             multi_selection: self.selection.is_multi_selection(),
             selected: self.selection.get_num_selected(),
             current_item_idx: self.selection.get_current_item_idx(),
+            hscroll_offset: self.selection.get_hscroll_offset(),
             reading: !self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true),
             time_since_read: self.reader_timer.elapsed(),
             time_since_match: self.matcher_timer.elapsed(),
@@ -768,6 +769,7 @@ struct Status {
     multi_selection: bool,
     selected: usize,
     current_item_idx: usize,
+    hscroll_offset: i64,
     reading: bool,
     time_since_read: Duration,
     time_since_match: Duration,
@@ -849,8 +851,9 @@ impl Draw for Status {
 
         // item cursor
         let line_num_str = format!(
-            " {}{}",
+            " {}/{}{}",
             self.current_item_idx,
+            self.hscroll_offset,
             if self.matcher_running { '.' } else { ' ' }
         );
         canvas.print_with_attr(0, screen_width - line_num_str.len(), &line_num_str, info_attr_bold)?;

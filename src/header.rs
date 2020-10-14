@@ -15,7 +15,6 @@ use tuikit::prelude::*;
 pub struct Header {
     header: Vec<AnsiString<'static>>,
     tabstop: usize,
-    hscroll_offset: usize,
     reverse: bool,
     theme: Arc<ColorTheme>,
 
@@ -28,7 +27,6 @@ impl Header {
         Self {
             header: vec![],
             tabstop: 8,
-            hscroll_offset: 0,
             reverse: false,
             theme: Arc::new(*DEFAULT_THEME),
             item_pool: Arc::new(DeferDrop::new(ItemPool::new())),
@@ -66,13 +64,6 @@ impl Header {
         self
     }
 
-    pub fn act_scroll(&mut self, offset: i32) {
-        let mut hscroll_offset = self.hscroll_offset as i32;
-        hscroll_offset += offset;
-        hscroll_offset = max(0, hscroll_offset);
-        self.hscroll_offset = hscroll_offset as usize;
-    }
-
     fn lines_of_header(&self) -> usize {
         self.header.len() + self.item_pool.reserved().len()
     }
@@ -108,7 +99,6 @@ impl Draw for Header {
                 .container_width(screen_width - 2)
                 .shift(0)
                 .text_width(screen_width - 2)
-                .hscroll_offset(self.hscroll_offset)
                 .build();
 
             for (ch, _attr) in header.iter() {
@@ -127,7 +117,6 @@ impl Draw for Header {
                 .container_width(screen_width - 2)
                 .shift(0)
                 .text_width(screen_width - 2)
-                .hscroll_offset(self.hscroll_offset)
                 .build();
 
             let context = DisplayContext {
@@ -152,21 +141,7 @@ impl Widget<Event> for Header {
 }
 
 impl EventHandler for Header {
-    fn handle(&mut self, event: &Event) -> UpdateScreen {
-        match event {
-            Event::EvActScrollLeft(diff) => {
-                self.act_scroll(*diff);
-            }
-
-            Event::EvActScrollRight(diff) => {
-                self.act_scroll(*diff);
-            }
-
-            _ => {
-                return UpdateScreen::DONT_REDRAW;
-            }
-        }
-
-        UpdateScreen::REDRAW
+    fn handle(&mut self, _event: &Event) -> UpdateScreen {
+        UpdateScreen::DONT_REDRAW
     }
 }
