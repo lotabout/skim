@@ -52,6 +52,8 @@ Usage: sk [options]
     --color [BASE][,COLOR:ANSI]
                          change color theme
     --no-hscroll         Disable horizontal scroll
+    --keep-right         Keep the right end of the line visible on overflow
+    --skip-to-pattern    Line starts with the start of matched pattern
 
   Layout
     --layout=LAYOUT      Choose layout: [default|reverse|reverse-list]
@@ -221,6 +223,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("filter").long("filter").short("f").takes_value(true).multiple(true))
         .arg(Arg::with_name("layout").long("layout").multiple(true).takes_value(true).default_value("default"))
         .arg(Arg::with_name("keep-right").long("keep-right").multiple(true))
+        .arg(Arg::with_name("skip-to-pattern").long("skip-to-pattern").multiple(true).takes_value(true).default_value(""))
         .get_matches_from(args);
 
     if opts.is_present("help") {
@@ -393,6 +396,12 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
             _ => CaseMatching::Respect,
         })
         .keep_right(options.is_present("keep-right"))
+        .skip_to_pattern(
+            options
+                .values_of("skip-to-pattern")
+                .and_then(|vals| vals.last())
+                .unwrap_or(""),
+        )
         .build()
         .unwrap()
 }

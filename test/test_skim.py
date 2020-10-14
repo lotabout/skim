@@ -960,6 +960,12 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines.any_include('6100 62'))
 
+    def test_skip_to_pattern(self):
+        self.tmux.send_keys(f"""echo -ne 'a/b/c' | {self.sk("--skip-to-pattern '[^/]*$'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(1))
+        self.tmux.until(lambda lines: lines.any_include('..c'))
+
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"

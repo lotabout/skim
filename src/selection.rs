@@ -15,6 +15,7 @@ use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{DisplayContext, Matches, SkimItem, SkimOptions};
+use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
 pub struct Selection {
@@ -39,6 +40,7 @@ pub struct Selection {
     line_cursor: usize,
     hscroll_offset: i64,
     keep_right: bool,
+    skip_to_pattern: Option<Regex>,
     height: AtomicUsize,
     tabstop: usize,
 
@@ -58,6 +60,7 @@ impl Selection {
             line_cursor: 0,
             hscroll_offset: 0,
             keep_right: false,
+            skip_to_pattern: None,
             height: AtomicUsize::new(0),
             tabstop: 8,
             multi_selection: false,
@@ -97,6 +100,10 @@ impl Selection {
 
         if options.nosort {
             self.items.nosort(true);
+        }
+
+        if !options.skip_to_pattern.is_empty() {
+            self.skip_to_pattern = Regex::new(options.skip_to_pattern).ok();
         }
 
         self.keep_right = options.keep_right;
@@ -273,6 +280,20 @@ impl Selection {
     pub fn get_hscroll_offset(&self) -> i64 {
         self.hscroll_offset
     }
+
+    fn calc_skip_width(&self, text: &str) -> usize {
+        let skip = if self.skip_to_pattern.is_none() {
+            0
+        } else {
+            let regex = self.skip_to_pattern.as_ref().unwrap();
+            if let Some(mat) = regex.find(text) {
+                text[..mat.start()].width_cjk()
+            } else {
+                0
+            }
+        };
+        max(2, skip) - 2
+    }
 }
 
 impl EventHandler for Selection {
@@ -414,8 +435,13 @@ impl Selection {
 
             let shift = if self.no_hscroll {
                 0
-            } else if self.keep_right && match_start_char == 0 && match_end_char == 0 {
-                max(full_width, container_width) - container_width
+            } else if match_start_char == 0 && match_end_char == 0 {
+                // no match
+                if self.keep_right {
+                    max(full_width, container_width) - container_width
+                } else {
+                    self.calc_skip_width(&item_text)
+                }
             } else {
                 shift
             };
