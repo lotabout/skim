@@ -96,6 +96,7 @@ Usage: sk [options]
     --print-cmd          Print command query as the first line (after --print-query)
     --print-score        Print matching score in filter output (with --filter)
     -1, --select-1       Automatically select the only match
+    -0, --exit-0         Exit immediately when there's no match
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -402,6 +403,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
                 .unwrap_or(""),
         )
         .select1(options.is_present("select-1"))
+        .exit0(options.is_present("exit-0"))
         .build()
         .unwrap()
 }

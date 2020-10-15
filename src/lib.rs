@@ -255,7 +255,7 @@ impl Skim {
                     .min_height(min_height)
                     .height(height)
                     .clear_on_exit(!options.no_clear)
-                    .hold(options.select1),
+                    .hold(options.select1 || options.exit0),
             )
             .unwrap(),
         );

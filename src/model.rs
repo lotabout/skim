@@ -48,6 +48,7 @@ pub struct Model {
     selection: Selection,
     num_options: usize,
     select1: bool,
+    exit0: bool,
 
     use_regex: bool,
     regex_matcher: Matcher,
@@ -147,6 +148,7 @@ impl Model {
             selection,
             num_options: 0,
             select1: false,
+            exit0: false,
             use_regex: options.regex,
             regex_matcher,
             matcher,
@@ -223,6 +225,7 @@ impl Model {
         }
 
         self.select1 = options.select1;
+        self.exit0 = options.exit0;
     }
 
     // -> (direction, size, wrap, shown)
@@ -328,8 +331,8 @@ impl Model {
         self.restart_matcher();
     }
 
-    fn handle_select1(&mut self) {
-        if !self.select1 {
+    fn handle_select1_or_exit0(&mut self) {
+        if !self.select1 && !self.exit0 {
             return;
         }
 
@@ -340,9 +343,12 @@ impl Model {
         let processed = reader_stopped && items_consumed && matcher_stopped;
         let num_matched = self.selection.get_num_options();
         if processed {
-            if num_matched == 1 {
+            if num_matched == 1 && self.select1 {
                 debug!("select-1 triggered, accept");
                 let _ = self.tx.send(Event::EvActAccept(None));
+            } else if num_matched == 0 && self.exit0 {
+                debug!("exit-0 triggered, accept");
+                let _ = self.tx.send(Event::EvActAbort);
             } else {
                 let _ = self.term.restart();
             }
@@ -469,7 +475,7 @@ impl Model {
                     // consume following HeartBeat event
                     next_event = self.consume_additional_event(&Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
-                    self.handle_select1();
+                    self.handle_select1_or_exit0();
                 }
 
                 Event::EvActIfNonMatched(ref arg_str) => {

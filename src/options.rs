@@ -52,6 +52,7 @@ pub struct SkimOptions<'a> {
     pub keep_right: bool,
     pub skip_to_pattern: &'a str,
     pub select1: bool,
+    pub exit0: bool,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -98,6 +99,7 @@ impl<'a> Default for SkimOptions<'a> {
             keep_right: false,
             skip_to_pattern: "",
             select1: false,
+            exit0: false,
         }
     }
 }
