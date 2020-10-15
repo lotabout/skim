@@ -281,6 +281,10 @@ impl Selection {
         self.hscroll_offset
     }
 
+    pub fn get_num_options(&self) -> usize {
+        self.items.len()
+    }
+
     fn calc_skip_width(&self, text: &str) -> usize {
         let skip = if self.skip_to_pattern.is_none() {
             0

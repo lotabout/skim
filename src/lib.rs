@@ -254,7 +254,8 @@ impl Skim {
                 TermOptions::default()
                     .min_height(min_height)
                     .height(height)
-                    .clear_on_exit(!options.no_clear),
+                    .clear_on_exit(!options.no_clear)
+                    .hold(options.select1),
             )
             .unwrap(),
         );
@@ -272,7 +273,7 @@ impl Skim {
         let term_clone = term.clone();
         let input_thread = thread::spawn(move || loop {
             if let Ok(key) = term_clone.poll_event() {
-                if key == TermEvent::User1 {
+                if key == TermEvent::User(()) {
                     break;
                 }
 
@@ -291,7 +292,7 @@ impl Skim {
         // model + previewer
         let mut model = Model::new(rx, tx, reader, term.clone(), &options);
         let ret = model.start();
-        let _ = term.send_event(TermEvent::User1); // interrupt the input thread
+        let _ = term.send_event(TermEvent::User(())); // interrupt the input thread
         let _ = input_thread.join();
         ret
     }

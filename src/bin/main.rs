@@ -95,7 +95,7 @@ Usage: sk [options]
     --print-query        Print query as the first line
     --print-cmd          Print command query as the first line (after --print-query)
     --print-score        Print matching score in filter output (with --filter)
-    -f, --filter=STR     Filter mode. Do not start interactive finder.
+    -1, --select-1       Automatically select the only match
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -118,7 +118,6 @@ Usage: sk [options]
     --history=FILE
     --history-size=N
     --sync
-    --select-1
     --exit-0
 ";
 
@@ -402,6 +401,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
                 .and_then(|vals| vals.last())
                 .unwrap_or(""),
         )
+        .select1(options.is_present("select-1"))
         .build()
         .unwrap()
 }

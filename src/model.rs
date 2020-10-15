@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Duration as TimerDuration;
+use defer_drop::DeferDrop;
 use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
 use tuikit::prelude::{Event as TermEvent, *};
@@ -27,7 +28,6 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
-use defer_drop::DeferDrop;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -47,6 +47,7 @@ pub struct Model {
     query: Query,
     selection: Selection,
     num_options: usize,
+    select1: bool,
 
     use_regex: bool,
     regex_matcher: Matcher,
@@ -145,6 +146,7 @@ impl Model {
             query,
             selection,
             num_options: 0,
+            select1: false,
             use_regex: options.regex,
             regex_matcher,
             matcher,
@@ -219,6 +221,8 @@ impl Model {
                 .delimiter(self.delimiter.clone()),
             );
         }
+
+        self.select1 = options.select1;
     }
 
     // -> (direction, size, wrap, shown)
@@ -322,6 +326,27 @@ impl Model {
         self.item_pool.reset();
         self.num_options = 0;
         self.restart_matcher();
+    }
+
+    fn handle_select1(&mut self) {
+        if !self.select1 {
+            return;
+        }
+
+        let items_consumed = self.item_pool.num_not_taken() == 0;
+        let reader_stopped = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
+        let matcher_stopped = self.matcher_control.as_ref().map(|ctrl| ctrl.stopped()).unwrap_or(true);
+
+        let processed = reader_stopped && items_consumed && matcher_stopped;
+        let num_matched = self.selection.get_num_options();
+        if processed {
+            if num_matched == 1 {
+                debug!("select-1 triggered, accept");
+                let _ = self.tx.send(Event::EvActAccept(None));
+            } else {
+                let _ = self.term.restart();
+            }
+        }
     }
 
     fn on_cmd_query_change(&mut self, env: &mut ModelEnv) {
@@ -444,6 +469,7 @@ impl Model {
                     // consume following HeartBeat event
                     next_event = self.consume_additional_event(&Event::EvHeartBeat);
                     self.act_heart_beat(&mut env);
+                    self.handle_select1();
                 }
 
                 Event::EvActIfNonMatched(ref arg_str) => {

@@ -51,6 +51,7 @@ pub struct SkimOptions<'a> {
     pub cmd_collector: Rc<RefCell<dyn CommandCollector>>,
     pub keep_right: bool,
     pub skip_to_pattern: &'a str,
+    pub select1: bool,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -96,6 +97,7 @@ impl<'a> Default for SkimOptions<'a> {
             cmd_collector: Rc::new(RefCell::new(SkimItemReader::new(Default::default()))),
             keep_right: false,
             skip_to_pattern: "",
+            select1: false,
         }
     }
 }
