@@ -10,11 +10,15 @@ __fsel() {
     -o -type d -print \
     -o -type l -print 2> /dev/null | cut -b3-"}"
   setopt localoptions pipefail no_aliases 2> /dev/null
+  REPORTTIME_=$REPORTTIME
+  unset REPORTTIME
   eval "$cmd" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_CTRL_T_OPTS" $(__skimcmd) -m "$@" | while read item; do
     echo -n "${(q)item} "
   done
   local ret=$?
   echo
+  REPORTTIME=$REPORTTIME_
+  unset REPORTTIME_
   return $ret
 }
 
@@ -51,7 +55,11 @@ skim-cd-widget() {
   local cmd="${SKIM_ALT_C_COMMAND:-"command find -L . -mindepth 1 \\( -path '*/\\.*' -o -fstype 'sysfs' -o -fstype 'devfs' -o -fstype 'devtmpfs' -o -fstype 'proc' \\) -prune \
     -o -type d -print 2> /dev/null | cut -b3-"}"
   setopt localoptions pipefail no_aliases 2> /dev/null
+  REPORTTIME_=$REPORTTIME
+  unset REPORTTIME
   local dir="$(eval "$cmd" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_ALT_C_OPTS" $(__skimcmd) -m)"
+  REPORTTIME=$REPORTTIME_
+  unset REPORTTIME_
   if [[ -z "$dir" ]]; then
     zle redisplay
     return 0
