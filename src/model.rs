@@ -49,6 +49,7 @@ pub struct Model {
     num_options: usize,
     select1: bool,
     exit0: bool,
+    sync: bool,
 
     use_regex: bool,
     regex_matcher: Matcher,
@@ -149,6 +150,7 @@ impl Model {
             num_options: 0,
             select1: false,
             exit0: false,
+            sync: false,
             use_regex: options.regex,
             regex_matcher,
             matcher,
@@ -226,6 +228,7 @@ impl Model {
 
         self.select1 = options.select1;
         self.exit0 = options.exit0;
+        self.sync = options.sync;
     }
 
     // -> (direction, size, wrap, shown)
@@ -332,7 +335,7 @@ impl Model {
     }
 
     fn handle_select1_or_exit0(&mut self) {
-        if !self.select1 && !self.exit0 {
+        if !self.select1 && !self.exit0 && !self.sync {
             return;
         }
 

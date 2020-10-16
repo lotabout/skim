@@ -375,6 +375,14 @@ Automatically select the only match
 .TP
 .B "-0, --exit-0"
 Exit immediately when there's no match
+.TP
+.B "--sync"
+Synchronous search for multi-staged filtering. If specified, skim will launch
+ncurses finder only after the input stream is complete.
+
+.RS
+e.g. \fBsk --multi | sk --sync\fR
+.RE
 
 .TP
 .B "--version"

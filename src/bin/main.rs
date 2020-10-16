@@ -97,6 +97,7 @@ Usage: sk [options]
     --print-score        Print matching score in filter output (with --filter)
     -1, --select-1       Automatically select the only match
     -0, --exit-0         Exit immediately when there's no match
+    --sync               Synchronous search for multi-staged filtering
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -118,8 +119,6 @@ Usage: sk [options]
     --no-bold
     --history=FILE
     --history-size=N
-    --sync
-    --exit-0
 ";
 
 const DEFAULT_HISTORY_SIZE: usize = 1000;
@@ -404,6 +403,7 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         )
         .select1(options.is_present("select-1"))
         .exit0(options.is_present("exit-0"))
+        .sync(options.is_present("sync"))
         .build()
         .unwrap()
 }
