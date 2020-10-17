@@ -10,9 +10,6 @@ use crate::spinlock::{SpinLock, SpinLockGuard};
 use crate::{MatchRange, Rank, SkimItem};
 
 //------------------------------------------------------------------------------
-pub type ItemIndex = (u32, u32);
-
-//------------------------------------------------------------------------------
 
 #[derive(Debug)]
 pub struct RankBuilder {
@@ -130,6 +127,10 @@ impl ItemPool {
         self.length.load(Ordering::SeqCst) - self.taken.load(Ordering::SeqCst)
     }
 
+    pub fn num_taken(&self) -> usize {
+        self.taken.load(Ordering::SeqCst)
+    }
+
     pub fn clear(&self) {
         let mut items = self.pool.lock();
         items.clear();
@@ -145,7 +146,8 @@ impl ItemPool {
         self.taken.store(0, Ordering::SeqCst);
     }
 
-    pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) {
+    /// append the items and return the new_size of the pool
+    pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) -> usize {
         let len = items.len();
         trace!("item pool, append {} items", len);
         let mut pool = self.pool.lock();
@@ -161,6 +163,7 @@ impl ItemPool {
         }
         self.length.store(pool.len(), Ordering::SeqCst);
         trace!("item pool, done append {} items", len);
+        pool.len()
     }
 
     pub fn take(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {

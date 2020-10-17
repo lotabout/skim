@@ -9,7 +9,6 @@ use tuikit::prelude::{Event as TermEvent, *};
 ///! Handle the selections of items
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::global::current_run_num;
-use crate::item::ItemIndex;
 use crate::item::MatchedItem;
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
@@ -17,6 +16,8 @@ use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{DisplayContext, MatchRange, Matches, SkimItem, SkimOptions};
 use regex::Regex;
 use unicode_width::UnicodeWidthStr;
+
+type ItemIndex = (u32, u32);
 
 pub struct Selection {
     // all items
@@ -183,7 +184,7 @@ impl Selection {
             .items
             .get(cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
-        let index = (current_run_num(), cursor as u32);
+        let index = (current_run_num(), current_item.item_idx);
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, current_item.item.clone());
         } else {
@@ -198,8 +199,8 @@ impl Selection {
         }
 
         let run_num = current_run_num();
-        for (idx, current_item) in self.items.iter().enumerate() {
-            let index = (run_num, idx as u32);
+        for current_item in self.items.iter() {
+            let index = (run_num, current_item.item_idx);
             if !self.selected.contains_key(&index) {
                 self.selected.insert(index, current_item.item.clone());
             } else {
@@ -208,12 +209,12 @@ impl Selection {
         }
     }
 
-    pub fn act_select_item(&mut self, item_index: ItemIndex, item: Arc<dyn SkimItem>) {
+    pub fn act_select_item(&mut self, run_num: u32, matched: MatchedItem) {
         if !self.multi_selection {
             return;
         }
 
-        self.selected.insert(item_index, item);
+        self.selected.insert((run_num, matched.item_idx), matched.item.clone());
     }
 
     pub fn act_select_all(&mut self) {
@@ -222,9 +223,9 @@ impl Selection {
         }
 
         let run_num = current_run_num();
-        for (idx, current_item) in self.items.iter().enumerate() {
+        for current_item in self.items.iter() {
             let item = current_item.item.clone();
-            self.selected.insert((run_num, idx as u32), item);
+            self.selected.insert((run_num, current_item.item_idx), item);
         }
     }
 
@@ -359,7 +360,6 @@ impl Selection {
         canvas: &mut dyn Canvas,
         row: usize,
         matched_item: &MatchedItem,
-        item_index: usize,
         is_current: bool,
     ) -> Result<()> {
         let (screen_width, screen_height) = canvas.size()?;
@@ -384,7 +384,7 @@ impl Selection {
         };
 
         // print selection cursor
-        let index = (current_run_num(), item_index as u32);
+        let index = (current_run_num(), matched_item.item_idx);
         if self.selected.contains_key(&index) {
             let _ = canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
         } else {
@@ -505,7 +505,7 @@ impl Draw for Selection {
                 .get(item_idx)
                 .unwrap_or_else(|| panic!("model:draw_items: failed to get item at {}", item_idx));
 
-            let _ = self.draw_item(canvas, line_no, &item, item_idx, line_cursor == self.line_cursor);
+            let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
         }
 
         Ok(())

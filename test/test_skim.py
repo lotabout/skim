@@ -965,6 +965,40 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines.ready_with_lines(1))
         self.tmux.until(lambda lines: lines.any_include('..c'))
 
+    def test_multi_selection(self):
+        self.tmux.send_keys(f"""echo -n 'a\nb\nc' | {self.sk("-m")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(3))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+        self.tmux.send_keys(Key('b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> b'))
+        self.tmux.send_keys(Key('TAB'))
+        self.tmux.until(lambda lines: lines[-3].startswith('>>b'))
+        self.tmux.send_keys(Key('C-h'))
+        self.tmux.until(lambda lines: lines[-4].startswith(' >b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+        self.tmux.send_keys(Key('c'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> c'))
+        self.tmux.send_keys(Key('TAB'))
+        self.tmux.until(lambda lines: lines[-3].startswith('>>c'))
+        self.tmux.send_keys(Key('C-h'))
+        self.tmux.until(lambda lines: lines[-5].startswith(' >c'))
+        self.tmux.until(lambda lines: lines[-4].startswith(' >b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+        self.tmux.send_keys(Key('Enter'))
+        self.assertEqual('b\nc', self.readonce().strip())
+
+    def test_append_and_select(self):
+        self.tmux.send_keys(f"""echo -n 'a\nb\nc' | {self.sk("-m --bind 'ctrl-f:append-and-select'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_lines(3))
+        self.tmux.send_keys(Key('xyz'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.send_keys(Key('C-f'))
+        self.tmux.until(lambda lines: lines[-3].startswith('>>xyz'))
+        self.tmux.send_keys(Key('C-u'))
+        self.tmux.until(lambda lines: lines[-6].startswith(' >xyz'))
+        self.tmux.until(lambda lines: lines[-5].startswith('  c'))
+        self.tmux.until(lambda lines: lines[-4].startswith('  b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
 
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1

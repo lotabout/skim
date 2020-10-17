@@ -83,7 +83,7 @@ impl Matcher {
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
-            let num_taken = item_pool.num_not_taken();
+            let num_taken = item_pool.num_taken();
             let items = item_pool.take();
 
             // 1. use rayon for parallel

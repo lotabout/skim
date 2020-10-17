@@ -14,9 +14,10 @@ use tuikit::prelude::{Event as TermEvent, *};
 
 use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, RegexEngineFactory};
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
+use crate::global::current_run_num;
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{parse_criteria, ItemPool, RankBuilder, RankCriteria};
+use crate::item::{parse_criteria, ItemPool, MatchedItem, RankBuilder, RankCriteria};
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -27,7 +28,8 @@ use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{FuzzyAlgorithm, MatchEngineFactory, SkimItem};
+use crate::{FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
+use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -89,7 +91,8 @@ pub struct Model {
     timer: Timer,
     hb_timer_guard: Option<TimerGuard>,
 
-    next_idx_to_append: u32, // for AppendAndSelect action
+    // for AppendAndSelect action
+    rank_builder: Arc<RankBuilder>,
 }
 
 impl Model {
@@ -125,7 +128,7 @@ impl Model {
             let fuzzy_engine_factory: Rc<dyn MatchEngineFactory> = Rc::new(AndOrEngineFactory::new(
                 ExactOrFuzzyEngineFactory::builder()
                     .exact_mode(options.exact)
-                    .rank_builder(rank_builder)
+                    .rank_builder(rank_builder.clone())
                     .build(),
             ));
             Matcher::builder(fuzzy_engine_factory).case(options.case).build()
@@ -183,7 +186,7 @@ impl Model {
             timer: Timer::new(),
             hb_timer_guard: None,
 
-            next_idx_to_append: 0,
+            rank_builder,
         };
         ret.parse_options(options);
         ret
@@ -443,14 +446,18 @@ impl Model {
             return;
         }
 
-        let item_index = (std::u32::MAX, self.next_idx_to_append);
-
+        let item_len = query.len();
         let item: Arc<dyn SkimItem> = Arc::new(query);
+        let new_len = self.item_pool.append(vec![item.clone()]);
+        let item_idx = (max(new_len, 1) - 1) as u32;
+        let matched_item = MatchedItem {
+            item,
+            rank: self.rank_builder.build_rank(0, 0, 0, item_len),
+            matched_range: Some(MatchRange::ByteRange(0, 0)),
+            item_idx,
+        };
 
-        self.next_idx_to_append += 1;
-
-        self.item_pool.append(vec![item.clone()]);
-        self.selection.act_select_item(item_index, item);
+        self.selection.act_select_item(current_run_num(), matched_item);
 
         self.act_heart_beat(env);
     }
@@ -654,7 +661,7 @@ impl Model {
         if !processed {
             // take out new items and put them into items
             let new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
-            self.item_pool.append(new_items);
+            let _ = self.item_pool.append(new_items);
         };
 
         // send heart beat (so that heartbeat/refresh is triggered)
