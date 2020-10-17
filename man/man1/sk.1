@@ -385,6 +385,23 @@ e.g. \fBsk --multi | sk --sync\fR
 .RE
 
 .TP
+.B "--pre-select-n=NUM"
+Pre-select the first \fBNUM\fR items in the multi-selection mode.
+.TP
+.B "--pre-select-pat=REGEX"
+Pre-select the items that matches the \fBREGEX\fR specified in multi-selection
+mode. Check the doc for the detailed syntax:
+.I https://docs.rs/regex/1.4.1/regex/
+.TP
+.B "--pre-select-items=$'item1\(rsnitem2'"
+Pre-select the specified items (separated by newline character) in
+multi-selection mode.
+.TP
+.B "--pre-select-file=FILENAME"
+Pre-select the items read from \fBFILENAME\fR (separated by newline
+character) in multi-selection mode.
+
+.TP
 .B "--version"
 Display version information and exit
 

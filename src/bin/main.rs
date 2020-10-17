@@ -98,6 +98,13 @@ Usage: sk [options]
     -1, --select-1       Automatically select the only match
     -0, --exit-0         Exit immediately when there's no match
     --sync               Synchronous search for multi-staged filtering
+    --pre-select-n=NUM   Pre-select the first n items in multi-selection mode
+    --pre-select-pat=REGEX
+                         Pre-select the matched items in multi-selection mode
+    --pre-select-items=$'item1\\nitem2'
+                         Pre-select the items separated by newline character
+    --pre-select-file=FILENAME
+                         Pre-select the items read from file
 
   Environment variables
     SKIM_DEFAULT_COMMAND Default command to use when input is tty
@@ -225,6 +232,10 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("layout").long("layout").multiple(true).takes_value(true).default_value("default"))
         .arg(Arg::with_name("keep-right").long("keep-right").multiple(true))
         .arg(Arg::with_name("skip-to-pattern").long("skip-to-pattern").multiple(true).takes_value(true).default_value(""))
+        .arg(Arg::with_name("pre-select-n").long("pre-select-n").multiple(true).takes_value(true).default_value("0"))
+        .arg(Arg::with_name("pre-select-pat").long("pre-select-pat").multiple(true).takes_value(true).default_value(""))
+        .arg(Arg::with_name("pre-select-items").long("pre-select-items").multiple(true).takes_value(true).default_value(""))
+        .arg(Arg::with_name("pre-select-file").long("pre-select-file").multiple(true).takes_value(true).default_value(""))
         .get_matches_from(args);
 
     if opts.is_present("help") {
@@ -264,6 +275,28 @@ fn real_main() -> Result<i32, std::io::Error> {
     }
 
     options.cmd_collector = cmd_collector.clone();
+
+
+    //------------------------------------------------------------------------------
+    // handle pre-selection options
+    let pre_select_n: Option<usize> = opts.values_of("pre-select-n").and_then(|vals| vals.last()).and_then(|s| s.parse().ok());
+    let pre_select_pat = opts.values_of("pre-select-pat").and_then(|vals| vals.last());
+    let pre_select_items: Option<Vec<String>> = opts.values_of("pre-select-items").map(|vals| vals.flat_map(|m|m.split('\n')).map(|s|s.to_string()).collect());
+    let pre_select_file = opts.values_of("pre-select-file").and_then(|vals| vals.last());
+
+    if pre_select_n.is_some() || pre_select_pat.is_some() || pre_select_items.is_some() || pre_select_file.is_some() {
+        let first_n = pre_select_n.unwrap_or(0);
+        let pattern = pre_select_pat.unwrap_or("");
+        let preset_items = pre_select_items.unwrap_or(vec![]);
+        let preset_file = pre_select_file.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+
+        let selector = DefaultSkimSelector::default()
+            .first_n(first_n)
+            .regex(pattern)
+            .preset(preset_items)
+            .preset(preset_file);
+        options.selector = Some(Rc::new(selector));
+    }
 
     let options = options;
 

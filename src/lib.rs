@@ -24,7 +24,6 @@ use crate::reader::Reader;
 mod ansi;
 mod engine;
 mod event;
-/// provide default implementation
 pub mod field;
 mod global;
 mod header;
@@ -257,6 +256,14 @@ pub trait MatchEngineFactory {
     fn create_engine(&self, query: &str) -> Box<dyn MatchEngine> {
         self.create_engine_with_case(query, CaseMatching::default())
     }
+}
+
+//------------------------------------------------------------------------------
+// Preselection
+
+/// A selector that determines whether an item should be "pre-selected" in multi-selection mode
+pub trait Selector {
+    fn should_select(&self, index: usize, item: &dyn SkimItem) -> bool;
 }
 
 //------------------------------------------------------------------------------

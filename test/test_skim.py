@@ -1000,6 +1000,36 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-4].startswith('  b'))
         self.tmux.until(lambda lines: lines[-3].startswith('> a'))
 
+    def test_pre_select_n(self):
+        self.tmux.send_keys(f"""echo -n 'a\nb\nc' | {self.sk("-m --pre-select-n=1")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-5].startswith('  c'))
+        self.tmux.until(lambda lines: lines[-4].startswith('  b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('>>a'))
+
+    def test_pre_select_items(self):
+        args = "-m --pre-select-items=$'b\\nc'"
+        self.tmux.send_keys(f"""echo -n 'a\nb\nc' | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-5].startswith(' >c'))
+        self.tmux.until(lambda lines: lines[-4].startswith(' >b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+
+    def test_pre_select_pat(self):
+        self.tmux.send_keys(f"""echo -n 'a\nb\nc' | {self.sk("-m --pre-select-pat='[b|c]'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-5].startswith(' >c'))
+        self.tmux.until(lambda lines: lines[-4].startswith(' >b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+
+    def test_pre_select_file(self):
+        pre_select_file = f'{self.tempname()}.pre_select'
+        self.tmux.send_keys(f"echo -e 'b\nc' > {pre_select_file}", Key('Enter'))
+        args = f'''-m --pre-select-file={pre_select_file}'''
+
+        self.tmux.send_keys(f"""echo -n 'a\nb\nc' | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-5].startswith(' >c'))
+        self.tmux.until(lambda lines: lines[-4].startswith(' >b'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> a'))
+
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"

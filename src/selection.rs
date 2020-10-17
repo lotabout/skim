@@ -13,8 +13,9 @@ use crate::item::MatchedItem;
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
-use crate::{DisplayContext, MatchRange, Matches, SkimItem, SkimOptions};
+use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions};
 use regex::Regex;
+use std::rc::Rc;
 use unicode_width::UnicodeWidthStr;
 
 type ItemIndex = (u32, u32);
@@ -50,6 +51,12 @@ pub struct Selection {
     reverse: bool,
     no_hscroll: bool,
     theme: Arc<ColorTheme>,
+
+    // Pre-selection will be performed the first time an item was seen by Selection.
+    // To avoid remember all items, we'll track the latest run_num and index.
+    latest_select_run_num: u32,
+    pre_selected_watermark: usize,
+    selector: Option<Rc<dyn Selector>>,
 }
 
 impl Selection {
@@ -68,6 +75,9 @@ impl Selection {
             reverse: false,
             no_hscroll: false,
             theme: Arc::new(*DEFAULT_THEME),
+            latest_select_run_num: 0,
+            pre_selected_watermark: 0,
+            selector: None,
         }
     }
 
@@ -108,6 +118,7 @@ impl Selection {
         }
 
         self.keep_right = options.keep_right;
+        self.selector = options.selector.clone();
     }
 
     pub fn theme(mut self, theme: Arc<ColorTheme>) -> Self {
@@ -116,7 +127,19 @@ impl Selection {
     }
 
     pub fn append_sorted_items(&mut self, items: Vec<MatchedItem>) {
+        debug!("append_sorted_items: num: {}", items.len());
+        let current_run_num = current_run_num();
+        if !items.is_empty() && current_run_num > self.latest_select_run_num {
+            self.latest_select_run_num = current_run_num;
+            self.pre_selected_watermark = 0;
+        }
+
+        if self.items.len() >= self.pre_selected_watermark {
+            self.pre_select(&items);
+        }
+
         self.items.append(items);
+        self.pre_selected_watermark = max(self.pre_selected_watermark, self.items.len());
 
         let height = self.height.load(Ordering::Relaxed);
         if self.items.len() <= self.line_cursor {
@@ -132,6 +155,26 @@ impl Selection {
 
     pub fn clear(&mut self) {
         self.items.clear();
+    }
+
+    fn pre_select(&mut self, items: &[MatchedItem]) {
+        debug!("perform pre selection for {} items", items.len());
+        if self.selector.is_none() || !self.multi_selection {
+            return;
+        }
+
+        let current_run_num = current_run_num();
+        for item in items {
+            if self
+                .selector
+                .as_ref()
+                .map(|s| s.should_select(item.item_idx as usize, item.item.as_ref()))
+                .unwrap_or(false)
+            {
+                self.act_select_raw_item(current_run_num, item.item_idx, item.item.clone());
+            }
+        }
+        debug!("done perform pre selection for {} items", items.len());
     }
 
     // > 0 means move up, < 0 means move down
@@ -209,12 +252,15 @@ impl Selection {
         }
     }
 
-    pub fn act_select_item(&mut self, run_num: u32, matched: MatchedItem) {
+    pub fn act_select_matched(&mut self, run_num: u32, matched: MatchedItem) {
+        self.act_select_raw_item(run_num, matched.item_idx, matched.item.clone());
+    }
+
+    pub fn act_select_raw_item(&mut self, run_num: u32, item_index: u32, item: Arc<dyn SkimItem>) {
         if !self.multi_selection {
             return;
         }
-
-        self.selected.insert((run_num, matched.item_idx), matched.item.clone());
+        self.selected.insert((run_num, item_index), item);
     }
 
     pub fn act_select_all(&mut self) {

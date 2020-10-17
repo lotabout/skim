@@ -457,7 +457,7 @@ impl Model {
             item_idx,
         };
 
-        self.selection.act_select_item(current_run_num(), matched_item);
+        self.selection.act_select_matched(current_run_num(), matched_item);
 
         self.act_heart_beat(env);
     }

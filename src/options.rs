@@ -4,7 +4,7 @@ use derive_builder::Builder;
 
 use crate::helper::item_reader::SkimItemReader;
 use crate::reader::CommandCollector;
-use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory};
+use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory, Selector};
 use std::cell::RefCell;
 
 #[derive(Builder)]
@@ -54,6 +54,7 @@ pub struct SkimOptions<'a> {
     pub select1: bool,
     pub exit0: bool,
     pub sync: bool,
+    pub selector: Option<Rc<dyn Selector>>,
 }
 
 impl<'a> Default for SkimOptions<'a> {
@@ -102,6 +103,7 @@ impl<'a> Default for SkimOptions<'a> {
             select1: false,
             exit0: false,
             sync: false,
+            selector: None,
         }
     }
 }
