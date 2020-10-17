@@ -7,13 +7,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::spinlock::{SpinLock, SpinLockGuard};
-use crate::SkimItem;
+use crate::{MatchRange, Rank, SkimItem};
 
 //------------------------------------------------------------------------------
 pub type ItemIndex = (u32, u32);
 
 //------------------------------------------------------------------------------
-pub type Rank = [i32; 4];
 
 #[derive(Debug)]
 pub struct RankBuilder {
@@ -61,55 +60,15 @@ impl RankBuilder {
 }
 
 //------------------------------------------------------------------------------
-#[derive(PartialEq, Eq, Clone, Debug)]
-#[allow(dead_code)]
-pub enum MatchedRange {
-    ByteRange(usize, usize),
-    // range of bytes
-    Chars(Vec<usize>), // individual character indices matched
-}
-
 #[derive(Clone)]
 pub struct MatchedItem {
     pub item: Arc<dyn SkimItem>,
     pub rank: Rank,
-    pub matched_range: Option<MatchedRange>, // range of chars that matched the pattern
+    pub matched_range: Option<MatchRange>, // range of chars that matched the pattern
+    pub item_idx: u32,
 }
 
-impl MatchedItem {
-    pub fn builder(item: Arc<dyn SkimItem>) -> Self {
-        MatchedItem {
-            item,
-            rank: Default::default(),
-            matched_range: None,
-        }
-    }
-
-    pub fn matched_range(mut self, range: MatchedRange) -> Self {
-        self.matched_range = Some(range);
-        self
-    }
-
-    pub fn rank(mut self, rank: Rank) -> Self {
-        self.rank = rank;
-        self
-    }
-
-    pub fn build(self) -> Self {
-        self
-    }
-
-    pub fn range_char_indices(&self) -> Option<Vec<usize>> {
-        self.matched_range.as_ref().map(|r| match r {
-            MatchedRange::ByteRange(start, end) => {
-                let first = self.item.text()[..*start].chars().count();
-                let last = first + self.item.text()[*start..*end].chars().count();
-                (first..last).collect()
-            }
-            MatchedRange::Chars(vec) => vec.clone(),
-        })
-    }
-}
+impl MatchedItem {}
 
 use std::cmp::Ordering as CmpOrd;
 

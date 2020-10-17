@@ -4,9 +4,9 @@ use std::sync::Arc;
 use regex::Regex;
 
 use crate::engine::util::regex_match;
-use crate::item::{MatchedItem, MatchedRange, RankBuilder};
-use crate::SkimItem;
+use crate::item::RankBuilder;
 use crate::{CaseMatching, MatchEngine};
+use crate::{MatchRange, MatchResult, SkimItem};
 use std::cmp::min;
 
 //------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ impl RegexEngine {
 }
 
 impl MatchEngine for RegexEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
         let mut matched_result = None;
         let item_text = item.text();
         let default_range = [(0, item_text.len())];
@@ -70,12 +70,10 @@ impl MatchEngine for RegexEngine {
         let score = (end - begin) as i32;
         let item_len = item_text.len();
 
-        Some(
-            MatchedItem::builder(item)
-                .rank(self.rank_builder.build_rank(score, begin, end, item_len))
-                .matched_range(MatchedRange::ByteRange(begin, end))
-                .build(),
-        )
+        Some(MatchResult {
+            rank: self.rank_builder.build_rank(score, begin, end, item_len),
+            matched_range: MatchRange::ByteRange(begin, end),
+        })
     }
 }
 

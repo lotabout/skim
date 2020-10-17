@@ -5,9 +5,9 @@ use fuzzy_matcher::clangd::ClangdMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
-use crate::item::{MatchedItem, MatchedRange, RankBuilder};
-use crate::SkimItem;
+use crate::item::RankBuilder;
 use crate::{CaseMatching, MatchEngine};
+use crate::{MatchRange, MatchResult, SkimItem};
 use bitflags::_core::cmp::min;
 
 //------------------------------------------------------------------------------
@@ -124,7 +124,7 @@ impl FuzzyEngine {
 }
 
 impl MatchEngine for FuzzyEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
         // iterate over all matching fields:
         let mut matched_result = None;
         let item_text = item.text();
@@ -156,12 +156,10 @@ impl MatchEngine for FuzzyEngine {
         let end = *matched_range.last().unwrap_or(&0);
 
         let item_len = item_text.len();
-        Some(
-            MatchedItem::builder(item)
-                .rank(self.rank_builder.build_rank(score as i32, begin, end, item_len))
-                .matched_range(MatchedRange::Chars(matched_range))
-                .build(),
-        )
+        Some(MatchResult {
+            rank: self.rank_builder.build_rank(score as i32, begin, end, item_len),
+            matched_range: MatchRange::Chars(matched_range),
+        })
     }
 }
 

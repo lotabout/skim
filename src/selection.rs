@@ -10,11 +10,11 @@ use tuikit::prelude::{Event as TermEvent, *};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::global::current_run_num;
 use crate::item::ItemIndex;
-use crate::item::{MatchedItem, MatchedRange};
+use crate::item::MatchedItem;
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::{print_item, reshape_string, LinePrinter};
-use crate::{DisplayContext, Matches, SkimItem, SkimOptions};
+use crate::{DisplayContext, MatchRange, Matches, SkimItem, SkimOptions};
 use regex::Regex;
 use unicode_width::UnicodeWidthStr;
 
@@ -396,8 +396,8 @@ impl Selection {
         let container_width = screen_width - 2;
 
         let matches = match matched_item.matched_range {
-            Some(MatchedRange::Chars(ref matched_indices)) => Matches::CharIndices(matched_indices),
-            Some(MatchedRange::ByteRange(start, end)) => Matches::ByteRange(start, end),
+            Some(MatchRange::Chars(ref matched_indices)) => Matches::CharIndices(matched_indices),
+            Some(MatchRange::ByteRange(start, end)) => Matches::ByteRange(start, end),
             _ => Matches::None,
         };
 
@@ -414,14 +414,14 @@ impl Selection {
         let mut printer = if display_content.stripped() == item_text {
             // need to display the match content
             let (match_start_char, match_end_char) = match matched_item.matched_range {
-                Some(MatchedRange::Chars(ref matched_indices)) => {
+                Some(MatchRange::Chars(ref matched_indices)) => {
                     if !matched_indices.is_empty() {
                         (matched_indices[0], matched_indices[matched_indices.len() - 1] + 1)
                     } else {
                         (0, 0)
                     }
                 }
-                Some(MatchedRange::ByteRange(match_start, match_end)) => {
+                Some(MatchRange::ByteRange(match_start, match_end)) => {
                     let match_start_char = item_text[..match_start].chars().count();
                     let diff = item_text[match_start..match_end].chars().count();
                     (match_start_char, match_start_char + diff)

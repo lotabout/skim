@@ -83,6 +83,7 @@ impl Matcher {
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
+            let num_taken = item_pool.num_not_taken();
             let items = item_pool.take();
 
             // 1. use rayon for parallel
@@ -91,14 +92,20 @@ impl Matcher {
 
             trace!("matcher start, total: {}", items.len());
             let result: Result<Vec<_>, _> = items
-                .par_iter()
-                .filter_map(|item| {
+                .into_par_iter()
+                .enumerate()
+                .filter_map(|(index, item)| {
                     processed.fetch_add(1, Ordering::Relaxed);
                     if stopped.load(Ordering::Relaxed) {
                         Some(Err("matcher killed"))
-                    } else if let Some(item) = matcher_engine.match_item(item.clone()) {
+                    } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
                         matched.fetch_add(1, Ordering::Relaxed);
-                        Some(Ok(item))
+                        Some(Ok(MatchedItem {
+                            item: item.clone(),
+                            rank: match_result.rank,
+                            matched_range: Some(match_result.matched_range),
+                            item_idx: (num_taken + index) as u32,
+                        }))
                     } else {
                         None
                     }

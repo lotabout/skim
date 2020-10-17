@@ -16,7 +16,6 @@ use tuikit::prelude::{Event as TermEvent, *};
 pub use crate::ansi::AnsiString;
 pub use crate::engine::fuzzy::FuzzyAlgorithm;
 use crate::event::{EventReceiver, EventSender};
-pub use crate::item::MatchedItem;
 use crate::model::Model;
 pub use crate::options::SkimOptions;
 pub use crate::output::SkimOutput;
@@ -220,8 +219,37 @@ impl Default for CaseMatching {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
+#[allow(dead_code)]
+pub enum MatchRange {
+    ByteRange(usize, usize),
+    // range of bytes
+    Chars(Vec<usize>), // individual character indices matched
+}
+
+pub type Rank = [i32; 4];
+
+#[derive(Clone)]
+pub struct MatchResult {
+    pub rank: Rank,
+    pub matched_range: MatchRange,
+}
+
+impl MatchResult {
+    pub fn range_char_indices(&self, text: &str) -> Vec<usize> {
+        match &self.matched_range {
+            &MatchRange::ByteRange(start, end) => {
+                let first = text[..start].chars().count();
+                let last = first + text[start..end].chars().count();
+                (first..last).collect()
+            }
+            MatchRange::Chars(vec) => vec.clone(),
+        }
+    }
+}
+
 pub trait MatchEngine: Sync + Send + Display {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem>;
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult>;
 }
 
 pub trait MatchEngineFactory {

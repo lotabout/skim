@@ -1,8 +1,7 @@
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
 
-use crate::item::{MatchedItem, MatchedRange};
-use crate::{MatchEngine, SkimItem};
+use crate::{MatchEngine, MatchRange, MatchResult, SkimItem};
 
 //------------------------------------------------------------------------------
 // OrEngine, a combinator
@@ -26,7 +25,7 @@ impl OrEngine {
 }
 
 impl MatchEngine for OrEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
         for engine in &self.engines {
             let result = engine.match_item(Arc::clone(&item));
             if result.is_some() {
@@ -72,33 +71,31 @@ impl AndEngine {
         self
     }
 
-    fn merge_matched_items(&self, items: Vec<MatchedItem>) -> MatchedItem {
+    fn merge_matched_items(&self, items: Vec<MatchResult>, text: &str) -> MatchResult {
         let rank = items[0].rank;
-        let item = Arc::clone(&items[0].item);
         let mut ranges = vec![];
         for item in items {
             match item.matched_range {
-                Some(MatchedRange::ByteRange(..)) => {
-                    ranges.extend(item.range_char_indices().unwrap());
+                MatchRange::ByteRange(..) => {
+                    ranges.extend(item.range_char_indices(text));
                 }
-                Some(MatchedRange::Chars(vec)) => {
+                MatchRange::Chars(vec) => {
                     ranges.extend(vec.iter());
                 }
-                _ => {}
             }
         }
 
         ranges.sort();
         ranges.dedup();
-        MatchedItem::builder(item)
-            .rank(rank)
-            .matched_range(MatchedRange::Chars(ranges))
-            .build()
+        MatchResult {
+            rank,
+            matched_range: MatchRange::Chars(ranges),
+        }
     }
 }
 
 impl MatchEngine for AndEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
         // mock
         let mut results = vec![];
         for engine in &self.engines {
@@ -109,7 +106,7 @@ impl MatchEngine for AndEngine {
         if results.is_empty() {
             None
         } else {
-            Some(self.merge_matched_items(results))
+            Some(self.merge_matched_items(results, &item.text()))
         }
     }
 }

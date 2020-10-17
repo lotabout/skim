@@ -1,6 +1,6 @@
 use crate::engine::util::{contains_upper, regex_match};
-use crate::item::{MatchedItem, MatchedRange, RankBuilder};
-use crate::{CaseMatching, MatchEngine, SkimItem};
+use crate::item::RankBuilder;
+use crate::{CaseMatching, MatchEngine, MatchRange, MatchResult, SkimItem};
 use regex::{escape, Regex};
 use std::cmp::min;
 use std::fmt::{Display, Error, Formatter};
@@ -73,7 +73,7 @@ impl ExactEngine {
 }
 
 impl MatchEngine for ExactEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchedItem> {
+    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
         let mut matched_result = None;
         let item_text = item.text();
         let default_range = [(0, item_text.len())];
@@ -100,12 +100,10 @@ impl MatchEngine for ExactEngine {
         let (begin, end) = matched_result?;
         let score = (end - begin) as i32;
         let item_len = item_text.len();
-        Some(
-            MatchedItem::builder(item)
-                .rank(self.rank_builder.build_rank(score, begin, end, item_len))
-                .matched_range(MatchedRange::ByteRange(begin, end))
-                .build(),
-        )
+        Some(MatchResult {
+            rank: self.rank_builder.build_rank(score, begin, end, item_len),
+            matched_range: MatchRange::ByteRange(begin, end),
+        })
     }
 }
 
