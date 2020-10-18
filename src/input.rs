@@ -19,18 +19,21 @@ impl Input {
         }
     }
 
-    pub fn translate_event(&self, event: TermEvent) -> ActionChain {
+    pub fn translate_event(&self, event: TermEvent) -> (Key, ActionChain) {
         match event {
             // search event from keymap
-            TermEvent::Key(key) => self.keymap.get(&key).cloned().unwrap_or_else(|| {
-                if let Key::Char(ch) = key {
-                    vec![Event::EvActAddChar(ch)]
-                } else {
-                    vec![Event::EvInputKey(key)]
-                }
-            }),
-            TermEvent::Resize { .. } => vec![Event::EvActRedraw],
-            _ => vec![Event::EvInputInvalid],
+            TermEvent::Key(key) => (
+                key,
+                self.keymap.get(&key).cloned().unwrap_or_else(|| {
+                    if let Key::Char(ch) = key {
+                        vec![Event::EvActAddChar(ch)]
+                    } else {
+                        vec![Event::EvInputKey(key)]
+                    }
+                }),
+            ),
+            TermEvent::Resize { .. } => (Key::Null, vec![Event::EvActRedraw]),
+            _ => (Key::Null, vec![Event::EvInputInvalid]),
         }
     }
 

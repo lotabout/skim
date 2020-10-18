@@ -222,7 +222,7 @@ impl Model {
             let tx = Arc::new(SpinLock::new(self.tx.clone()));
             self.previewer = Some(
                 Previewer::new(Some(preview_cmd.to_string()), move || {
-                    let _ = tx.lock().send(Event::EvHeartBeat);
+                    let _ = tx.lock().send((Key::Null, Event::EvHeartBeat));
                 })
                 .wrap(preview_wrap)
                 .delimiter(self.delimiter.clone()),
@@ -317,7 +317,7 @@ impl Model {
             let hb_timer_guard =
                 self.timer
                     .schedule_with_delay(TimerDuration::milliseconds(REFRESH_DURATION), move || {
-                        let _ = tx.send(Event::EvHeartBeat);
+                        let _ = tx.send((Key::Null, Event::EvHeartBeat));
                     });
             self.hb_timer_guard.replace(hb_timer_guard);
         }
@@ -351,10 +351,10 @@ impl Model {
         if processed {
             if num_matched == 1 && self.select1 {
                 debug!("select-1 triggered, accept");
-                let _ = self.tx.send(Event::EvActAccept(None));
+                let _ = self.tx.send((Key::Null, Event::EvActAccept(None)));
             } else if num_matched == 0 && self.exit0 {
                 debug!("exit-0 triggered, accept");
-                let _ = self.tx.send(Event::EvActAbort);
+                let _ = self.tx.send((Key::Null, Event::EvActAbort));
             } else {
                 let _ = self.term.restart();
             }
@@ -474,9 +474,9 @@ impl Model {
         self.reader_control = Some(self.reader.run(&env.cmd));
 
         // In the event loop, there might need
-        let mut next_event = Some(Event::EvHeartBeat);
+        let mut next_event = Some((Key::Null, Event::EvHeartBeat));
         loop {
-            let ev = next_event.take().or_else(|| self.rx.recv().ok())?;
+            let (key, ev) = next_event.take().or_else(|| self.rx.recv().ok())?;
 
             debug!("handle event: {:?}", ev);
 
@@ -492,21 +492,21 @@ impl Model {
                     let matched =
                         self.num_options + self.matcher_control.as_ref().map(|c| c.get_num_matched()).unwrap_or(0);
                     if matched == 0 {
-                        next_event = parse_action_arg(arg_str);
+                        next_event = parse_action_arg(arg_str).map(|ev| (key, ev));
                         continue;
                     }
                 }
 
                 Event::EvActIfQueryEmpty(ref arg_str) => {
                     if env.query.is_empty() {
-                        next_event = parse_action_arg(arg_str);
+                        next_event = parse_action_arg(arg_str).map(|ev| (key, ev));
                         continue;
                     }
                 }
 
                 Event::EvActIfQueryNotEmpty(ref arg_str) => {
                     if !env.query.is_empty() {
-                        next_event = parse_action_arg(arg_str);
+                        next_event = parse_action_arg(arg_str).map(|ev| (key, ev));
                         continue;
                     }
                 }
@@ -528,7 +528,9 @@ impl Model {
                     }
 
                     return Some(SkimOutput {
-                        accept_key,
+                        is_abort: false,
+                        final_event: Event::EvActAccept(accept_key.clone()),
+                        final_key: key,
                         query: self.query.get_fz_query(),
                         cmd: self.query.get_cmd_query(),
                         selected_items: self.selection.get_selected_indices_and_items().1,
@@ -543,12 +545,19 @@ impl Model {
                         ctrl.kill();
                     }
 
-                    return None;
+                    return Some(SkimOutput {
+                        is_abort: true,
+                        final_event: ev.clone(),
+                        final_key: key,
+                        query: self.query.get_fz_query(),
+                        cmd: self.query.get_cmd_query(),
+                        selected_items: self.selection.get_selected_indices_and_items().1,
+                    });
                 }
 
                 Event::EvActDeleteCharEOF => {
                     if env.in_query_mode && env.query.is_empty() || !env.in_query_mode && env.cmd_query.is_empty() {
-                        next_event = Some(Event::EvActAbort);
+                        next_event = Some((key, Event::EvActAbort));
                         continue;
                     }
                 }
@@ -577,7 +586,7 @@ impl Model {
                         };
                         let messages = root.on_event(TermEvent::Key(key), rect);
                         for message in messages {
-                            let _ = self.tx.send(message);
+                            let _ = self.tx.send((key, message));
                         }
                     })
                 }
@@ -633,10 +642,10 @@ impl Model {
         }
     }
 
-    fn consume_additional_event(&self, target_event: &Event) -> Option<Event> {
+    fn consume_additional_event(&self, target_event: &Event) -> Option<(Key, Event)> {
         // consume additional HeartBeat event
         let mut rx_try_iter = self.rx.try_iter().peekable();
-        while let Some(ev) = rx_try_iter.peek() {
+        while let Some((_key, ev)) = rx_try_iter.peek() {
             if *ev == *target_event {
                 let _ = rx_try_iter.next();
             } else {
@@ -665,7 +674,7 @@ impl Model {
         };
 
         // send heart beat (so that heartbeat/refresh is triggered)
-        let _ = self.tx.send(Event::EvHeartBeat);
+        let _ = self.tx.send((Key::Null, Event::EvHeartBeat));
 
         let matcher = if self.use_regex {
             &self.regex_matcher
@@ -676,7 +685,7 @@ impl Model {
         let tx = self.tx.clone();
         let new_matcher_control = matcher.run(&query, self.item_pool.clone(), move |_| {
             // notify refresh immediately
-            let _ = tx.send(Event::EvHeartBeat);
+            let _ = tx.send((Key::Null, Event::EvHeartBeat));
         });
 
         self.matcher_control.replace(new_matcher_control);

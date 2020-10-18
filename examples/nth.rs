@@ -2,6 +2,9 @@ extern crate skim;
 use skim::prelude::*;
 use std::io::Cursor;
 
+/// `nth` option is supported by SkimItemReader.
+/// In the example below, with `nth=2` set, only `123` could be matched.
+
 pub fn main() {
     let input = "foo 123";
 

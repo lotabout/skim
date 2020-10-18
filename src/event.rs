@@ -4,8 +4,8 @@ use bitflags::bitflags;
 use std::sync::mpsc::{Receiver, Sender};
 use tuikit::key::Key;
 
-pub type EventReceiver = Receiver<Event>;
-pub type EventSender = Sender<Event>;
+pub type EventReceiver = Receiver<(Key, Event)>;
+pub type EventSender = Sender<(Key, Event)>;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Event {
@@ -70,6 +70,9 @@ pub enum Event {
     EvActUnixWordRubout,
     EvActUp(i32),
     EvActYank,
+
+    #[doc(hidden)]
+    __Nonexhaustive,
 }
 
 bitflags! {

@@ -101,13 +101,13 @@ impl<T: Any> AsAny for T {
 /// assert_eq!(immutable.immutable(), 0)
 /// ```
 pub trait SkimItem: AsAny + Send + Sync + 'static {
+    /// The string to be used for matching (without color)
+    fn text(&self) -> Cow<str>;
+
     /// The content to be displayed on the item list, could contain ANSI properties
     fn display<'a>(&'a self, context: DisplayContext<'a>) -> AnsiString<'a> {
         AnsiString::from(context)
     }
-
-    /// The string to be used for matching (without color)
-    fn text(&self) -> Cow<str>;
 
     /// Custom preview content, default to `ItemPreview::Global` which will use global preview
     /// setting(i.e. the command set by `preview` option)
@@ -273,6 +273,14 @@ pub type SkimItemReceiver = Receiver<Arc<dyn SkimItem>>;
 pub struct Skim {}
 
 impl Skim {
+    /// params:
+    /// - options: the "complex" options that control how skim behaves
+    /// - source: a stream of items to be passed to skim for filtering.
+    ///   If None is given, skim will invoke the command given to fetch the items.
+    ///
+    /// return:
+    /// - None: on internal errors.
+    /// - SkimOutput: the collected key, event, query, selected items, etc.
     pub fn run_with(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Option<SkimOutput> {
         let min_height = options
             .min_height
@@ -312,8 +320,9 @@ impl Skim {
                     break;
                 }
 
-                for ev in input.translate_event(key).into_iter() {
-                    let _ = tx_clone.send(ev);
+                let (key, action_chain) = input.translate_event(key);
+                for event in action_chain.into_iter() {
+                    let _ = tx_clone.send((key, event));
                 }
             }
         });

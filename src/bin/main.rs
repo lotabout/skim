@@ -276,7 +276,6 @@ fn real_main() -> Result<i32, std::io::Error> {
 
     options.cmd_collector = cmd_collector.clone();
 
-
     //------------------------------------------------------------------------------
     // handle pre-selection options
     let pre_select_n: Option<usize> = opts.values_of("pre-select-n").and_then(|vals| vals.last()).and_then(|s| s.parse().ok());
@@ -328,13 +327,16 @@ fn real_main() -> Result<i32, std::io::Error> {
 
     //------------------------------------------------------------------------------
     let output = Skim::run_with(&options, rx_item);
-    if output.is_none() {
-        return Ok(130);
+    if output.is_none() { // error
+        return Ok(135);
     }
 
     //------------------------------------------------------------------------------
     // output
     let output = output.unwrap();
+    if output.is_abort {
+        return Ok(130);
+    }
 
     // output query
     if bin_options.print_query {
@@ -345,8 +347,11 @@ fn real_main() -> Result<i32, std::io::Error> {
         write!(stdout, "{}{}", output.cmd, bin_options.output_ending)?;
     }
 
-    if let Some(key) = output.accept_key {
-        write!(stdout, "{}{}", key, bin_options.output_ending)?;
+    match output.final_event {
+        Event::EvActAccept(Some(accept_key)) => {
+            write!(stdout, "{}{}", accept_key, bin_options.output_ending)?;
+        }
+        _ => {}
     }
 
     for item in output.selected_items.iter() {
