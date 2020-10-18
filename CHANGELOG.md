@@ -1,5 +1,60 @@
 # Change Log
 
+## 0.9.0: 2020-10-18
+
+Breaking Change to the Library:
+
+- `SkimItem::display` now accepts a `DisplayContext` that provide more
+    information such as container width, score, matches, etc.
+- `SkimItem::preview` now accepts a `PreviewContext` that provide more
+    information such as query, width, selections, etc.
+- `Skim::run_as` now returns `Some` on both `Accept` and `Abort`, so that user
+    could collect and react on abort events.
+- `SkimOutput` now provides the final key received before return.
+
+Features:
+- Reduce memory usage
+- Defer drops of items, to improve interaction speed
+- support `--tac` and `--nosort`
+- new action: `half-page-up` and `half-page-down`
+- support tiebreak by `length`
+- [#344](https://github.com/lotabout/skim/issues/344) expose preview context
+    in `preview()` function
+- [#341](https://github.com/lotabout/skim/issues/341) support multiline header
+- use unicode spinner
+- [#324](https://github.com/lotabout/skim/issues/324) support option
+    `--no-clear` to keep the content drawn on screen
+- [#300](https://github.com/lotabout/skim/issues/300) library: move reader
+    options to default reader
+- support new option `--keep-right` to show the right most text if it is too
+    long.
+- support negative horizontal scroll
+- support `--skip-to-pattern` to start item display with the pattern matched
+- support `--select-1` that automatically select the only match
+- support `--exit-0` that exit automatically if no item matched
+- support `--sync` that waits for all inputs to be ready and then starts the
+    selection UI
+- [#309](https://github.com/lotabout/skim/issues/309) support pre-selection
+    - `pre-select-n`: select first `n` items
+    - `pre-select-pat`: select items that matches regex
+    - `pre-select-items`: select items from a preset
+    - `pre-select-file`: select items from a preset that's loaded from file
+- [#328](https://github.com/lotabout/skim/issues/328) support
+    `--no-clear-if-empty` that preserve selection if the new command query
+    returns nothing. Was designed to reduce flicking.
+
+Fixes:
+- [#326](https://github.com/lotabout/skim/issues/326) preview not updated anymore
+- [#349](https://github.com/lotabout/skim/issues/349) kill-line and
+    discard-line in interactive mode
+- [#344](https://github.com/lotabout/skim/issues/344) implement `text()` and
+    `display()` correctly
+- [#312](https://github.com/lotabout/skim/issues/312) mouse click and page
+    up/down out of bound
+- Do not auto-scroll for customized items
+- [#321](https://github.com/lotabout/skim/issues/321) fix annoyance through
+    ZSH's REPORTTIME
+
 ## 0.8.2: 2020-06-26
 
 Bug fixes:
