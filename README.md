@@ -6,9 +6,7 @@
 Half of our life is spent on navigation: files, lines, commands… You need skim!
 It is a general fuzzy finder that saves you time.
 
-It is blazingly fast as it reads the data source asynchronously.
-
-![skim demo](https://cloud.githubusercontent.com/assets/1527040/21603846/09138f6e-d1db-11e6-9466-711cc5b1ead8.gif)
+[![skim demo](https://asciinema.org/a/pIfwazaM0mTHA8F7qRbjrqOnm.svg)](https://asciinema.org/a/pIfwazaM0mTHA8F7qRbjrqOnm)
 
 skim provides a single executable: `sk`. Basically anywhere you would want to use
 `grep`, try `sk` instead.
@@ -47,91 +45,42 @@ skim project contains several components:
 2. `sk-tmux` -- script for launching `sk` in a tmux pane.
 3. Vim/Nvim plugin -- to call `sk` inside Vim/Nvim. check [skim.vim](https://github.com/lotabout/skim.vim) for more Vim support.
 
-## Linux
+## Package Managers
 
-### On Fedora
-
-```sh
-dnf install skim
-```
-
-### On Alpine
-
-```sh
-apk add skim
-```
-
-### On Arch
-
-```sh
-pacman -S skim
-```
-
-### From sources
-
-Clone this repository and run the install script:
-
-```sh
-git clone --depth 1 git@github.com:lotabout/skim.git ~/.skim
-~/.skim/install
-```
-
-Next, add `~/.skim/bin` to your PATH by putting the following line into your `~/.bashrc`:
-
-```sh
-export PATH="$PATH:$HOME/.skim/bin"
-```
-
-### From binary
-
-As an alternative, you can directly [download the sk
-executable](https://github.com/lotabout/skim/releases), but extra utilities are recommended.
-
-## OSX
-
-Using Homebrew:
-
-```sh
-brew install sk
-```
-
-But the Linux way described above will also work.
-
-## Install from crates.io
-
-```sh
-cargo install skim
-```
+| Distribution   | Package Manager   | Command            |
+| -------------- | ----------------- | ---------          |
+| Mac OS         | homebrew          | `brew instsall sk` |
+| Fedora         | dnf               | `dnf install skim` |
+| Alpine         | apk               | `apk add skim`     |
+| Arch           | pacman            | `pacman -S skim`   |
 
 ## Install as Vim plugin
 
-Once you have cloned the repository, add the following line to your `.vimrc`:
-
-```vim
-set rtp+=~/.skim
-```
-
-Or you can have vim-plug manage skim (recommended):
+Via vim-plug(recommended):
 
 ```vim
 Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
 ```
 
-## Build Manually
+## Hard Core
 
-Clone the repo and run:
+Any of the following applies:
 
-```sh
-cargo install
-```
-
-Alternatively, run:
-
-```sh
-cargo build --release
-```
-
-then put the resulting `target/release/sk` executable on your PATH.
+- Using Git
+    ```sh
+    $ git clone --depth 1 git@github.com:lotabout/skim.git ~/.skim
+    $ ~/.skim/install
+    ```
+- Using Binary: directly [download the sk executable](https://github.com/lotabout/skim/releases).
+- Install from [crates.io](https://crates.io/): `cargo install skim`
+- Build Manually
+    ```sh
+    $ git clone --depth 1 git@github.com:lotabout/skim.git ~/.skim
+    $ cd ~/.skim
+    $ cargo install
+    $ cargo build --release
+    $ # put the resulting `target/release/sk` executable on your PATH.
+    ```
 
 # Usage
 
@@ -142,7 +91,7 @@ interface for invoking commands.
 
 Try the following
 
-```sh
+```bash
 # directly invoke skim
 sk
 
@@ -186,6 +135,9 @@ Some commonly used keybindings:
 | Ctrl-N/Down       | Move cursor Down                           |
 | TAB               | Toggle selection and move down (with `-m`) |
 | Shift-TAB         | Toggle selection and move up (with `-m`)   |
+
+For full list of key bindings, checkout the [man
+page](https://github.com/lotabout/skim/blob/master/man/man1/sk.1) (`man sk`).
 
 ## Search Syntax
 
@@ -239,7 +191,7 @@ Specify the bindings with comma seperated pairs(no space allowed), example:
 sk --bind 'alt-a:select-all,alt-d:deselect-all'
 ```
 
-Additionaly, use `+` to concatenate actions, such as `execute-silent(echo {} | pbcopy)+abort`.
+Additionally, use `+` to concatenate actions, such as `execute-silent(echo {} | pbcopy)+abort`.
 
 See the _KEY BINDINGS_ section of the man page for details.
 
@@ -378,7 +330,7 @@ First, add skim into your `Cargo.toml`:
 
 ```toml
 [dependencies]
-skim = "0.8.1"
+skim = "*"
 ```
 
 Then try to run this simple example:
@@ -414,8 +366,8 @@ pub fn main() {
 ```
 
 Given an `Option<SkimItemReceiver>`, skim will read items accordingly, do its
-job and bring us back the user selection including the selected items(with
-their indices), the query, etc. Note that:
+job and bring us back the user selection including the selected items, the
+query, etc. Note that:
 
 - `SkimItemReceiver` is `crossbeam::channel::Receiver<Arc<dyn SkimItem>>`
 - If it is none, it will invoke the given command and read items from command output
@@ -469,11 +421,13 @@ in Rust!
 This project is written from scratch. Some decisions of implementation are
 different from fzf. For example:
 
-1. The fuzzy search algorithm is different.
-2. ~~UI of showing matched items. `fzf` will show only the range matched while
+1. `skim` is a binary as well as a library while fzf is only a binary.
+2. `skim` has an interactive mode.
+3. `skim` support pre-selection
+4. The fuzzy search algorithm is different.
+5. ~~UI of showing matched items. `fzf` will show only the range matched while
    `skim` will show each character matched.~~ (fzf has this now)
-3. `skim` has an interactive mode.
-4. ~~`skim`'s range syntax is git style~~: now it is the same with fzf.
+6. ~~`skim`'s range syntax is git style~~: now it is the same with fzf.
 
 # How to contribute
 
