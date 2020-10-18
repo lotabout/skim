@@ -1029,6 +1029,19 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-4].startswith(' >b'))
         self.tmux.until(lambda lines: lines[-3].startswith('> a'))
 
+    def test_no_clear_if_empty(self):
+        text_file = f'{self.tempname()}.txt'
+        self.tmux.send_keys(f"echo -e 'b\nc' > {text_file}", Key('Enter'))
+
+        args = "-c 'cat {}'" + f''' -i --cmd-query='{text_file}' --no-clear-if-empty'''
+        self.tmux.send_keys(f"""{self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-4].startswith('  c'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> b'))
+
+        self.tmux.send_keys(Key('xx'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(0))
+        self.tmux.until(lambda lines: lines[-4].startswith('  c'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> b'))
 
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1

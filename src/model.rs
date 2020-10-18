@@ -85,6 +85,7 @@ pub struct Model {
     layout: String,
     delimiter: Regex,
     inline_info: bool,
+    no_clear_if_empty: bool,
     theme: Arc<ColorTheme>,
 
     // timer thread for scheduled events
@@ -182,6 +183,7 @@ impl Model {
             layout: "default".to_string(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             inline_info: false,
+            no_clear_if_empty: false,
             theme,
             timer: Timer::new(),
             hb_timer_guard: None,
@@ -232,6 +234,7 @@ impl Model {
         self.select1 = options.select1;
         self.exit0 = options.exit0;
         self.sync = options.sync;
+        self.no_clear_if_empty = options.no_clear_if_empty;
     }
 
     // -> (direction, size, wrap, shown)
@@ -292,7 +295,7 @@ impl Model {
                     env.clear_selection = ClearStrategy::DontClear;
                 }
                 ClearStrategy::ClearIfNotNull => {
-                    if reader_stopped || !matched.is_empty() {
+                    if (!self.no_clear_if_empty && reader_stopped) || !matched.is_empty() {
                         self.selection.clear();
                         env.clear_selection = ClearStrategy::DontClear;
                     }

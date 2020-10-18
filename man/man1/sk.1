@@ -202,9 +202,20 @@ Line will start with the start of the matched pattern. Effective only when
 the query string is empty. Was designed to skip showing starts of paths of
 rg/grep results.
 
+
 .RS
 e.g. \fBsk -i -c "rg {} --color=always" --skip-to-pattern '[^/]*:' --ansi\fR
 .RE
+
+.TP
+.BI "--no-clear-if-empty"
+Do not clear previous items if new command returns empty result. This might be
+useful to reduce flickering when typing new commands and the half-complete
+commands are not valid.
+
+This is not default however because similar usecases for \fBgrep\fR and
+\fBrg\fR had already been optimized where empty result of a query do mean
+"empty" and previous results should be cleared.
 
 .SS Display
 .TP
