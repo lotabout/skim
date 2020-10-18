@@ -2,10 +2,10 @@
 #    / __/___  / __/
 #   / /_/_  / / /_
 #  / __/ / /_/ __/
-# /_/   /___/_/-completion.bash
+# /_/   /___/_/ completion.bash
 #
 # - $SKIM_TMUX               (default: 0)
-# - $SKIM_TMUX_HEIGHT        (default: '40%')
+# - $SKIM_TMUX_OPTS          (default: empty)
 # - $SKIM_COMPLETION_TRIGGER (default: '**')
 # - $SKIM_COMPLETION_OPTS    (default: empty)
 # copied and modified from https://github.com/junegunn/fzf/blob/master/shell/completion.bash
@@ -38,9 +38,9 @@ bind '"\e[0n": redraw-current-line'
 __skim_comprun() {
   if [ "$(type -t _skim_comprun 2>&1)" = function ]; then
     _skim_comprun "$@"
-  elif [ -n "$TMUX_PANE" ] && [ "${SKIM_TMUX:-0}" != 0 ] && [ ${LINES:-40} -gt 15 ]; then
+  elif [ -n "$TMUX_PANE" ] && { [ "${SKIM_TMUX:-0}" != 0 ] || [ -n "$SKIM_TMUX_OPTS" ]; }; then
     shift
-    sk-tmux -d "${SKIM_TMUX_HEIGHT:-40%}" "$@"
+    sk-tmux ${SKIM_TMUX_OPTS:--d${SKIM_TMUX_HEIGHT:-40%}} -- "$@"
   else
     shift
     sk "$@"
@@ -191,6 +191,27 @@ __skim_generic_path_completion() {
 }
 
 _skim_complete() {
+  # Split arguments around --
+  local args rest str_arg i sep
+  args=("$@")
+  sep=
+  for i in "${!args[@]}"; do
+    if [[ "${args[$i]}" = -- ]]; then
+      sep=$i
+      break
+    fi
+  done
+  if [[ -n "$sep" ]]; then
+    str_arg=
+    rest=("${args[@]:$((sep + 1)):${#args[@]}}")
+    args=("${args[@]:0:$sep}")
+  else
+    str_arg=$1
+    args=()
+    shift
+    rest=("$@")
+  fi
+
   local cur selected trigger cmd post
   post="$(caller 0 | awk '{print $2}')_post"
   type -t "$post" > /dev/null 2>&1 || post=cat
@@ -201,7 +222,7 @@ _skim_complete() {
   if [[ "$cur" == *"$trigger" ]]; then
     cur=${cur:0:${#cur}-${#trigger}}
 
-    selected=$(cat | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS $1" __skim_comprun "$2" -q "$cur" | $post | tr '\n' ' ')
+    selected=$(SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS $str_arg" __skim_comprun "${rest[0]}" "${args[@]}" -q "$cur" | $post | tr '\n' ' ')
     selected=${selected% } # Strip trailing space not to repeat "-o nospace"
     if [ -n "$selected" ]; then
       COMPREPLY=("$selected")
@@ -211,8 +232,7 @@ _skim_complete() {
     printf '\e[5n'
     return 0
   else
-    shift
-    _skim_handle_dynamic_completion "$cmd" "$@"
+    _skim_handle_dynamic_completion "$cmd" "${rest[@]}"
   fi
 }
 
@@ -230,22 +250,30 @@ _skim_dir_completion() {
 }
 
 _skim_complete_kill() {
-  [ -n "${COMP_WORDS[COMP_CWORD]}" ] && return 1
-
-  local selected
-  selected=$(command ps -ef | sed 1d | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-50%} --min-height 15 --reverse $SKIM_DEFAULT_OPTIONS $SKIM_COMPLETION_OPTS --preview 'echo {}' --preview-window down:3:wrap" __skim_comprun "kill" -m | awk '{print $2}' | tr '\n' ' ')
-  selected=${selected% }
-  printf '\e[5n'
-
-  if [ -n "$selected" ]; then
-    COMPREPLY=( "$selected" )
-    return 0
+  local trigger=${SKIM_COMPLETION_TRIGGER-'**'}
+  local cur="${COMP_WORDS[COMP_CWORD]}"
+  if [[ -z "$cur" ]]; then
+    COMP_WORDS[$COMP_CWORD]=$trigger
+  elif [[ "$cur" != *"$trigger" ]]; then
+    return 1
   fi
+
+  _skim_proc_completion "$@"
+}
+
+_skim_proc_completion() {
+  _skim_complete -m --preview 'echo {}' --preview-window down:3:wrap --min-height 15 -- "$@" < <(
+    command ps -ef | sed 1d
+  )
+}
+
+_skim_proc_completion_post() {
+  awk '{print $2}'
 }
 
 _skim_host_completion() {
-  _skim_complete '--no-multi' "$@" < <(
-    cat <(cat ~/.ssh/config ~/.ssh/config.d/* /etc/ssh/ssh_config 2> /dev/null | command grep -i '^\s*host\(name\)\? ' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}' | command grep -v '[*?]') \
+  _skim_complete --no-multi -- "$@" < <(
+    command cat <(command tail -n +1 ~/.ssh/config ~/.ssh/config.d/* /etc/ssh/ssh_config 2> /dev/null | command grep -i '^\s*host\(name\)\? ' | awk '{for (i = 2; i <= NF; i++) print $1 " " $i}' | command grep -v '[*?]') \
         <(command grep -oE '^[[a-z0-9.,:-]+' ~/.ssh/known_hosts | tr ',' '\n' | tr -d '[' | awk '{ print $1 " " $1 }') \
         <(command grep -v '^\s*\(#\|$\)' /etc/hosts | command grep -Fv '0.0.0.0') |
         awk '{if (length($2) > 0) {print $2}}' | sort -u
@@ -253,13 +281,13 @@ _skim_host_completion() {
 }
 
 _skim_var_completion() {
-  _skim_complete '-m' "$@" < <(
+  _skim_complete -m -- "$@" < <(
     declare -xp | sed 's/=.*//' | sed 's/.* //'
   )
 }
 
 _skim_alias_completion() {
-  _skim_complete '-m' "$@" < <(
+  _skim_complete -m -- "$@" < <(
     alias | sed 's/=.*//' | sed 's/.* //'
   )
 }
@@ -277,11 +305,10 @@ a_cmds="
   find git grep gunzip gzip hg jar
   ln ls mv open rm rsync scp
   svn tar unzip zip"
-x_cmds="kill"
 
 # Preserve existing completion
 eval "$(complete |
-  sed -E '/-F/!d; / _skim/d; '"/ ($(echo $d_cmds $a_cmds $x_cmds | sed 's/ /|/g; s/+/\\+/g'))$/"'!d' |
+  sed -E '/-F/!d; / _skim/d; '"/ ($(echo $d_cmds $a_cmds | sed 's/ /|/g; s/+/\\+/g'))$/"'!d' |
   __skim_orig_completion_filter)"
 
 if type _completion_loader > /dev/null 2>&1; then
@@ -313,17 +340,17 @@ for cmd in $d_cmds; do
   __skim_defc "$cmd" _skim_dir_completion "-o nospace -o dirnames"
 done
 
-# Kill completion
+# Kill completion (supports empty completion trigger)
 complete -F _skim_complete_kill -o default -o bashdefault kill
 
-unset cmd d_cmds a_cmds x_cmds
+unset cmd d_cmds a_cmds
 
 _skim_setup_completion() {
   local kind fn cmd
   kind=$1
   fn=_skim_${1}_completion
   if [[ $# -lt 2 ]] || ! type -t "$fn" > /dev/null; then
-    echo "usage: ${FUNCNAME[0]} path|dir|var|alias|host COMMANDS..."
+    echo "usage: ${FUNCNAME[0]} path|dir|var|alias|host|proc COMMANDS..."
     return 1
   fi
   shift
