@@ -26,6 +26,10 @@ impl Default for RankBuilder {
 
 impl RankBuilder {
     pub fn new(mut criterion: Vec<RankCriteria>) -> Self {
+        if !criterion.contains(&RankCriteria::Score) && !criterion.contains(&RankCriteria::NegScore) {
+            criterion.insert(0, RankCriteria::Score);
+        }
+
         criterion.dedup();
         Self { criterion }
     }
