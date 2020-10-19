@@ -427,7 +427,7 @@ fn merge_fragments(old: &[(Attr, (u32, u32))], new: &[(Attr, (u32, u32))]) -> Ve
         }
     }
     if j < new.len() {
-        ret.extend_from_slice(&new[i..]);
+        ret.extend_from_slice(&new[j..]);
     }
 
     ret
