@@ -249,6 +249,13 @@ fn real_main() -> Result<i32, std::io::Error> {
         writeln!(stdout, "{}", VERSION)?;
         return Ok(0);
     }
+
+    //------------------------------------------------------------------------------
+    let mut options = parse_options(&opts);
+
+    let preview_window_joined = opts.values_of("preview-window").map(|x| x.collect::<Vec<_>>().join(":"));
+    options.preview_window = preview_window_joined.as_ref().map(|x| x.as_str());
+
     //------------------------------------------------------------------------------
     // initialize collector
     let item_reader_option = SkimItemReaderOption::default()
@@ -260,6 +267,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .build();
 
     let cmd_collector = Rc::new(RefCell::new(SkimItemReader::new(item_reader_option)));
+    options.cmd_collector = cmd_collector.clone();
 
     //------------------------------------------------------------------------------
     // read in the history file
@@ -268,15 +276,12 @@ fn real_main() -> Result<i32, std::io::Error> {
     let query_history = fz_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
     let cmd_history = cmd_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
 
-    let mut options = parse_options(&opts);
     if fz_query_histories.is_some() || cmd_query_histories.is_some() {
         options.query_history = &query_history;
         options.cmd_history = &cmd_history;
         // bind ctrl-n and ctrl-p to handle history
         options.bind.insert(0, "ctrl-p:previous-history,ctrl-n:next-history");
     }
-
-    options.cmd_collector = cmd_collector.clone();
 
     //------------------------------------------------------------------------------
     // handle pre-selection options
@@ -387,7 +392,6 @@ fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
         .height(options.values_of("height").and_then(|vals| vals.last()))
         .margin(options.values_of("margin").and_then(|vals| vals.last()))
         .preview(options.values_of("preview").and_then(|vals| vals.last()))
-        .preview_window(options.values_of("preview-window").and_then(|vals| vals.last()))
         .cmd(options.values_of("cmd").and_then(|vals| vals.last()))
         .query(options.values_of("query").and_then(|vals| vals.last()))
         .cmd_query(options.values_of("cmd-query").and_then(|vals| vals.last()))
