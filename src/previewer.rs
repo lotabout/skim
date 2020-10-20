@@ -245,7 +245,7 @@ impl Previewer {
         };
 
         let new_offset = min(new_offset, max(self.content_lines.lock().len(), 1) - 1);
-        self.vscroll_offset.store(new_offset, Ordering::SeqCst);
+        self.vscroll_offset.store(max(new_offset, 1), Ordering::SeqCst);
     }
 
     fn act_scroll_right(&mut self, diff: i32) {
