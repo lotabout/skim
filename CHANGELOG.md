@@ -1,5 +1,24 @@
 # Change Log
 
+## 0.9.1: 2020-10-20
+
+Feature:
+- Support preview scroll offset relative to window height
+  ```sh
+  git grep --line-number '' |
+    sk --delimiter : \
+        --preview 'bat --style=numbers --color=always --highlight-line {2} {1}' \
+        --preview-window +{2}-/2
+  ```
+
+Fix:
+- [#356](https://github.com/lotabout/skim/issues/356) panic on ANSI enabled.
+- `tiebreak` would now include `score` in the front of criterion if not specified.
+- Reduce preview window flicking when moving cursor fast.
+- Multiple preview window options weren't merged.
+- `pre-select-items` should not contain empty string by default.
+- click/wheel events's row weren't correct if `--height` is specified.
+
 ## 0.9.0: 2020-10-18
 
 Breaking Change to the Library:
