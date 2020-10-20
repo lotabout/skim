@@ -282,7 +282,7 @@ impl Previewer {
             return Default::default();
         }
 
-        let nums: Vec<&str> = offset_expr.split("-").collect();
+        let nums: Vec<&str> = offset_expr.split('-').collect();
         let v_scroll = if nums.is_empty() {
             Size::Default
         } else {
@@ -291,7 +291,7 @@ impl Previewer {
 
         let v_offset = if nums.len() >= 2 {
             let expr = nums[1];
-            if expr.starts_with("/") {
+            if expr.starts_with('/') {
                 let num = atoi::<usize>(expr).unwrap_or(0);
                 Size::Percent(if num == 0 { 0 } else { 100 / num })
             } else {

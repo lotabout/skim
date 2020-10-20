@@ -389,7 +389,7 @@ pub fn inject_command<'a>(cmd: &'a str, context: InjectContext<'a>) -> Cow<'a, s
 }
 
 pub fn str_lines(string: &str) -> Vec<&str> {
-    string.trim_end().split("\n").collect()
+    string.trim_end().split('\n').collect()
 }
 
 pub fn atoi<T: FromStr>(string: &str) -> Option<T> {

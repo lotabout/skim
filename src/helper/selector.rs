@@ -32,7 +32,9 @@ impl DefaultSkimSelector {
             self.preset = Some(HashSet::new())
         }
 
-        self.preset.as_mut().map(|set| set.extend(preset));
+        if let Some(set) = self.preset.as_mut() {
+            set.extend(preset)
+        }
         self
     }
 

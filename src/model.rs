@@ -233,7 +233,7 @@ impl Model {
                     options
                         .preview_window
                         .map(Self::parse_preview_offset)
-                        .unwrap_or("".to_string()),
+                        .unwrap_or_else(|| "".to_string()),
                 ),
             );
         }
@@ -282,7 +282,7 @@ impl Model {
 
     // -> string
     fn parse_preview_offset(preview_window: &str) -> String {
-        for token in preview_window.split(":") {
+        for token in preview_window.split(':') {
             if RE_PREVIEW_OFFSET.is_match(token) {
                 return token.to_string();
             }
@@ -550,7 +550,7 @@ impl Model {
 
                     return Some(SkimOutput {
                         is_abort: false,
-                        final_event: Event::EvActAccept(accept_key.clone()),
+                        final_event: Event::EvActAccept(accept_key),
                         final_key: key,
                         query: self.query.get_fz_query(),
                         cmd: self.query.get_cmd_query(),
