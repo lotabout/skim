@@ -235,7 +235,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("skip-to-pattern").long("skip-to-pattern").multiple(true).takes_value(true).default_value(""))
         .arg(Arg::with_name("pre-select-n").long("pre-select-n").multiple(true).takes_value(true).default_value("0"))
         .arg(Arg::with_name("pre-select-pat").long("pre-select-pat").multiple(true).takes_value(true).default_value(""))
-        .arg(Arg::with_name("pre-select-items").long("pre-select-items").multiple(true).takes_value(true).default_value(""))
+        .arg(Arg::with_name("pre-select-items").long("pre-select-items").multiple(true).takes_value(true))
         .arg(Arg::with_name("pre-select-file").long("pre-select-file").multiple(true).takes_value(true).default_value(""))
         .arg(Arg::with_name("no-clear-if-empty").long("no-clear-if-empty").multiple(true))
         .get_matches_from(args);
