@@ -512,6 +512,12 @@ where
 
     let output = output.unwrap();
 
+    if output.status.code().is_none() {
+        // On Unix it means the process is terminated by a signal
+        // directly return to avoid flickering
+        return;
+    }
+
     // Capture stderr in case users want to debug ...
     let out_str = String::from_utf8_lossy(if output.status.success() {
         &output.stdout
