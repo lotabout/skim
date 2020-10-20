@@ -320,14 +320,7 @@ Preview window will be updated even when there is no match for the current
 query if any of the placeholder expressions evaluates to a non-empty string.
 .RE
 .TP
-.BI "--preview-window=" "[POSITION][:SIZE[%]][:wrap][:hidden]"
-Determine the layout of the preview window. If the argument ends with
-\fB:hidden\fR, the preview window will be hidden by default until
-\fBtoggle-preview\fR action is triggered. Long lines are truncated by default.
-Line wrap can be enabled with \fB:wrap\fR flag.
-
-If size is given as 0, preview window will not be visible, but sk will still
-execute the command in the background.
+.BI "--preview-window=" "[POSITION][:SIZE[%]][:wrap][:hidden][:+SCROLL[-OFFSET]]"
 
 .RS
 .B POSITION: (default: right)
@@ -337,10 +330,40 @@ execute the command in the background.
     \fBright
 .RE
 
+Determine the layout of the preview window. If the argument ends with
+\fB:hidden\fR, the preview window will be hidden by default until
+\fBtoggle-preview\fR action is triggered. Long lines are truncated by default.
+Line wrap can be enabled with \fB:wrap\fR flag.
+
+If size is given as 0, preview window will not be visible, but sk will still
+execute the command in the background.
+
+\fB+SCROLL[-OFFSET]\fR determines the initial scroll offset of the preview
+window. \fBSCROLL\fR can be either a numeric integer or a single-field index
+expression that refers to a numeric integer. The optional \fB-OFFSET\fR part is
+for adjusting the base offset so that you can see the text above it. It should
+be given as a numeric integer (\fB-INTEGER\fR), or as a denominator form
+(\fB-/INTEGER\fR) for specifying a fraction of the preview window height.
+
 .RS
-e.g. \fBsk --preview="head {}" --preview-window=up:30%\fR
-     \fBsk --preview="file {}" --preview-window=down:1\fR
+e.g.
+     \fB# Non-default scroll window positions and sizes
+     sk --preview="head {}" --preview-window=up:30%
+     sk --preview="file {}" --preview-window=down:2
+
+     # Initial scroll offset is set to the line number of each line of
+     # git grep output *minus* 5 lines (-5)
+     git grep --line-number '' |
+       sk --delimiter : --preview 'nl {1}' --preview-window +{2}-5
+
+     # Preview with bat, matching line in the middle of the window (-/2)
+     git grep --line-number '' |
+       sk --delimiter : \\
+           --preview 'bat --style=numbers --color=always --highlight-line {2} {1}' \\
+           --preview-window +{2}-/2\fR
+
 .RE
+
 .SS Scripting
 .TP
 .BI "-q, --query=" "STR"
