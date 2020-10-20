@@ -16,8 +16,8 @@ use tuikit::prelude::{Event as TermEvent, *};
 use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::spinlock::SpinLock;
-use crate::util::{depends_on_items, inject_command, InjectContext};
-use crate::{ItemPreview, PreviewContext, SkimItem};
+use crate::util::{atoi, depends_on_items, inject_command, InjectContext};
+use crate::{ItemPreview, PreviewContext, PreviewPosition, SkimItem};
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
@@ -26,10 +26,10 @@ pub struct Previewer {
     tx_preview: Sender<PreviewEvent>,
     content_lines: Arc<SpinLock<Vec<AnsiString<'static>>>>,
 
-    width: AtomicUsize,
-    height: AtomicUsize,
-    hscroll_offset: usize,
-    vscroll_offset: usize,
+    width: Arc<AtomicUsize>,
+    height: Arc<AtomicUsize>,
+    hscroll_offset: Arc<AtomicUsize>,
+    vscroll_offset: Arc<AtomicUsize>,
     wrap: bool,
 
     prev_item: Option<Arc<dyn SkimItem>>,
@@ -38,6 +38,7 @@ pub struct Previewer {
     prev_num_selected: usize,
 
     preview_cmd: Option<String>,
+    preview_offset: String, // e.g. +SCROLL-OFFSET
     delimiter: Regex,
     thread_previewer: Option<JoinHandle<()>>,
 }
@@ -49,10 +50,30 @@ impl Previewer {
     {
         let content_lines = Arc::new(SpinLock::new(Vec::new()));
         let (tx_preview, rx_preview) = channel();
+        let width = Arc::new(AtomicUsize::new(80));
+        let height = Arc::new(AtomicUsize::new(60));
+        let hscroll_offset = Arc::new(AtomicUsize::new(1));
+        let vscroll_offset = Arc::new(AtomicUsize::new(1));
+
         let content_clone = content_lines.clone();
+        let width_clone = width.clone();
+        let height_clone = height.clone();
+        let hscroll_offset_clone = hscroll_offset.clone();
+        let vscroll_offset_clone = vscroll_offset.clone();
         let thread_previewer = thread::spawn(move || {
-            run(rx_preview, move |lines| {
+            run(rx_preview, move |lines, pos| {
+                let width = width_clone.load(Ordering::SeqCst);
+                let height = height_clone.load(Ordering::SeqCst);
+
+                let hscroll = pos.h_scroll.calc_fixed_size(lines.len(), 0);
+                let hoffset = pos.h_offset.calc_fixed_size(width, 0);
+                let vscroll = pos.v_scroll.calc_fixed_size(usize::MAX, 0);
+                let voffset = pos.v_offset.calc_fixed_size(height, 0);
+
+                hscroll_offset_clone.store(max(1, max(hscroll, hoffset) - hoffset), Ordering::SeqCst);
+                vscroll_offset_clone.store(max(1, max(vscroll, voffset) - voffset), Ordering::SeqCst);
                 *content_clone.lock() = lines;
+
                 callback();
             })
         });
@@ -61,10 +82,10 @@ impl Previewer {
             tx_preview,
             content_lines,
 
-            width: AtomicUsize::new(80),
-            height: AtomicUsize::new(60),
-            hscroll_offset: 0,
-            vscroll_offset: 0,
+            width,
+            height,
+            hscroll_offset,
+            vscroll_offset,
             wrap: false,
 
             prev_item: None,
@@ -73,6 +94,7 @@ impl Previewer {
             prev_num_selected: 0,
 
             preview_cmd,
+            preview_offset: "".to_string(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             thread_previewer: Some(thread_previewer),
         }
@@ -85,6 +107,12 @@ impl Previewer {
 
     pub fn delimiter(mut self, delimiter: Regex) -> Self {
         self.delimiter = delimiter;
+        self
+    }
+
+    // e.g. +SCROLL-OFFSET
+    pub fn preview_offset(mut self, offset: String) -> Self {
+        self.preview_offset = offset;
         self
     }
 
@@ -172,57 +200,114 @@ impl Previewer {
         };
 
         let preview_event = match new_item {
-            Some(item) => match item.preview(preview_context) {
-                ItemPreview::Text(text) => PreviewEvent::PreviewPlainText(text),
-                ItemPreview::AnsiText(text) => PreviewEvent::PreviewAnsiText(text),
-                preview => {
-                    let cmd = match preview {
-                        ItemPreview::Command(cmd) => cmd,
-                        ItemPreview::Global => self.preview_cmd.clone().expect("previewer: not provided"),
-                        ItemPreview::Text(_) | ItemPreview::AnsiText(_) => unreachable!(),
-                    };
-
+            Some(item) => match (item.preview(preview_context), PreviewPosition::default()) {
+                (ItemPreview::Text(text), pos) => PreviewEvent::PreviewPlainText(text, pos),
+                (ItemPreview::AnsiText(text), pos) => PreviewEvent::PreviewAnsiText(text, pos),
+                (ItemPreview::TextWithPos(text, pos), _) => PreviewEvent::PreviewPlainText(text, pos),
+                (ItemPreview::AnsiWithPos(text, pos), _) => PreviewEvent::PreviewAnsiText(text, pos),
+                (ItemPreview::Command(cmd), pos) | (ItemPreview::CommandWithPos(cmd, pos), _) => {
                     if depends_on_items(&cmd) && self.prev_item.is_none() {
                         debug!("the command for preview refers to items and currently there is no item");
                         debug!("command to execute: [{}]", cmd);
-                        PreviewEvent::PreviewPlainText("no item matched".to_string())
+                        PreviewEvent::PreviewPlainText("no item matched".to_string(), Default::default())
                     } else {
                         let cmd = inject_command(&cmd, inject_context).to_string();
                         let preview_command = PreviewCommand { cmd, columns, lines };
-
-                        PreviewEvent::PreviewCommand(preview_command)
+                        PreviewEvent::PreviewCommand(preview_command, pos)
+                    }
+                }
+                (ItemPreview::Global, _) => {
+                    let cmd = self.preview_cmd.clone().expect("previewer: not provided");
+                    if depends_on_items(&cmd) && self.prev_item.is_none() {
+                        debug!("the command for preview refers to items and currently there is no item");
+                        debug!("command to execute: [{}]", cmd);
+                        PreviewEvent::PreviewPlainText("no item matched".to_string(), Default::default())
+                    } else {
+                        let cmd = inject_command(&cmd, inject_context).to_string();
+                        let pos = self.eval_scroll_offset(inject_context);
+                        let preview_command = PreviewCommand { cmd, columns, lines };
+                        PreviewEvent::PreviewCommand(preview_command, pos)
                     }
                 }
             },
-            None => PreviewEvent::PreviewPlainText("".to_string()),
+            None => PreviewEvent::Noop,
         };
 
         let _ = self.tx_preview.send(preview_event);
-
-        self.hscroll_offset = 0;
-        self.vscroll_offset = 0;
     }
 
     fn act_scroll_down(&mut self, diff: i32) {
-        if diff > 0 {
-            self.vscroll_offset += diff as usize;
+        let vscroll_offset = self.vscroll_offset.load(Ordering::SeqCst);
+        let new_offset = if diff > 0 {
+            vscroll_offset + diff as usize
         } else {
-            self.vscroll_offset -= min((-diff) as usize, self.vscroll_offset);
-        }
+            vscroll_offset - min((-diff) as usize, vscroll_offset)
+        };
 
-        self.vscroll_offset = min(self.vscroll_offset, max(self.content_lines.lock().len(), 1) - 1);
+        let new_offset = min(new_offset, max(self.content_lines.lock().len(), 1) - 1);
+        self.vscroll_offset.store(new_offset, Ordering::SeqCst);
     }
 
     fn act_scroll_right(&mut self, diff: i32) {
-        if diff > 0 {
-            self.hscroll_offset += diff as usize;
+        let hscroll_offset = self.hscroll_offset.load(Ordering::SeqCst);
+        let new_offset = if diff > 0 {
+            hscroll_offset + diff as usize
         } else {
-            self.hscroll_offset -= min((-diff) as usize, self.hscroll_offset);
-        }
+            hscroll_offset - min((-diff) as usize, hscroll_offset)
+        };
+        self.hscroll_offset.store(max(1, new_offset), Ordering::SeqCst);
     }
 
     fn act_toggle_wrap(&mut self) {
         self.wrap = !self.wrap;
+    }
+
+    fn eval_scroll_offset(&self, context: InjectContext) -> PreviewPosition {
+        // currently, only h_scroll and h_offset is supported
+        // The syntax follows fzf's
+
+        // +SCROLL[-OFFSET] determines the initial scroll offset of the preview window.
+        // SCROLL can be either a numeric integer or a  single-field index expression
+        // that refers to a numeric integer. The optional -OFFSET part is for adjusting
+        // the base offset so that you can see the text above it. It should be given as a
+        // numeric integer (-INTEGER), or as a  denominator form (-/INTEGER) for
+        // specifying a fraction of the preview window height
+
+        if self.preview_offset.is_empty() {
+            return Default::default();
+        }
+
+        let offset_expr = inject_command(&self.preview_offset, context);
+        if offset_expr.is_empty() {
+            return Default::default();
+        }
+
+        let nums: Vec<&str> = offset_expr.split("-").collect();
+        let v_scroll = if nums.is_empty() {
+            Size::Default
+        } else {
+            Size::Fixed(atoi::<usize>(nums[0]).unwrap_or(0))
+        };
+
+        let v_offset = if nums.len() >= 2 {
+            let expr = nums[1];
+            if expr.starts_with("/") {
+                let num = atoi::<usize>(expr).unwrap_or(0);
+                Size::Percent(if num == 0 { 0 } else { 100 / num })
+            } else {
+                let num = atoi::<usize>(expr).unwrap_or(0);
+                Size::Fixed(num)
+            }
+        } else {
+            Size::Default
+        };
+
+        PreviewPosition {
+            h_scroll: Default::default(),
+            h_offset: Default::default(),
+            v_scroll,
+            v_offset,
+        }
     }
 }
 
@@ -265,19 +350,22 @@ impl Draw for Previewer {
 
         let content = self.content_lines.lock();
 
+        let vscroll_offset = self.vscroll_offset.load(Ordering::SeqCst);
+        let hscroll_offset = self.hscroll_offset.load(Ordering::SeqCst);
+
         let mut printer = PrinterBuilder::default()
             .width(screen_width)
             .height(screen_height)
-            .skip_rows(self.vscroll_offset)
-            .skip_cols(self.hscroll_offset)
+            .skip_rows(max(1, vscroll_offset) - 1)
+            .skip_cols(max(1, hscroll_offset) - 1)
             .wrap(self.wrap)
             .build()
             .unwrap();
         printer.print_lines(canvas, &content);
 
         // print the vscroll info
-        let status = format!("{}/{}", self.vscroll_offset + 1, content.len());
-        let col = max(status.len() + 1, self.width.load(Ordering::Relaxed)) - status.len() - 1;
+        let status = format!("{}/{}", vscroll_offset, content.len());
+        let col = max(status.len() + 1, screen_width - status.len() - 1);
         canvas.print_with_attr(
             0,
             col,
@@ -313,9 +401,10 @@ pub struct PreviewCommand {
 
 #[derive(Debug)]
 enum PreviewEvent {
-    PreviewCommand(PreviewCommand),
-    PreviewPlainText(String),
-    PreviewAnsiText(String),
+    PreviewCommand(PreviewCommand, PreviewPosition),
+    PreviewPlainText(String, PreviewPosition),
+    PreviewAnsiText(String, PreviewPosition),
+    Noop,
     Abort,
 }
 
@@ -336,7 +425,7 @@ impl PreviewThread {
 
 fn run<C>(rx_preview: Receiver<PreviewEvent>, on_return: C)
 where
-    C: Fn(Vec<AnsiString<'static>>) + Send + Sync + 'static,
+    C: Fn(Vec<AnsiString<'static>>, PreviewPosition) + Send + Sync + 'static,
 {
     let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
@@ -360,7 +449,7 @@ where
         }
 
         match event {
-            PreviewEvent::PreviewCommand(preview_cmd) => {
+            PreviewEvent::PreviewCommand(preview_cmd, pos) => {
                 let cmd = &preview_cmd.cmd;
                 if cmd == "" {
                     continue;
@@ -379,7 +468,7 @@ where
                 match spawned {
                     Err(err) => {
                         let astdout = AnsiString::parse(format!("Failed to spawn: {} / {}", cmd, err).as_str());
-                        callback(vec![astdout]);
+                        callback(vec![astdout], pos);
                         preview_thread = None;
                     }
                     Ok(spawned) => {
@@ -390,21 +479,22 @@ where
                         let thread = thread::spawn(move || {
                             wait(spawned, move |lines| {
                                 stopped_clone.store(true, Ordering::SeqCst);
-                                callback_clone(lines);
+                                callback_clone(lines, pos);
                             })
                         });
                         preview_thread = Some(PreviewThread { pid, thread, stopped });
                     }
                 }
             }
-            PreviewEvent::PreviewPlainText(text) => {
-                callback(text.lines().map(|line| line.to_string().into()).collect());
+            PreviewEvent::PreviewPlainText(text, pos) => {
+                callback(text.lines().map(|line| line.to_string().into()).collect(), pos);
             }
-            PreviewEvent::PreviewAnsiText(text) => {
+            PreviewEvent::PreviewAnsiText(text, pos) => {
                 let mut parser = ANSIParser::default();
                 let color_lines = text.lines().map(|line| parser.parse_ansi(line)).collect();
-                callback(color_lines);
+                callback(color_lines, pos);
             }
+            PreviewEvent::Noop => {}
             PreviewEvent::Abort => return,
         };
     }

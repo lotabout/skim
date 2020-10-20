@@ -191,6 +191,14 @@ pub struct PreviewContext<'a> {
 
 //------------------------------------------------------------------------------
 // Preview
+#[derive(Default, Copy, Clone, Debug)]
+pub struct PreviewPosition {
+    pub h_scroll: Size,
+    pub h_offset: Size,
+    pub v_scroll: Size,
+    pub v_offset: Size,
+}
+
 pub enum ItemPreview {
     /// execute the command and print the command's output
     Command(String),
@@ -198,6 +206,9 @@ pub enum ItemPreview {
     Text(String),
     /// Display the colored text(lines)
     AnsiText(String),
+    CommandWithPos(String, PreviewPosition),
+    TextWithPos(String, PreviewPosition),
+    AnsiWithPos(String, PreviewPosition),
     /// Use global command settings to preview the item
     Global,
 }

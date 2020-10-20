@@ -1043,6 +1043,26 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-4].startswith('  c'))
         self.tmux.until(lambda lines: lines[-3].startswith('> b'))
 
+    def test_preview_scroll_const(self):
+        self.tmux.send_keys(f"""echo foo 123 321 | {self.sk("--preview 'seq 1000' --preview-window left:+123")}""", Key('Enter'))
+        self.tmux.until(lambda lines: re.match(r'123.*123/1000', lines[0]))
+
+    def test_preview_scroll_expr(self):
+        args = "--preview 'seq 1000' --preview-window left:+{3}"
+        self.tmux.send_keys(f"""echo foo 123 321 | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: re.match(r'321.*321/1000', lines[0]))
+
+    def test_preview_scroll_and_offset(self):
+        args = "--preview 'seq 1000' --preview-window left:+{2}-2"
+
+        self.tmux.send_keys(f"""echo foo 123 321 | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: re.match(r'121.*121/1000', lines[0]))
+        self.tmux.send_keys(Key('Enter'))
+
+        self.tmux.send_keys(f"""echo foo :123: 321 | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: re.match(r'121.*121/1000', lines[0]))
+        self.tmux.send_keys(Key('Enter'))
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"

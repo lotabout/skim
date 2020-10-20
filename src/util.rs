@@ -8,9 +8,11 @@ use unicode_width::UnicodeWidthChar;
 
 use crate::field::get_string_by_range;
 use crate::AnsiString;
+use bitflags::_core::str::FromStr;
 
 lazy_static! {
     static ref RE_ESCAPE: Regex = Regex::new(r"['\U{00}]").unwrap();
+    static ref RE_NUMBER: Regex = Regex::new(r"[+|-]?\d+").unwrap();
 }
 
 pub fn escape_single_quote(text: &str) -> String {
@@ -390,6 +392,10 @@ pub fn str_lines(string: &str) -> Vec<&str> {
     string.trim_end().split("\n").collect()
 }
 
+pub fn atoi<T: FromStr>(string: &str) -> Option<T> {
+    RE_NUMBER.find(string).and_then(|mat| mat.as_str().parse::<T>().ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,5 +462,19 @@ mod tests {
     #[test]
     fn test_escape_single_quote() {
         assert_eq!("'\\''a'\\''\\0", escape_single_quote("'a'\0"));
+    }
+
+    #[test]
+    fn test_atoi() {
+        assert_eq!(None, atoi::<usize>(""));
+        assert_eq!(Some(1), atoi::<usize>("1"));
+        assert_eq!(Some(8589934592), atoi::<usize>("8589934592"));
+        assert_eq!(Some(1), atoi::<usize>("a1"));
+        assert_eq!(Some(1), atoi::<usize>("1b"));
+        assert_eq!(Some(1), atoi::<usize>("a1b"));
+        assert_eq!(None, atoi::<usize>("-1"));
+        assert_eq!(Some(-1), atoi::<i32>("a-1b"));
+        assert_eq!(None, atoi::<i32>("8589934592"));
+        assert_eq!(Some(123), atoi::<i32>("+'123'"));
     }
 }

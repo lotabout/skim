@@ -40,6 +40,7 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 lazy_static! {
     static ref RE_FIELDS: Regex = Regex::new(r"\\?(\{-?[0-9.,q]*?})").unwrap();
+    static ref RE_PREVIEW_OFFSET: Regex = Regex::new(r"^\+([0-9]+|\{-?[0-9]+\})(-[0-9]+|-/[1-9][0-9]*)?$").unwrap();
     static ref DEFAULT_CRITERION: Vec<RankCriteria> =
         vec![RankCriteria::Score, RankCriteria::Begin, RankCriteria::End,];
 }
@@ -227,7 +228,13 @@ impl Model {
                     let _ = tx.lock().send((Key::Null, Event::EvHeartBeat));
                 })
                 .wrap(preview_wrap)
-                .delimiter(self.delimiter.clone()),
+                .delimiter(self.delimiter.clone())
+                .preview_offset(
+                    options
+                        .preview_window
+                        .map(Self::parse_preview_offset)
+                        .unwrap_or("".to_string()),
+                ),
             );
         }
 
@@ -271,6 +278,17 @@ impl Model {
         }
 
         (direction, size, wrap, shown)
+    }
+
+    // -> string
+    fn parse_preview_offset(preview_window: &str) -> String {
+        for token in preview_window.split(":") {
+            if RE_PREVIEW_OFFSET.is_match(token) {
+                return token.to_string();
+            }
+        }
+
+        "".to_string()
     }
 
     fn act_heart_beat(&mut self, env: &mut ModelEnv) {
