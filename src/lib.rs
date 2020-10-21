@@ -164,9 +164,12 @@ impl<'a> From<DisplayContext<'a>> for AnsiString<'a> {
                 AnsiString::new_str(context.text, vec![(context.highlight_attr, (start as u32, end as u32))])
             }
             Matches::ByteRange(start, end) => {
-                let start = context.text[..start].chars().count();
-                let end = start + context.text[start..end].chars().count();
-                AnsiString::new_str(context.text, vec![(context.highlight_attr, (start as u32, end as u32))])
+                let ch_start = context.text[..start].chars().count();
+                let ch_end = ch_start + context.text[start..end].chars().count();
+                AnsiString::new_str(
+                    context.text,
+                    vec![(context.highlight_attr, (ch_start as u32, ch_end as u32))],
+                )
             }
             Matches::None => AnsiString::new_str(context.text, vec![]),
         }

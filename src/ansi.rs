@@ -337,7 +337,7 @@ impl<'a> From<(&'a str, &'a [usize], Attr)> for AnsiString<'a> {
 pub struct AnsiStringIterator<'a> {
     fragments: &'a [(Attr, (u32, u32))],
     fragment_idx: usize,
-    chars_iter: std::str::CharIndices<'a>,
+    chars_iter: std::iter::Enumerate<std::str::Chars<'a>>,
 }
 
 impl<'a> AnsiStringIterator<'a> {
@@ -345,7 +345,7 @@ impl<'a> AnsiStringIterator<'a> {
         Self {
             fragments,
             fragment_idx: 0,
-            chars_iter: stripped.char_indices(),
+            chars_iter: stripped.chars().enumerate(),
         }
     }
 }
@@ -580,5 +580,17 @@ mod tests {
             merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (2, 6))]),
             vec![(ao, (1, 2)), (an, (2, 6)), (ao, (6, 7)), (ao, (9, 11))]
         );
+    }
+
+    #[test]
+    fn test_multi_byte_359() {
+        // https://github.com/lotabout/skim/issues/359
+        let highlight = Attr::default().effect(Effect::BOLD);
+        let ansistring = AnsiString::new_str("ああa", vec![(highlight, (2, 3))]);
+        let mut it = ansistring.iter();
+        assert_eq!(Some(('あ', Attr::default())), it.next());
+        assert_eq!(Some(('あ', Attr::default())), it.next());
+        assert_eq!(Some(('a', highlight)), it.next());
+        assert_eq!(None, it.next());
     }
 }
