@@ -52,7 +52,9 @@ __fsel() {
   done
   local ret=$?
   echo
-  REPORTTIME=$REPORTTIME_
+  if ! [ -z $REPORTTIME_ ]; then
+      REPORTTIME=$REPORTTIME_
+  fi
   unset REPORTTIME_
   return $ret
 }
@@ -89,7 +91,9 @@ skim-cd-widget() {
   REPORTTIME_=$REPORTTIME
   unset REPORTTIME
   local dir="$(eval "$cmd" | SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} --reverse $SKIM_DEFAULT_OPTIONS $SKIM_ALT_C_OPTS" $(__skimcmd) --no-multi)"
-  REPORTTIME=$REPORTTIME_
+  if ! [ -z $REPORTTIME_ ]; then
+      REPORTTIME=$REPORTTIME_
+  fi
   unset REPORTTIME_
   if [[ -z "$dir" ]]; then
     zle redisplay
