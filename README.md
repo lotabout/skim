@@ -49,7 +49,7 @@ skim project contains several components:
 
 | Distribution   | Package Manager   | Command            |
 | -------------- | ----------------- | ---------          |
-| Mac OS         | homebrew          | `brew instsall sk` |
+| Mac OS         | homebrew          | `brew install sk`  |
 | Fedora         | dnf               | `dnf install skim` |
 | Alpine         | apk               | `apk add skim`     |
 | Arch           | pacman            | `pacman -S skim`   |
