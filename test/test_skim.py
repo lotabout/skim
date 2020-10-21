@@ -1063,6 +1063,10 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: re.match(r'121.*121/1000', lines[0]))
         self.tmux.send_keys(Key('Enter'))
 
+    def test_issue_359_multi_byte_and_regex(self):
+        self.tmux.send_keys(f"""echo 'ああa' | {self.sk("--regex -q 'a'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines[-3].startswith('> ああa'))
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"
