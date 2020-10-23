@@ -1067,6 +1067,20 @@ class TestSkim(TestBase):
         self.tmux.send_keys(f"""echo 'ああa' | {self.sk("--regex -q 'a'")}""", Key('Enter'))
         self.tmux.until(lambda lines: lines[-3].startswith('> ああa'))
 
+    def test_issue_361_literal_space(self):
+        args = '''-q "'foo\\ bar"'''
+        self.tmux.send_keys(f"""echo 'foo bar\nfoo  bar' | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> foo bar'))
+        self.tmux.send_keys(Key('Enter'))
+
+        args = '''-q "!foo\\ bar"'''
+        self.tmux.send_keys(f"""echo 'foo bar\nfoo  bar' | {self.sk(args)}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
+        self.tmux.until(lambda lines: lines[-3].startswith('> foo  bar'))
+        self.tmux.send_keys(Key('Enter'))
+
+
 def find_prompt(lines, interactive=False, reverse=False):
     linen = -1
     prompt = ">"

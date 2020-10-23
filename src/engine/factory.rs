@@ -142,15 +142,18 @@ impl AndOrEngineFactory {
         }
     }
 
+    // we want to treat `\ ` as plain white space
+    // regex crate doesn't support look around, so I use a lazy workaround
+    // that replace `\ ` with `\0` ahead of split and replace it back afterwards
     fn parse_or(&self, query: &str, case: CaseMatching) -> Box<dyn MatchEngine> {
         if query.trim().is_empty() {
             self.inner.create_engine_with_case(query, case)
         } else {
-            Box::new(
-                OrEngine::builder()
-                    .engines(RE_OR.split(query).map(|q| self.parse_and(q, case)).collect())
-                    .build(),
-            )
+            let engines = RE_OR
+                .split(&self.mask_escape_space(query))
+                .map(|q| self.parse_and(q, case))
+                .collect();
+            Box::new(OrEngine::builder().engines(engines).build())
         }
     }
 
@@ -161,8 +164,9 @@ impl AndOrEngineFactory {
         for mat in RE_AND.find_iter(query_trim) {
             let (start, end) = (mat.start(), mat.end());
             let term = query_trim[last..start].trim_matches(|c| c == ' ' || c == '|');
+            let term = self.unmask_escape_space(term);
             if !term.is_empty() {
-                engines.push(self.inner.create_engine_with_case(term, case));
+                engines.push(self.inner.create_engine_with_case(&term, case));
             }
 
             if !mat.as_str().trim().is_empty() {
@@ -172,10 +176,19 @@ impl AndOrEngineFactory {
         }
 
         let term = query_trim[last..].trim_matches(|c| c == ' ' || c == '|');
+        let term = self.unmask_escape_space(term);
         if !term.is_empty() {
-            engines.push(self.inner.create_engine_with_case(term, case));
+            engines.push(self.inner.create_engine_with_case(&term, case));
         }
         Box::new(AndEngine::builder().engines(engines).build())
+    }
+
+    fn mask_escape_space(&self, string: &str) -> String {
+        string.replace("\\ ", "\0")
+    }
+
+    fn unmask_escape_space(&self, string: &str) -> String {
+        string.replace("\0", " ")
     }
 }
 
