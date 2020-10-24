@@ -612,6 +612,14 @@ impl Model {
                     })
                 }
 
+                Event::EvActRefreshCmd => {
+                    self.on_cmd_query_change(&mut env);
+                }
+
+                Event::EvActRefreshPreview => {
+                    self.draw_preview(&env, true);
+                }
+
                 _ => {}
             }
 
@@ -640,26 +648,33 @@ impl Model {
                 previewer.handle(&ev);
             }
 
-            // re-draw
-            if !self.preview_hidden {
-                let item_index = self.selection.get_current_item_idx();
-                let item = self.selection.get_current_item();
-                if let Some(previewer) = self.previewer.as_mut() {
-                    let selections = &self.selection;
-                    let get_selected_items = || selections.get_selected_indices_and_items();
-                    previewer.on_item_change(
-                        item_index,
-                        item,
-                        env.query.to_string(),
-                        env.cmd_query.to_string(),
-                        selections.get_num_of_selected_exclude_current(),
-                        get_selected_items,
-                    );
-                }
-            }
+            self.draw_preview(&env, false);
 
             let _ = self.do_with_widget(|root| self.term.draw(&root));
             let _ = self.term.present();
+        }
+    }
+
+    fn draw_preview(&mut self, env: &ModelEnv, force: bool) {
+        if self.preview_hidden {
+            return;
+        }
+
+        // re-draw
+        let item_index = self.selection.get_current_item_idx();
+        let item = self.selection.get_current_item();
+        if let Some(previewer) = self.previewer.as_mut() {
+            let selections = &self.selection;
+            let get_selected_items = || selections.get_selected_indices_and_items();
+            previewer.on_item_change(
+                item_index,
+                item,
+                env.query.to_string(),
+                env.cmd_query.to_string(),
+                selections.get_num_of_selected_exclude_current(),
+                get_selected_items,
+                force,
+            );
         }
     }
 

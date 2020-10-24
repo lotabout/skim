@@ -124,6 +124,7 @@ impl Previewer {
         new_cmd_query: impl Into<Option<String>>,
         num_selected: usize,
         get_selected_items: impl Fn() -> (Vec<usize>, Vec<Arc<dyn SkimItem>>), // lazy get
+        force: bool,
     ) {
         let new_item = new_item.into();
         let new_query = new_query.into();
@@ -152,7 +153,7 @@ impl Previewer {
 
         let selected_items_changed = self.prev_num_selected != num_selected;
 
-        if !item_changed && !query_changed && !cmd_query_changed && !selected_items_changed {
+        if !force && !item_changed && !query_changed && !cmd_query_changed && !selected_items_changed {
             return;
         }
 
