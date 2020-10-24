@@ -1,5 +1,21 @@
 # Change Log
 
+## 0.9.2: 2020-10-24
+
+Feature:
+- new action `refresh-cmd`: call the interactive command and refresh the
+    items accordingly.
+- new action `refresh-preview`: call the preview command and refresh the
+    preview display. Will only refresh if the preview window is shown.
+
+Fix:
+- zsh corrupt `REPORTTIME` settings.
+- [#359](https://github.com/lotabout/skim/issues/359) panic with multi-byte and regex
+- [#361](https://github.com/lotabout/skim/issues/361) support literal space by `\ `
+- [#365](https://github.com/lotabout/skim/issues/365) new option
+    `--show-cmd-error` to retrieve error message of failed interactive command
+    and display as items. Served as a debug helper.
+
 ## 0.9.1: 2020-10-20
 
 Feature:
