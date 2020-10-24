@@ -1,10 +1,4 @@
 /// helper for turn a BufRead into a skim stream
-use crate::field::FieldRange;
-use crate::helper::item::DefaultSkimItem;
-use crate::reader::CommandCollector;
-use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
-use crossbeam::channel::{bounded, Receiver, Sender};
-use regex::Regex;
 use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
@@ -12,6 +6,14 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
+
+use crossbeam::channel::{bounded, Receiver, Sender};
+use regex::Regex;
+
+use crate::field::FieldRange;
+use crate::helper::item::DefaultSkimItem;
+use crate::reader::CommandCollector;
+use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
 
 const CMD_CHANNEL_SIZE: usize = 1024;
 const ITEM_CHANNEL_SIZE: usize = 10240;
@@ -31,6 +33,7 @@ pub struct SkimItemReaderOption {
     matching_fields: Vec<FieldRange>,
     delimiter: Regex,
     line_ending: u8,
+    show_error: bool,
 }
 
 impl Default for SkimItemReaderOption {
@@ -42,6 +45,7 @@ impl Default for SkimItemReaderOption {
             transform_fields: Vec::new(),
             matching_fields: Vec::new(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
+            show_error: false,
         }
     }
 }
@@ -105,6 +109,11 @@ impl SkimItemReaderOption {
         } else {
             self.line_ending = b'\n';
         }
+        self
+    }
+
+    pub fn show_error(mut self, show_error: bool) -> Self {
+        self.show_error = show_error;
         self
     }
 
@@ -205,6 +214,8 @@ impl SkimItemReader {
         let started = Arc::new(AtomicBool::new(false));
         let started_clone = started.clone();
         let components_to_stop_clone = components_to_stop.clone();
+        let tx_item_clone = tx_item.clone();
+        let send_error = self.option.show_error;
         // listening to close signal and kill command if needed
         thread::spawn(move || {
             debug!("collector: command killer start");
@@ -212,10 +223,22 @@ impl SkimItemReader {
             started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
             let _ = rx_interrupt.recv(); // block waiting
-                                         // clean up resources
             if let Some(mut x) = command {
-                let _ = x.kill();
-                let _ = x.wait();
+                let success = match x.try_wait() {
+                    Ok(Some(status)) if status.success() => true,
+                    _ => false,
+                };
+
+                // clean up resources
+                if success {
+                    let _ = x.kill();
+                    let _ = x.wait();
+                } else if send_error {
+                    let output = x.wait_with_output().expect("could not retrieve error message");
+                    for line in String::from_utf8_lossy(&output.stderr).lines() {
+                        let _ = tx_item_clone.send(Arc::new(line.to_string()));
+                    }
+                }
             }
 
             components_to_stop_clone.fetch_sub(1, Ordering::SeqCst);
@@ -295,13 +318,14 @@ impl CommandCollector for SkimItemReader {
 }
 
 type CommandOutput = (Option<Child>, Box<dyn BufRead + Send>);
+
 fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
     let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
     let mut command: Child = Command::new(shell)
         .arg("-c")
         .arg(cmd)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()?;
 
     let stdout = command

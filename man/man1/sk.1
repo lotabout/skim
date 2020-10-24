@@ -217,6 +217,13 @@ This is not default however because similar usecases for \fBgrep\fR and
 \fBrg\fR had already been optimized where empty result of a query do mean
 "empty" and previous results should be cleared.
 
+.TP
+.BI "--show-cmd-error"
+If the command fails, send the error messages and show them as items. This
+option was intended to help debugging interactive commands. It's not enabled
+by default because the command often fails before we complete the "cmd-query"
+and error messages would be annoying.
+
 .SS Display
 .TP
 .B "--ansi"

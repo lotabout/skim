@@ -895,7 +895,7 @@ class TestSkim(TestBase):
     def test_cmd_history(self):
         """query history should work"""
 
-        history_file = f'{self.tempname()}.history'
+        history_file = f'{self.tempname()}.cmd-history'
 
         self.tmux.send_keys(f"echo -e 'a\nb\nc' > {history_file}", Key('Enter'))
         self.tmux.send_keys(f"""{self.sk("-i -c 'echo {}'", '--cmd-history', history_file)}""", Key('Enter'))
@@ -1031,7 +1031,7 @@ class TestSkim(TestBase):
 
     def test_no_clear_if_empty(self):
         text_file = f'{self.tempname()}.txt'
-        self.tmux.send_keys(f"echo -e 'b\nc' > {text_file}", Key('Enter'))
+        self.tmux.send_keys(f"echo -e 'b\\nc' > {text_file}", Key('Enter'))
 
         args = "-c 'cat {}'" + f''' -i --cmd-query='{text_file}' --no-clear-if-empty'''
         self.tmux.send_keys(f"""{self.sk(args)}""", Key('Enter'))
