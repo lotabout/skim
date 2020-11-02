@@ -16,7 +16,8 @@ pub struct ANSIParser {
     last_attr: Attr,
 
     stripped: String,
-    fragments: Vec<(Attr, (u32, u32))>,
+    stripped_char_count: usize,
+    fragments: Vec<(Attr, (u32, u32))>, // [char_index_start, char_index_end)
 }
 
 impl Default for ANSIParser {
@@ -26,6 +27,7 @@ impl Default for ANSIParser {
             last_attr: Attr::default(),
 
             stripped: String::new(),
+            stripped_char_count: 0,
             fragments: Vec::new(),
         }
     }
@@ -182,10 +184,15 @@ impl ANSIParser {
         }
 
         let string = mem::replace(&mut self.partial_str, String::new());
+        let string_char_count = string.chars().count();
         self.fragments.push((
             self.last_attr,
-            (self.stripped.len() as u32, (self.stripped.len() + string.len()) as u32),
+            (
+                self.stripped_char_count as u32,
+                (self.stripped_char_count + string_char_count) as u32,
+            ),
         ));
+        self.stripped_char_count += string_char_count;
         self.stripped.push_str(&string);
     }
 
@@ -208,6 +215,7 @@ impl ANSIParser {
         self.save_str();
 
         let stripped = mem::replace(&mut self.stripped, String::new());
+        self.stripped_char_count = 0;
         let fragments = mem::replace(&mut self.fragments, Vec::new());
         AnsiString::new_string(stripped, fragments)
     }
@@ -511,6 +519,28 @@ mod tests {
         let ansistring = ANSIParser::default().parse_ansi(input);
         assert_eq!(ansistring.fragments.as_ref().map(|x| x.len()).unwrap(), 2);
         assert_eq!(ansistring.stripped(), "AB");
+    }
+
+    #[test]
+    fn test_multi_bytes() {
+        let input = "中`\x1B[0m\x1B[1m\x1B[31mXYZ\x1B[0ms`";
+        let ansistring = ANSIParser::default().parse_ansi(input);
+        let mut it = ansistring.iter();
+        let default_attr = Attr::default();
+        let annotated = Attr {
+            fg: Color::AnsiValue(1),
+            effect: Effect::BOLD,
+            ..default_attr
+        };
+
+        assert_eq!(Some(('中', default_attr)), it.next());
+        assert_eq!(Some(('`', default_attr)), it.next());
+        assert_eq!(Some(('X', annotated)), it.next());
+        assert_eq!(Some(('Y', annotated)), it.next());
+        assert_eq!(Some(('Z', annotated)), it.next());
+        assert_eq!(Some(('s', default_attr)), it.next());
+        assert_eq!(Some(('`', default_attr)), it.next());
+        assert_eq!(None, it.next());
     }
 
     #[test]
