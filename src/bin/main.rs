@@ -357,11 +357,16 @@ fn real_main() -> Result<i32, std::io::Error> {
         write!(stdout, "{}{}", output.cmd, bin_options.output_ending)?;
     }
 
-    match output.final_event {
-        Event::EvActAccept(Some(accept_key)) => {
-            write!(stdout, "{}{}", accept_key, bin_options.output_ending)?;
+    if opts.is_present("expect") {
+        match output.final_event {
+            Event::EvActAccept(Some(accept_key)) => {
+                write!(stdout, "{}{}", accept_key, bin_options.output_ending)?;
+            }
+            Event::EvActAccept(None) => {
+                write!(stdout, "{}", bin_options.output_ending)?;
+            }
+            _ => {}
         }
-        _ => {}
     }
 
     for item in output.selected_items.iter() {
