@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.9.3: 2020-11-02
+
+Fix:
+- [#370](https://github.com/lotabout/skim/issues/370) Ansi parse error for
+    multi-byte strings
+- [#372](https://github.com/lotabout/skim/issues/372) Can't bind `Enter` key
+    with `expect` specified
+- [#369](https://github.com/lotabout/skim/issues/369) `--select-1` and
+    `--exit-0` still take effect after all items are read and matched.
+
 ## 0.9.2: 2020-10-24
 
 Feature:
