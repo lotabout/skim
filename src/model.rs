@@ -377,6 +377,10 @@ impl Model {
                 debug!("exit-0 triggered, accept");
                 let _ = self.tx.send((Key::Null, Event::EvActAbort));
             } else {
+                // no longer need need to handle select-1, exit-1, sync, etc.
+                self.select1 = false;
+                self.exit0 = false;
+                self.sync = false;
                 let _ = self.term.restart();
             }
         }
