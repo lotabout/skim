@@ -39,7 +39,7 @@ skim provides a single executable: `sk`. Basically anywhere you would want to us
 
 # Installation
 
-skim project contains several components:
+The skim project contains several components:
 
 1. `sk` executable -- the core.
 2. `sk-tmux` -- script for launching `sk` in a tmux pane.
@@ -57,7 +57,7 @@ skim project contains several components:
 
 ## Install as Vim plugin
 
-Via vim-plug(recommended):
+Via vim-plug (recommended):
 
 ```vim
 Plug 'lotabout/skim', { 'dir': '~/.skim', 'do': './install' }
@@ -85,7 +85,7 @@ Any of the following applies:
 
 # Usage
 
-skim can be used as a general filter(like `grep`) or as an interactive
+skim can be used as a general filter (like `grep`) or as an interactive
 interface for invoking commands.
 
 ## As filter
@@ -126,7 +126,7 @@ sk --ansi -i -c 'rg --color=always --line-number "{}"'
 
 ## Key Bindings
 
-Some commonly used keybindings:
+Some commonly used key bindings:
 
 | Key               | Action                                     |
 |------------------:|--------------------------------------------|
@@ -137,7 +137,7 @@ Some commonly used keybindings:
 | TAB               | Toggle selection and move down (with `-m`) |
 | Shift-TAB         | Toggle selection and move up (with `-m`)   |
 
-For full list of key bindings, checkout the [man
+For full list of key bindings, check out the [man
 page](https://github.com/lotabout/skim/blob/master/man/man1/sk.1) (`man sk`).
 
 ## Search Syntax
@@ -181,12 +181,12 @@ You can switch to `regex` mode dynamically by pressing `Ctrl-R` (Rotate Mode).
 
 # Customization
 
-The doc here is only a preview, please check the man page(`man sk`) for full
+The doc here is only a preview, please check the man page (`man sk`) for a full
 list of options.
 
 ## Keymap
 
-Specify the bindings with comma seperated pairs(no space allowed), example:
+Specify the bindings with comma separated pairs (no space allowed), example:
 
 ```sh
 sk --bind 'alt-a:select-all,alt-d:deselect-all'
@@ -224,7 +224,7 @@ See `--color` option in the man page for details.
 
 ## Misc
 
-- `--ansi`: to parse ANSI color codes(e.g `\e[32mABC`) of the data source
+- `--ansi`: to parse ANSI color codes (e.g., `\e[32mABC`) of the data source
 - `--regex`: use the query as regular expression to match the data source
 
 # Advanced Topics
@@ -242,12 +242,12 @@ How it works?
 ![skim's interactive mode](https://user-images.githubusercontent.com/1527040/53381293-461ce380-39ab-11e9-8e86-7c3bbfd557bc.png)
 
 - Skim could accept two kinds of source: command output or piped input
-- Skim have two kinds of prompt: query prompt to specify the query pattern,
+- Skim has two kinds of prompts: A query prompt to specify the query pattern and a
     command prompt to specify the "arguments" of the command
 - `-c` is used to specify the command to execute while defaults to `SKIM_DEFAULT_COMMAND`
 - `-i` is to tell skim open command prompt on startup, which will show `c>` by default.
 
-If you want to further narrow down the result returned by the command, press
+If you want to further narrow down the results returned by the command, press
 `Ctrl-Q` to toggle interactive mode.
 
 ## Executing external programs
@@ -409,11 +409,11 @@ plugin, `SKIM_DEFAULT_COMMAND` is set to the command by default:
 let $SKIM_DEFAULT_COMMAND = "git ls-tree -r --name-only HEAD || rg --files || ag -l -g \"\" || find ."
 ```
 
-That means the files not recognized by git will not shown. Either override the
+That means, the files not recognized by git will not shown. Either override the
 default with `let $SKIM_DEFAULT_COMMAND = ''` or find the missing file by
 yourself.
 
-# Difference to fzf
+# Differences to fzf
 
 [fzf](https://github.com/junegunn/fzf) is a command-line fuzzy finder written
 in Go and [skim](https://github.com/lotabout/skim) tries to implement a new one
@@ -424,11 +424,11 @@ different from fzf. For example:
 
 1. `skim` is a binary as well as a library while fzf is only a binary.
 2. `skim` has an interactive mode.
-3. `skim` support pre-selection
+3. `skim` supports pre-selection
 4. The fuzzy search algorithm is different.
 5. ~~UI of showing matched items. `fzf` will show only the range matched while
    `skim` will show each character matched.~~ (fzf has this now)
-6. ~~`skim`'s range syntax is git style~~: now it is the same with fzf.
+6. ~~`skim`'s range syntax is Git style~~: now it is the same with fzf.
 
 # How to contribute
 
