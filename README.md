@@ -34,7 +34,7 @@ skim provides a single executable: `sk`. Basically anywhere you would want to us
 - [FAQ](#faq)
     - [How to ignore files?](#how-to-ignore-files)
     - [Some files are not shown in vim plugin](#some-files-are-not-shown-in-vim-plugin)
-- [Difference to fzf](#difference-to-fzf)
+- [Differences to fzf](#differences-to-fzf)
 - [How to contribute](#how-to-contribute)
 
 # Installation
