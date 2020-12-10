@@ -293,7 +293,7 @@ _skim_alias_completion() {
 }
 
 # skim options
-complete -o default -F _skim_opts_completion skim
+complete -o default -F _skim_opts_completion sk
 
 d_cmds="${SKIM_COMPLETION_DIR_COMMANDS:-cd pushd rmdir}"
 a_cmds="
