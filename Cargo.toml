@@ -20,7 +20,7 @@ name = "sk"
 path = "src/bin/main.rs"
 
 [dependencies]
-nix = "0.14.0"
+nix = "0.19.1"
 regex = "1.1.5"
 lazy_static = "1.3.0"
 shlex = "0.1.1"
