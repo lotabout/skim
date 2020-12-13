@@ -5,7 +5,7 @@ use std::mem;
 use beef::lean::Cow;
 use std::cmp::max;
 use tuikit::prelude::*;
-use vte::Perform;
+use vte::{Params, Perform};
 
 /// An ANSI Parser, will parse one line at a time.
 ///
@@ -51,7 +51,7 @@ impl Perform for ANSIParser {
         }
     }
 
-    fn hook(&mut self, params: &[i64], _intermediates: &[u8], _ignore: bool) {
+    fn hook(&mut self, params: &Params, _intermediates: &[u8], _ignore: bool, _action: char) {
         trace!("AnsiParser:hook ignored {:?}", params);
     }
 
@@ -63,16 +63,16 @@ impl Perform for ANSIParser {
         trace!("AnsiParser:unhook ignored");
     }
 
-    fn osc_dispatch(&mut self, params: &[&[u8]]) {
+    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
         trace!("AnsiParser:osc ignored {:?}", params);
     }
 
-    fn csi_dispatch(&mut self, params: &[i64], _intermediates: &[u8], _ignore: bool, mode: char) {
+    fn csi_dispatch(&mut self, params: &Params, _intermediates: &[u8], _ignore: bool, action: char) {
         // https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_(Select_Graphic_Rendition)_parameters
         // Only care about graphic modes, ignore all others
 
-        if mode != 'm' {
-            trace!("ignore: params: {:?}, mode: {:?}", params, mode);
+        if action != 'm' {
+            trace!("ignore: params: {:?}, action : {:?}", params, action);
             return;
         }
 
@@ -84,8 +84,8 @@ impl Perform for ANSIParser {
         };
 
         let mut iter = params.iter();
-        while let Some(&code) = iter.next() {
-            match code {
+        while let Some(code) = iter.next() {
+            match code[0] {
                 0 => attr = Attr::default(),
                 1 => attr.effect |= Effect::BOLD,
                 2 => attr.effect |= !Effect::BOLD,
@@ -96,30 +96,29 @@ impl Perform for ANSIParser {
                     attr.fg = Color::AnsiValue((num - 30) as u8);
                 }
                 38 => match iter.next() {
-                    Some(2) => {
+                    Some(&[2]) => {
                         // ESC[ 38;2;<r>;<g>;<b> m Select RGB foreground color
-                        let or = iter.next();
-                        let og = iter.next();
-                        let ob = iter.next();
-                        if ob.is_none() {
-                            trace!("ignore CSI {:?} m", params);
-                            continue;
-                        }
-
-                        let r = *or.unwrap() as u8;
-                        let g = *og.unwrap() as u8;
-                        let b = *ob.unwrap() as u8;
+                        let (r, g, b) = match (iter.next(), iter.next(), iter.next()) {
+                            (Some(r), Some(g), Some(b)) => (r[0] as u8, g[0] as u8, b[0] as u8),
+                            _ => {
+                                trace!("ignore CSI {:?} m", params);
+                                continue;
+                            }
+                        };
 
                         attr.fg = Color::Rgb(r, g, b);
                     }
-                    Some(5) => {
+                    Some(&[5]) => {
                         // ESC[ 38;5;<n> m Select foreground color
-                        let color = iter.next();
-                        if color.is_none() {
-                            trace!("ignore CSI {:?} m", params);
-                            continue;
-                        }
-                        attr.fg = Color::AnsiValue(*color.unwrap() as u8);
+                        let color = match iter.next() {
+                            Some(color) => color[0] as u8,
+                            None => {
+                                trace!("ignore CSI {:?} m", params);
+                                continue;
+                            }
+                        };
+
+                        attr.fg = Color::AnsiValue(color);
                     }
                     _ => {
                         trace!("error on parsing CSI {:?} m", params);
@@ -130,30 +129,29 @@ impl Perform for ANSIParser {
                     attr.bg = Color::AnsiValue((num - 40) as u8);
                 }
                 48 => match iter.next() {
-                    Some(2) => {
+                    Some(&[2]) => {
                         // ESC[ 48;2;<r>;<g>;<b> m Select RGB background color
-                        let or = iter.next();
-                        let og = iter.next();
-                        let ob = iter.next();
-                        if ob.is_none() {
-                            trace!("ignore CSI {:?} m", params);
-                            continue;
-                        }
-
-                        let r = *or.unwrap() as u8;
-                        let g = *og.unwrap() as u8;
-                        let b = *ob.unwrap() as u8;
+                        let (r, g, b) = match (iter.next(), iter.next(), iter.next()) {
+                            (Some(r), Some(g), Some(b)) => (r[0] as u8, g[0] as u8, b[0] as u8),
+                            _ => {
+                                trace!("ignore CSI {:?} m", params);
+                                continue;
+                            }
+                        };
 
                         attr.bg = Color::Rgb(r, g, b);
                     }
-                    Some(5) => {
+                    Some(&[5]) => {
                         // ESC[ 48;5;<n> m Select background color
-                        let color = iter.next();
-                        if color.is_none() {
-                            trace!("ignore CSI {:?} m", params);
-                            continue;
-                        }
-                        attr.bg = Color::AnsiValue(*color.unwrap() as u8);
+                        let color = match iter.next() {
+                            Some(color) => color[0] as u8,
+                            None => {
+                                trace!("ignore CSI {:?} m", params);
+                                continue;
+                            }
+                        };
+
+                        attr.bg = Color::AnsiValue(color);
                     }
                     _ => {
                         trace!("ignore CSI {:?} m", params);
@@ -169,7 +167,7 @@ impl Perform for ANSIParser {
         self.attr_change(attr);
     }
 
-    fn esc_dispatch(&mut self, _params: &[i64], _intermediates: &[u8], _ignore: bool, _byte: u8) {
+    fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {
         // ESC characters are replaced with \[
         self.partial_str.push('"');
         self.partial_str.push('[');
