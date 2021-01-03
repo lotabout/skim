@@ -136,7 +136,7 @@ const DEFAULT_HISTORY_SIZE: usize = 1000;
 
 //------------------------------------------------------------------------------
 fn main() {
-    env_logger::builder().default_format_timestamp_nanos(true).init();
+    env_logger::builder().format_timestamp_nanos().init();
 
     match real_main() {
         Ok(exit_code) => std::process::exit(exit_code),
