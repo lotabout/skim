@@ -884,9 +884,9 @@ dependencies = [
 
 [[package]]
 name = "tuikit"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dffdaf0475a16285148e3206b4e7bb3017ade03022efbfec1c774c82424fa907"
+checksum = "8b14d0a62e5faec84af47c1e7804ff49092c6f05b890f52502928a45d9bbc6c1"
 dependencies = [
  "bitflags",
  "lazy_static",

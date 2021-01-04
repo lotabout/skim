@@ -32,6 +32,8 @@ pub struct Query {
     fz_query_history_before: Vec<String>,
     fz_query_history_after: Vec<String>,
 
+    pasted: Option<String>,
+
     theme: Arc<ColorTheme>,
 }
 
@@ -54,6 +56,8 @@ impl Query {
             cmd_history_after: Vec::new(),
             fz_query_history_before: Vec::new(),
             fz_query_history_after: Vec::new(),
+
+            pasted: None,
 
             theme: Arc::new(*DEFAULT_THEME),
         }
@@ -443,9 +447,10 @@ impl EventHandler for Query {
         let cmd_after_len = self.cmd_after.len();
 
         match event {
-            EvActAddChar(ch) => {
-                self.act_add_char(*ch);
-            }
+            EvActAddChar(ch) => match self.pasted.as_mut() {
+                Some(pasted) => pasted.push(*ch),
+                None => self.act_add_char(*ch),
+            },
 
             EvActDeleteChar | EvActDeleteCharEOF => {
                 self.act_delete_char();
@@ -511,6 +516,17 @@ impl EventHandler for Query {
 
             EvActToggleInteractive => {
                 self.act_query_toggle_interactive();
+            }
+
+            EvInputKey(Key::BracketedPasteStart) => {
+                self.pasted.replace(String::new());
+            }
+
+            EvInputKey(Key::BracketedPasteEnd) => {
+                let pasted = self.pasted.take().unwrap_or_else(|| String::new());
+                for ch in pasted.chars() {
+                    self.act_add_char(ch);
+                }
             }
 
             _ => {}
