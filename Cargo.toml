@@ -38,7 +38,7 @@ bitflags = "1.0.4"
 timer = "0.2.0"
 chrono = "0.4"
 crossbeam = "0.8.0"
-beef = "0.4.4" # compact cow
+beef = "0.5.0" # compact cow
 defer-drop = "1.0.1"
 
 [features]
