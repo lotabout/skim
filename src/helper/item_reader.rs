@@ -223,20 +223,21 @@ impl SkimItemReader {
             started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
             let _ = rx_interrupt.recv(); // block waiting
-            if let Some(mut x) = command {
-                let success = match x.try_wait() {
-                    Ok(Some(status)) if status.success() => true,
-                    _ => false,
-                };
-
+            if let Some(mut child) = command {
                 // clean up resources
-                if success {
-                    let _ = x.kill();
-                    let _ = x.wait();
-                } else if send_error {
-                    let output = x.wait_with_output().expect("could not retrieve error message");
-                    for line in String::from_utf8_lossy(&output.stderr).lines() {
-                        let _ = tx_item_clone.send(Arc::new(line.to_string()));
+                let _ = child.kill();
+                let _ = child.wait();
+
+                if send_error {
+                    let has_error = child
+                        .try_wait()
+                        .map(|os| os.map(|s| !s.success()).unwrap_or(true))
+                        .unwrap_or(false);
+                    if has_error {
+                        let output = child.wait_with_output().expect("could not retrieve error message");
+                        for line in String::from_utf8_lossy(&output.stderr).lines() {
+                            let _ = tx_item_clone.send(Arc::new(line.to_string()));
+                        }
                     }
                 }
             }
