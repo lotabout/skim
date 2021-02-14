@@ -871,7 +871,7 @@ struct Status {
 
 #[allow(unused_assignments)]
 impl Draw for Status {
-    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> DrawResult<()> {
         // example:
         //    /--num_matched/num_read        /-- current_item_index
         // [| 869580/869580                  0.]

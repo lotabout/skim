@@ -338,7 +338,7 @@ impl EventHandler for Previewer {
 }
 
 impl Draw for Previewer {
-    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> DrawResult<()> {
         canvas.clear()?;
         let (screen_width, screen_height) = canvas.size()?;
 

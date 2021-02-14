@@ -407,7 +407,7 @@ impl Selection {
         row: usize,
         matched_item: &MatchedItem,
         is_current: bool,
-    ) -> Result<()> {
+    ) -> DrawResult<()> {
         let (screen_width, screen_height) = canvas.size()?;
 
         // update item heights
@@ -524,7 +524,7 @@ impl Selection {
 }
 
 impl Draw for Selection {
-    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> DrawResult<()> {
         let (_screen_width, screen_height) = canvas.size()?;
         canvas.clear()?;
 

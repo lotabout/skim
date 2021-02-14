@@ -78,7 +78,7 @@ impl Header {
 }
 
 impl Draw for Header {
-    fn draw(&self, canvas: &mut dyn Canvas) -> Result<()> {
+    fn draw(&self, canvas: &mut dyn Canvas) -> DrawResult<()> {
         let (screen_width, screen_height) = canvas.size()?;
         if screen_width < 3 {
             return Err("screen width is too small".into());
