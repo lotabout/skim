@@ -926,8 +926,9 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-1].startswith('c> cd'))
         self.tmux.send_keys(Key('Enter'))
 
-        with open(history_file) as fp:
-            self.assertEqual('a\nb\nc\ncd', fp.read())
+        self.tmux.send_keys(f'[[ "$(echo -n $(cat {history_file}))" == "a b c cd" ]] && echo ok')
+        self.tmux.send_keys(Key('Enter'))
+        self.tmux.until(lambda lines: lines[-1].startswith('ok'))
 
     def test_execute_with_zero_result_ref(self):
         """execute should not panic with zero results #276"""
