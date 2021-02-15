@@ -73,7 +73,7 @@ class TmuxOutput(list):
     # normal:  `| 10/219 [2]               8/0.`
     # inline:  `> query < 10/219 [2]       8/0.`
     # preview: `> query < 10/219 [2]       8/0.│...`
-    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?: \[([0-9]+)\])? *([0-9]+)/(-?[0-9]+)(\.)?(?: │)? *$')
+    RE = re.compile(r'(?:^|[^<-]*). ([0-9]+)/([0-9]+)(?:/[A-Z]*)?(?: \[([0-9]+)\])? *([0-9]+)/(-?[0-9]+)(\.)?(?: │)? *$')
     def __init__(self, iteratable=[]):
         super(TmuxOutput, self).__init__(iteratable)
         self._counts = None
@@ -325,7 +325,7 @@ class TestSkim(TestBase):
     def test_default_command(self):
         self.tmux.send_keys(self.sk().replace('SKIM_DEFAULT_COMMAND=', "SKIM_DEFAULT_COMMAND='echo hello'"))
         self.tmux.send_keys(Key('Enter'))
-        self.tmux.until(lambda lines: lines[-2].startswith('  1/1'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.send_keys(Key('Enter'))
         self.assertEqual('hello', self.readonce().strip())
 
@@ -864,6 +864,8 @@ class TestSkim(TestBase):
         history_file = f'{self.tempname()}.history'
 
         self.tmux.send_keys(f"echo -e 'a\nb\nc' > {history_file}", Key('Enter'))
+        history_mtime = os.stat(history_file).st_mtime
+
         self.tmux.send_keys(f"echo -e 'a\nb\nc' | {self.sk('--history', history_file)}", Key('Enter'))
         self.tmux.until(lambda lines: lines.ready_with_lines(3))
         self.tmux.send_keys(Ctrl('p'))
@@ -889,6 +891,7 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-1].startswith('> cd'))
         self.tmux.send_keys(Key('Enter'))
 
+        self.tmux.until(lambda _lines: os.stat(history_file).st_mtime > history_mtime)
         with open(history_file) as fp:
             self.assertEqual('a\nb\nc\ncd', fp.read())
 
@@ -1065,6 +1068,7 @@ class TestSkim(TestBase):
 
     def test_issue_359_multi_byte_and_regex(self):
         self.tmux.send_keys(f"""echo 'ああa' | {self.sk("--regex -q 'a'")}""", Key('Enter'))
+        self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> ああa'))
 
     def test_issue_361_literal_space(self):
