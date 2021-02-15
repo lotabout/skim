@@ -149,6 +149,7 @@ fn get_default_key_map() -> HashMap<Key, ActionChain> {
     ret.insert(Key::AltBackspace, vec![Event::EvActBackwardKillWord]);
     ret.insert(Key::Alt('b'),     vec![Event::EvActBackwardWord]);
     ret.insert(Key::ShiftLeft,    vec![Event::EvActBackwardWord]);
+    ret.insert(Key::CtrlLeft,     vec![Event::EvActBackwardWord]);
     ret.insert(Key::Ctrl('a'),    vec![Event::EvActBeginningOfLine]);
     ret.insert(Key::Home,         vec![Event::EvActBeginningOfLine]);
     ret.insert(Key::Ctrl('l'),    vec![Event::EvActClearScreen]);
@@ -162,6 +163,7 @@ fn get_default_key_map() -> HashMap<Key, ActionChain> {
     ret.insert(Key::Ctrl('f'),    vec![Event::EvActForwardChar]);
     ret.insert(Key::Right,        vec![Event::EvActForwardChar]);
     ret.insert(Key::Alt('f'),     vec![Event::EvActForwardWord]);
+    ret.insert(Key::CtrlRight,    vec![Event::EvActForwardWord]);
     ret.insert(Key::ShiftRight,   vec![Event::EvActForwardWord]);
     ret.insert(Key::Alt('d'),     vec![Event::EvActKillWord]);
     ret.insert(Key::ShiftUp,      vec![Event::EvActPreviewPageUp(1)]);
