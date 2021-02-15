@@ -1,5 +1,20 @@
 # Change Log
 
+## 0.9.4: 2021-02-15
+
+Feature:
+- Upgrade dependency versions
+- use Github Actions for CI
+- Support bracketed paste
+- [#384](https://github.com/lotabout/skim/issues/384) support ctrl-left/right
+    for cursor movement between words
+
+Fix:
+- [#386](https://github.com/lotabout/skim/issues/386) freeze on unknown
+    keystrokes
+- [#376](https://github.com/lotabout/skim/issues/376) noticeable delay in
+    interactive mode
+
 ## 0.9.3: 2020-11-02
 
 Fix:
