@@ -1,5 +1,10 @@
 # Change Log
 
+## 0.9.4: 2021-02-15
+
+Feature:
+- use Github Actions for CI
+
 ## 0.9.3: 2020-11-02
 
 Fix:

@@ -1,0 +1,29 @@
+name: Release to crates.io
+
+on:
+  push:
+    tags:
+    - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+    - name: Install correct toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    - name: Run cargo check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+    - name: Login crates.io
+      run: cargo login ${CRATES_IO_TOKEN}
+      env:
+        CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+    - run: cargo publish

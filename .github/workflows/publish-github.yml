@@ -1,0 +1,140 @@
+name: Publish to Github
+
+on:
+  push:
+    tags:
+    - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  create-release:
+    name: Create Github Release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Create artifacts directory
+      run: mkdir artifacts
+    - name: Get the release version from the tag
+      run: |
+        # Apparently, this is the right way to get a tag name. Really?
+        #
+        # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+        echo "SK_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+    - name: Create Release
+      id: release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ env.SK_VERSION }}
+        body: ${{ env.SK_VERSION }}
+        draft: false
+        prerelease: false
+    - name: Save release upload URL to artifact
+      run: echo "${{ steps.release.outputs.upload_url }}" > artifacts/release-upload-url
+    - name: Save version number to artifact
+      run: echo "${{ env.SK_VERSION }}" > artifacts/release-version
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: artifacts
+        path: artifacts
+
+  publish-to-github:
+    name: Publish to Github
+    needs: ['create-release']
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        build: [linux, arm, arm-v7, macos]
+        include:
+        - build: linux
+          os: ubuntu-latest
+          rust: stable
+          target: x86_64-unknown-linux-musl
+          cross: false
+        - build: arm
+          os: ubuntu-latest
+          rust: stable
+          target: arm-unknown-linux-gnueabihf
+          cross: true
+        - build: arm-v7
+          os: ubuntu-latest
+          rust: stable
+          target: armv7-unknown-linux-gnueabihf
+          cross: true
+        - build: macos
+          os: macos-latest
+          rust: stable
+          target: x86_64-apple-darwin
+          cross: false
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+    - name: Install correct toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+        use-cross: ${{ matrix.cross }}
+        override: true
+
+    - name: Get release download URL
+      uses: actions/download-artifact@v1
+      with:
+        name: artifacts
+        path: artifacts
+    - name: Set release upload URL and release version
+      shell: bash
+      run: |
+        release_upload_url="$(cat artifacts/release-upload-url)"
+        echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
+        echo "release upload url: $RELEASE_UPLOAD_URL"
+        release_version="$(cat artifacts/release-version)"
+        echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
+        echo "release version: $RELEASE_VERSION"
+
+    - name: build
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: ${{ matrix.cross }}
+        command: build
+        args: --release --target ${{ matrix.target }}
+    - name: Package Artifacts
+      run: |
+        src=$(pwd)
+        stage=
+
+        case $RUNNER_OS in
+            Linux)
+                stage=$(mktemp -d)
+                ;;
+            macOS)
+                stage=$(mktemp -d -t tmp)
+                ;;
+        esac
+
+        echo "src is: $src"
+        echo "stage is: $stage"
+
+        cp target/${{ matrix.target }}/release/sk $stage/
+        cd $stage
+
+        ASSET_NAME="skim-${{ env.RELEASE_VERSION }}-${{ matrix.target }}.tar.gz"
+        ASSET_PATH="$src/$ASSET_NAME"
+        echo "ASSET_NAME=$ASSET_NAME" >> $GITHUB_ENV
+        echo "ASSET_PATH=$ASSET_PATH" >> $GITHUB_ENV
+
+        tar czf $ASSET_PATH *
+
+        cd $src
+    - name: Upload release archive
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.ASSET_PATH }}
+        asset_name: ${{ env.ASSET_NAME }}
+        asset_content_type: application/octet-stream

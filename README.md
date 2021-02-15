@@ -1,5 +1,5 @@
 [![Crates.io](https://img.shields.io/crates/v/skim.svg)](https://crates.io/crates/skim)
-[![Build Status](https://travis-ci.org/lotabout/skim.svg?branch=master)](https://travis-ci.org/lotabout/skim)
+[![Build & Test](https://github.com/lotabout/skim/workflows/Build%20&%20Test/badge.svg)](https://github.com/lotabout/skim/actions?query=workflow%3A%22Build+%26+Test%22)
 
 > Life is short, skim!
 
