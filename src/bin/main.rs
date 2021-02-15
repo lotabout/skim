@@ -2,6 +2,7 @@ extern crate clap;
 extern crate env_logger;
 #[macro_use]
 extern crate log;
+extern crate atty;
 extern crate shlex;
 extern crate skim;
 extern crate time;
@@ -10,10 +11,8 @@ use derive_builder::Builder;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::os::unix::io::AsRawFd;
 
 use clap::{App, Arg, ArgMatches};
-use nix::unistd::isatty;
 use skim::prelude::*;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -320,13 +319,11 @@ fn real_main() -> Result<i32, std::io::Error> {
 
     //------------------------------------------------------------------------------
     // read from pipe or command
-    let stdin = std::io::stdin();
-    let rx_item = match isatty(stdin.as_raw_fd()) {
-        Ok(false) | Err(nix::Error::Sys(nix::errno::Errno::EINVAL)) => {
-            let rx_item = cmd_collector.borrow().of_bufread(BufReader::new(stdin));
+    let rx_item = if atty::isnt(atty::Stream::Stdin) {
+            let rx_item = cmd_collector.borrow().of_bufread(BufReader::new(std::io::stdin()));
             Some(rx_item)
-        }
-        Ok(true) | Err(_) => None,
+        } else {
+         None
     };
 
     //------------------------------------------------------------------------------
