@@ -27,7 +27,7 @@ pub struct SkimOptions<'a> {
     pub regex: bool,
     pub delimiter: Option<&'a str>,
     pub replstr: Option<&'a str>,
-    pub color: Option<&'a str>,
+    pub color: Option<String>,
     pub margin: Option<&'a str>,
     pub no_height: bool,
     pub no_clear: bool,
