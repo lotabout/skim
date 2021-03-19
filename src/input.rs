@@ -166,8 +166,8 @@ fn get_default_key_map() -> HashMap<Key, ActionChain> {
     ret.insert(Key::CtrlRight,    vec![Event::EvActForwardWord]);
     ret.insert(Key::ShiftRight,   vec![Event::EvActForwardWord]);
     ret.insert(Key::Alt('d'),     vec![Event::EvActKillWord]);
-    ret.insert(Key::ShiftUp,      vec![Event::EvActPreviewPageUp(1)]);
-    ret.insert(Key::ShiftDown,    vec![Event::EvActPreviewPageDown(1)]);
+    ret.insert(Key::ShiftUp,      vec![Event::EvActPreviewUp(1)]);
+    ret.insert(Key::ShiftDown,    vec![Event::EvActPreviewDown(1)]);
     ret.insert(Key::PageDown,     vec![Event::EvActPageDown(1)]);
     ret.insert(Key::PageUp,       vec![Event::EvActPageUp(1)]);
     ret.insert(Key::Ctrl('r'),    vec![Event::EvActRotateMode]);
