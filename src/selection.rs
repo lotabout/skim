@@ -354,6 +354,15 @@ impl EventHandler for Selection {
     fn handle(&mut self, event: &Event) -> UpdateScreen {
         use crate::event::Event::*;
         match event {
+            Event::EvHeartBeat => {
+                debug!("HEARTBEAT!!!!!!!!!");
+                if self.to_run_auto_line_select {
+                    debug!("Running! to_run_auto_line_select!!!!!!!");
+                    self.act_move_line_cursor(1);
+                    self.to_run_auto_line_select = false;
+                }        
+            }
+
             EvActUp(diff) => {
                 self.act_move_line_cursor(*diff);
             }
@@ -556,13 +565,6 @@ impl Draw for Selection {
 
             let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
         }
-
-        if self.to_run_auto_line_select {
-            debug!("Running! to_run_auto_line_select");
-            // let s = self as *mut Selector;
-            // s.to_run_auto_line_select = false;
-        }
-
 
         Ok(())
     }
