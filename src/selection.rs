@@ -189,6 +189,7 @@ impl Selection {
         let item_len = self.items.len() as i32;
 
         let height = self.height.load(Ordering::Relaxed) as i32;
+        debug!("VITALY: act_move_line_cursor - height: {}", height);
 
         line_cursor += diff;
         if line_cursor >= height {
@@ -355,11 +356,35 @@ impl EventHandler for Selection {
         use crate::event::Event::*;
         match event {
             Event::EvHeartBeat => {
-                debug!("HEARTBEAT!!!!!!!!!");
-                if self.to_run_auto_line_select {
-                    debug!("Running! to_run_auto_line_select!!!!!!!");
-                    self.act_move_line_cursor(1);
-                    self.to_run_auto_line_select = false;
+                debug!("Vitaly: HEARTBEAT!!!!!!!!!");
+                if self.to_run_auto_line_select && (self.height.load(Ordering::Relaxed) as i32) > 0 {
+                    debug!("Vitaly: Running! to_run_auto_line_select!!!!!!!");
+
+                    if self.selector.is_none() == false {
+                        debug!("Vitaly: LOOKING FOR SELECTOR");
+                        debug!("Vitaly: EXTRA INFO - items.len(): {}", self.items.len());
+
+                        let mut diff = 0;
+                        for (i, item) in self.items.iter().enumerate() {
+                            if self
+                                .selector
+                                .as_ref()
+                                .map(|s| s.should_select(item.item_idx as usize, item.item.as_ref()))
+                                .unwrap_or(false)
+                            {
+                                debug!("Vitaly: FOUND ITEM: {} - FOUND ITEM INDEX: {} - FOUND I: {}", item.item.text(), item.item_idx, i);
+                                debug!("Vitaly: EXTRA INFO - item_cursor: {} - line_cursor: {}", self.item_cursor, self.line_cursor);
+                                diff = -((self.line_cursor as i32)-(i as i32));
+                                debug!("Vitaly: EXTRA INFO - item_cursor: {} - line_cursor: {}", self.item_cursor, self.line_cursor);
+                            }
+                        }
+                        if diff != 0 {
+                            self.act_move_line_cursor(diff);
+                        }
+                    }
+
+                    // VITALY: todo - enable
+                    // self.to_run_auto_line_select = false;
                 }        
             }
 
@@ -537,6 +562,8 @@ impl Selection {
 
 impl Draw for Selection {
     fn draw(&self, canvas: &mut dyn Canvas) -> DrawResult<()> {
+        debug!("VITALY: Draw Start");
+
         let (_screen_width, screen_height) = canvas.size()?;
         canvas.clear()?;
 
@@ -565,6 +592,7 @@ impl Draw for Selection {
 
             let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
         }
+        debug!("VITALY: Draw End");
 
         Ok(())
     }
