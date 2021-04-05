@@ -56,6 +56,7 @@ pub struct Selection {
     // To avoid remember all items, we'll track the latest run_num and index.
     latest_select_run_num: u32,
     pre_selected_watermark: usize,
+    to_run_auto_line_select: bool,
     selector: Option<Rc<dyn Selector>>,
 }
 
@@ -77,6 +78,7 @@ impl Selection {
             theme: Arc::new(*DEFAULT_THEME),
             latest_select_run_num: 0,
             pre_selected_watermark: 0,
+            to_run_auto_line_select: false,
             selector: None,
         }
     }
@@ -136,6 +138,7 @@ impl Selection {
 
         if self.items.len() >= self.pre_selected_watermark {
             self.pre_select(&items);
+            self.to_run_auto_line_select = true;
         }
 
         self.items.append(items);
@@ -553,6 +556,13 @@ impl Draw for Selection {
 
             let _ = self.draw_item(canvas, line_no, &item, line_cursor == self.line_cursor);
         }
+
+        if self.to_run_auto_line_select {
+            debug!("Running! to_run_auto_line_select");
+            // let s = self as *mut Selector;
+            // s.to_run_auto_line_select = false;
+        }
+
 
         Ok(())
     }
