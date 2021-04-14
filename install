@@ -5,7 +5,6 @@
 #
 # If you know rust or have rust installed, you can build it with
 # `cargo build --release`
-# Note that nightly rust is required.
 
 set -u
 
