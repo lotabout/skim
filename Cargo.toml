@@ -48,3 +48,6 @@ default = []
 [profile.release]
 lto = true
 debug = false
+
+[profile.dev]
+split-debuginfo = "unpacked"
