@@ -6,11 +6,7 @@ pub fn main() {
     let options = SkimOptionsBuilder::default()
         .height(Some("50%"))
         .multi(true)
-        .preview_fn(|items: Vec<String>| {
-            items.iter()
-                 .map(|s| s.to_ascii_uppercase().into())
-                 .collect::<Vec<_>>()
-        })
+        .preview_fn(|items: Vec<String>| items.iter().map(|s| s.to_ascii_uppercase().into()).collect::<Vec<_>>())
         .build()
         .unwrap();
     let item_reader = SkimItemReader::default();

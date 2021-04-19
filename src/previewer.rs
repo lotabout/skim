@@ -24,16 +24,16 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 #[derive(Clone)]
 pub struct PreviewCallback {
-    inner: Arc<dyn Fn(Vec<String>) -> Vec<AnsiString<'static>> + Send + Sync + 'static>
+    inner: Arc<dyn Fn(Vec<String>) -> Vec<AnsiString<'static>> + Send + Sync + 'static>,
 }
 
 /// Handy conversion from Fn() to type. Used in the SkimOption builder
 impl<F> From<F> for PreviewCallback
-    where
-        F: Fn(Vec<String>) -> Vec<AnsiString<'static>> + Send + Sync + 'static
+where
+    F: Fn(Vec<String>) -> Vec<AnsiString<'static>> + Send + Sync + 'static,
 {
     fn from(func: F) -> Self {
-        Self {inner: Arc::new(func)}
+        Self { inner: Arc::new(func) }
     }
 }
 
@@ -126,8 +126,9 @@ impl Previewer {
     }
 
     pub fn new_with_callback<C>(user_callback: PreviewCallback, callback: C) -> Self
-        where
-            C: Fn() + Send + Sync + 'static, {
+    where
+        C: Fn() + Send + Sync + 'static,
+    {
         let content_lines = Arc::new(SpinLock::new(Vec::new()));
         let (tx_preview, rx_preview) = channel();
         let width = Arc::new(AtomicUsize::new(80));
@@ -173,7 +174,7 @@ impl Previewer {
             prev_cmd_query: None,
             prev_num_selected: 0,
 
-            preview_cmd:None,
+            preview_cmd: None,
             preview_cb: Some(user_callback),
             preview_offset: "".to_string(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
@@ -310,9 +311,9 @@ impl Previewer {
                             let preview_command = PreviewCommand { cmd, columns, lines };
                             PreviewEvent::PreviewCommand(preview_command, pos)
                         }
-                    }else if let Some(cb) = self.preview_cb.as_ref() {
+                    } else if let Some(cb) = self.preview_cb.as_ref() {
                         let pos = self.eval_scroll_offset(inject_context);
-                        let selection:Vec<String> = selected_texts.into_iter().map(ToOwned::to_owned).collect();
+                        let selection: Vec<String> = selected_texts.into_iter().map(ToOwned::to_owned).collect();
                         let cb = cb.clone();
                         PreviewEvent::PreviewCallback(Box::new(move || cb(selection)), pos)
                     } else {
@@ -489,10 +490,12 @@ pub struct PreviewCommand {
     pub columns: usize,
 }
 
-
 // #[derive(Debug)]
 enum PreviewEvent {
-    PreviewCallback(Box<dyn FnOnce() -> Vec<AnsiString<'static>> + Send + Sync + 'static>, PreviewPosition),
+    PreviewCallback(
+        Box<dyn FnOnce() -> Vec<AnsiString<'static>> + Send + Sync + 'static>,
+        PreviewPosition,
+    ),
     PreviewCommand(PreviewCommand, PreviewPosition),
     PreviewPlainText(String, PreviewPosition),
     PreviewAnsiText(String, PreviewPosition),
@@ -578,9 +581,7 @@ where
                     }
                 }
             }
-            PreviewEvent::PreviewCallback(cb, pos) => {
-                callback(cb(), pos)
-            }
+            PreviewEvent::PreviewCallback(cb, pos) => callback(cb(), pos),
             PreviewEvent::PreviewPlainText(text, pos) => {
                 callback(text.lines().map(|line| line.to_string().into()).collect(), pos);
             }

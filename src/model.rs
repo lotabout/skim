@@ -11,15 +11,14 @@ use chrono::Duration as TimerDuration;
 use defer_drop::DeferDrop;
 use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
-use tuikit::prelude::{*, Event as TermEvent};
+use tuikit::prelude::{Event as TermEvent, *};
 
-use crate::{FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
 use crate::engine::factory::{AndOrEngineFactory, ExactOrFuzzyEngineFactory, RegexEngineFactory};
 use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::global::current_run_num;
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{ItemPool, MatchedItem, parse_criteria, RankBuilder, RankCriteria};
+use crate::item::{parse_criteria, ItemPool, MatchedItem, RankBuilder, RankCriteria};
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -29,7 +28,8 @@ use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
-use crate::util::{depends_on_items, inject_command, InjectContext, margin_string_to_size, parse_margin};
+use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
+use crate::{FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -243,14 +243,15 @@ impl Model {
             self.previewer = Some(
                 Previewer::new_with_callback(cb.clone(), move || {
                     let _ = tx.lock().send((Key::Null, Event::EvHeartBeat));
-                }).wrap(preview_wrap)
-                  .delimiter(self.delimiter.clone())
-                  .preview_offset(
-                      options
-                          .preview_window
-                          .map(Self::parse_preview_offset)
-                          .unwrap_or_else(|| "".to_string()),
-                  ),
+                })
+                .wrap(preview_wrap)
+                .delimiter(self.delimiter.clone())
+                .preview_offset(
+                    options
+                        .preview_window
+                        .map(Self::parse_preview_offset)
+                        .unwrap_or_else(|| "".to_string()),
+                ),
             )
         }
 
