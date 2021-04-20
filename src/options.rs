@@ -6,6 +6,9 @@ use crate::helper::item_reader::SkimItemReader;
 use crate::reader::CommandCollector;
 use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory, Selector};
 use std::cell::RefCell;
+use std::sync::Arc;
+
+use crate::previewer::PreviewCallback;
 
 #[derive(Builder)]
 #[builder(build_fn(name = "final_build"))]
@@ -34,6 +37,8 @@ pub struct SkimOptions<'a> {
     pub min_height: Option<&'a str>,
     pub height: Option<&'a str>,
     pub preview: Option<&'a str>,
+    #[builder(setter(strip_option, into), default)]
+    pub preview_fn: Option<PreviewCallback>,
     pub preview_window: Option<&'a str>,
     pub reverse: bool,
     pub tabstop: Option<&'a str>,
@@ -84,6 +89,7 @@ impl<'a> Default for SkimOptions<'a> {
             min_height: Some("10"),
             height: Some("100%"),
             preview: None,
+            preview_fn: None,
             preview_window: Some("right:50%"),
             reverse: false,
             tabstop: None,
