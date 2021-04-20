@@ -60,15 +60,22 @@ pub struct Previewer {
     prev_cmd_query: Option<String>,
     prev_num_selected: usize,
 
-    preview_cmd: Option<String>,
-    preview_cb: Option<PreviewCallback>,
+    preview_source: PreviewSource,
     preview_offset: String, // e.g. +SCROLL-OFFSET
     delimiter: Regex,
     thread_previewer: Option<JoinHandle<()>>,
 }
 
+/// Source for the Preview window.
+#[non_exhaustive]
+pub enum PreviewSource {
+    Empty,
+    Command(String),
+    Callback(PreviewCallback),
+}
+
 impl Previewer {
-    pub fn new_from_command<C>(preview_cmd: Option<String>, callback: C) -> Self
+    pub fn new<C>(source: PreviewSource, callback: C) -> Self
     where
         C: Fn() + Send + Sync + 'static,
     {
@@ -105,77 +112,16 @@ impl Previewer {
         Self {
             tx_preview,
             content_lines,
-
             width,
             height,
             hscroll_offset,
             vscroll_offset,
             wrap: false,
-
             prev_item: None,
             prev_query: None,
             prev_cmd_query: None,
             prev_num_selected: 0,
-
-            preview_cmd,
-            preview_cb: None,
-            preview_offset: "".to_string(),
-            delimiter: Regex::new(DELIMITER_STR).unwrap(),
-            thread_previewer: Some(thread_previewer),
-        }
-    }
-
-    pub fn new_with_callback<C>(user_callback: PreviewCallback, callback: C) -> Self
-    where
-        C: Fn() + Send + Sync + 'static,
-    {
-        let content_lines = Arc::new(SpinLock::new(Vec::new()));
-        let (tx_preview, rx_preview) = channel();
-        let width = Arc::new(AtomicUsize::new(80));
-        let height = Arc::new(AtomicUsize::new(60));
-        let hscroll_offset = Arc::new(AtomicUsize::new(1));
-        let vscroll_offset = Arc::new(AtomicUsize::new(1));
-
-        let content_clone = content_lines.clone();
-        let width_clone = width.clone();
-        let height_clone = height.clone();
-        let hscroll_offset_clone = hscroll_offset.clone();
-        let vscroll_offset_clone = vscroll_offset.clone();
-        let thread_previewer = thread::spawn(move || {
-            run(rx_preview, move |lines, pos| {
-                let width = width_clone.load(Ordering::SeqCst);
-                let height = height_clone.load(Ordering::SeqCst);
-
-                let hscroll = pos.h_scroll.calc_fixed_size(lines.len(), 0);
-                let hoffset = pos.h_offset.calc_fixed_size(width, 0);
-                let vscroll = pos.v_scroll.calc_fixed_size(usize::MAX, 0);
-                let voffset = pos.v_offset.calc_fixed_size(height, 0);
-
-                hscroll_offset_clone.store(max(1, max(hscroll, hoffset) - hoffset), Ordering::SeqCst);
-                vscroll_offset_clone.store(max(1, max(vscroll, voffset) - voffset), Ordering::SeqCst);
-                *content_clone.lock() = lines;
-
-                callback();
-            })
-        });
-
-        Self {
-            tx_preview,
-            content_lines,
-
-            width,
-            height,
-            hscroll_offset,
-            vscroll_offset,
-            wrap: false,
-
-            prev_item: None,
-            prev_query: None,
-            prev_cmd_query: None,
-            prev_num_selected: 0,
-
-            preview_cmd: None,
-            preview_cb: Some(user_callback),
+            preview_source: source,
             preview_offset: "".to_string(),
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             thread_previewer: Some(thread_previewer),
@@ -299,9 +245,9 @@ impl Previewer {
                         PreviewEvent::PreviewCommand(preview_command, pos)
                     }
                 }
-                (ItemPreview::Global, _) => {
-                    if let Some(cmd) = self.preview_cmd.as_ref() {
-                        if depends_on_items(&cmd) && self.prev_item.is_none() {
+                (ItemPreview::Global, _) => match &self.preview_source {
+                    PreviewSource::Command(cmd) => {
+                        if depends_on_items(cmd) && self.prev_item.is_none() {
                             debug!("the command for preview refers to items and currently there is no item");
                             debug!("command to execute: [{}]", cmd);
                             PreviewEvent::PreviewPlainText("no item matched".to_string(), Default::default())
@@ -311,15 +257,15 @@ impl Previewer {
                             let preview_command = PreviewCommand { cmd, columns, lines };
                             PreviewEvent::PreviewCommand(preview_command, pos)
                         }
-                    } else if let Some(cb) = self.preview_cb.as_ref() {
+                    }
+                    PreviewSource::Callback(cb) => {
                         let pos = self.eval_scroll_offset(inject_context);
                         let selection: Vec<String> = selected_texts.into_iter().map(ToOwned::to_owned).collect();
                         let cb = cb.clone();
                         PreviewEvent::PreviewCallback(Box::new(move || cb(selection)), pos)
-                    } else {
-                        PreviewEvent::Noop
                     }
-                }
+                    PreviewSource::Empty => PreviewEvent::Noop,
+                },
             },
             None => PreviewEvent::Noop,
         };
