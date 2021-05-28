@@ -63,6 +63,7 @@ archi=$(uname -sm)
 case "$archi" in
   Darwin\ x86_64) download skim-v$version-${binary_arch:-x86_64}-apple-darwin;;
   Linux\ x86_64)  download skim-v$version-${binary_arch:-x86_64}-unknown-linux-musl;;
+  Linux\ armv7l) download skim-v$version-${binary_arch:-armv7}-unknown-linux-gnueabihf;;
   *) ;;
 esac
 
