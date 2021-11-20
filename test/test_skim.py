@@ -1079,11 +1079,17 @@ class TestSkim(TestBase):
         self.tmux.until(lambda lines: lines[-3].startswith('> foo bar'))
         self.tmux.send_keys(Key('Enter'))
 
-        args = '''-q "!foo\\ bar"'''
+        # prevent bang ("!" sign) expansion
+        self.tmux.send_keys(f"""set +o histexpand""", Key('Enter'))
+
+        args = '''-q "'!foo\\ bar"'''
         self.tmux.send_keys(f"""echo 'foo bar\nfoo  bar' | {self.sk(args)}""", Key('Enter'))
         self.tmux.until(lambda lines: lines.ready_with_matches(1))
         self.tmux.until(lambda lines: lines[-3].startswith('> foo  bar'))
         self.tmux.send_keys(Key('Enter'))
+
+        # revert option back
+        self.tmux.send_keys(f"""set -o histexpand""", Key('Enter'))
 
 
 def find_prompt(lines, interactive=False, reverse=False):
