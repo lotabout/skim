@@ -282,7 +282,7 @@ impl Model {
 
     // -> string
     fn parse_preview_offset(preview_window: &str) -> String {
-        for token in preview_window.split(':') {
+        for token in preview_window.split(':').rev() {
             if RE_PREVIEW_OFFSET.is_match(token) {
                 return token.to_string();
             }
