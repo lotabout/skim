@@ -342,6 +342,12 @@ function! skim#wrap(...)
     endif
   endif
 
+  " Interactive commands should use --cmd-history for query history
+  let history_option = '--history'
+  if index(opts['options'], '-i') != -1
+    let history_option = '--cmd-history'
+  endif
+
   " Colors: g:skim_colors
   let opts.options = s:defaults() .' '. s:evaluate_opts(get(opts, 'options', ''))
 
@@ -352,7 +358,7 @@ function! skim#wrap(...)
       call mkdir(dir, 'p')
     endif
     let history = skim#shellescape(dir.'/'.name)
-    let opts.options = join(['--history', history, opts.options])
+    let opts.options = join([history_option, history, opts.options])
   endif
 
   " Action: g:skim_action
