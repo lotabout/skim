@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::cmp::min;
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -17,13 +16,14 @@ use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions
 use regex::Regex;
 use std::rc::Rc;
 use unicode_width::UnicodeWidthStr;
+use linked_hash_map::LinkedHashMap;
 
 type ItemIndex = (u32, u32);
 
 pub struct Selection {
     // all items
     items: OrderedVec<MatchedItem>,
-    selected: BTreeMap<ItemIndex, Arc<dyn SkimItem>>,
+    selected: LinkedHashMap<ItemIndex, Arc<dyn SkimItem>>,
 
     //
     // |>------ items[items.len()-1]
@@ -63,7 +63,7 @@ impl Selection {
     pub fn new() -> Self {
         Selection {
             items: OrderedVec::new(),
-            selected: BTreeMap::new(),
+            selected: LinkedHashMap::new(),
             item_cursor: 0,
             line_cursor: 0,
             hscroll_offset: 0,
