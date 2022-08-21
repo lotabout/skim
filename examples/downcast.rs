@@ -37,7 +37,7 @@ pub fn main() {
 
     let selected_items = Skim::run_with(&options, Some(rx))
         .map(|out| out.selected_items)
-        .unwrap_or_else(|| Vec::new())
+        .unwrap_or_else(Vec::new)
         .iter()
         .map(|selected_item| (**selected_item).as_any().downcast_ref::<Item>().unwrap().to_owned())
         .collect::<Vec<Item>>();

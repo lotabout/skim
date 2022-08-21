@@ -70,7 +70,7 @@ impl Query {
     }
 
     pub fn replace_base_cmd_if_not_set(mut self, base_cmd: &str) -> Self {
-        if self.base_cmd == "" {
+        if self.base_cmd.is_empty() {
             self.base_cmd = base_cmd.to_owned();
         }
         self
@@ -374,18 +374,18 @@ impl Query {
 
     pub fn act_kill_line(&mut self) {
         let (_, after) = self.get_query_ref();
-        let after = mem::replace(after, Vec::new());
+        let after = std::mem::take(after);
         self.save_yank(after, false);
     }
 
     pub fn act_line_discard(&mut self) {
         let (before, _) = self.get_query_ref();
-        let before = mem::replace(before, Vec::new());
+        let before = std::mem::take(before);
         self.save_yank(before, false);
     }
 
     pub fn act_yank(&mut self) {
-        let yank = mem::replace(&mut self.yank, Vec::new());
+        let yank = std::mem::take(&mut self.yank);
         for &c in &yank {
             self.act_add_char(c);
         }
@@ -523,7 +523,7 @@ impl EventHandler for Query {
             }
 
             EvInputKey(Key::BracketedPasteEnd) => {
-                let pasted = self.pasted.take().unwrap_or_else(|| String::new());
+                let pasted = self.pasted.take().unwrap_or_default();
                 for ch in pasted.chars() {
                     self.act_add_char(ch);
                 }

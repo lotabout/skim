@@ -111,7 +111,7 @@ impl<'a> Default for SkimOptions<'a> {
 }
 
 impl<'a> SkimOptionsBuilder<'a> {
-    pub fn build(&mut self) -> Result<SkimOptions<'a>, String> {
+    pub fn build(&mut self) -> Result<SkimOptions<'a>, SkimOptionsBuilderError> {
         if let Some(true) = self.no_height {
             self.height = Some(Some("100%"));
         }

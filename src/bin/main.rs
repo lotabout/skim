@@ -169,27 +169,27 @@ fn real_main() -> Result<i32, std::io::Error> {
     // parse options
     let opts = App::new("sk")
         .author("Jinzhou Zhang<lotabout@gmail.com>")
-        .arg(Arg::with_name("help").long("help").short("h"))
-        .arg(Arg::with_name("version").long("version").short("v"))
-        .arg(Arg::with_name("bind").long("bind").short("b").multiple(true).takes_value(true))
-        .arg(Arg::with_name("multi").long("multi").short("m").multiple(true))
+        .arg(Arg::with_name("help").long("help").short('h'))
+        .arg(Arg::with_name("version").long("version").short('v'))
+        .arg(Arg::with_name("bind").long("bind").short('b').multiple(true).takes_value(true))
+        .arg(Arg::with_name("multi").long("multi").short('m').multiple(true))
         .arg(Arg::with_name("no-multi").long("no-multi").multiple(true))
-        .arg(Arg::with_name("prompt").long("prompt").short("p").multiple(true).takes_value(true).default_value("> "))
+        .arg(Arg::with_name("prompt").long("prompt").short('p').multiple(true).takes_value(true).default_value("> "))
         .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").multiple(true).takes_value(true).default_value("c> "))
         .arg(Arg::with_name("expect").long("expect").multiple(true).takes_value(true))
         .arg(Arg::with_name("tac").long("tac").multiple(true))
-        .arg(Arg::with_name("tiebreak").long("tiebreak").short("t").multiple(true).takes_value(true))
+        .arg(Arg::with_name("tiebreak").long("tiebreak").short('t').multiple(true).takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi").multiple(true))
-        .arg(Arg::with_name("exact").long("exact").short("e").multiple(true))
-        .arg(Arg::with_name("cmd").long("cmd").short("c").multiple(true).takes_value(true))
-        .arg(Arg::with_name("interactive").long("interactive").short("i").multiple(true))
-        .arg(Arg::with_name("query").long("query").short("q").multiple(true).takes_value(true))
+        .arg(Arg::with_name("exact").long("exact").short('e').multiple(true))
+        .arg(Arg::with_name("cmd").long("cmd").short('c').multiple(true).takes_value(true))
+        .arg(Arg::with_name("interactive").long("interactive").short('i').multiple(true))
+        .arg(Arg::with_name("query").long("query").short('q').multiple(true).takes_value(true))
         .arg(Arg::with_name("cmd-query").long("cmd-query").multiple(true).takes_value(true))
         .arg(Arg::with_name("regex").long("regex").multiple(true))
-        .arg(Arg::with_name("delimiter").long("delimiter").short("d").multiple(true).takes_value(true))
-        .arg(Arg::with_name("nth").long("nth").short("n").multiple(true).takes_value(true))
+        .arg(Arg::with_name("delimiter").long("delimiter").short('d').multiple(true).takes_value(true))
+        .arg(Arg::with_name("nth").long("nth").short('n').multiple(true).takes_value(true))
         .arg(Arg::with_name("with-nth").long("with-nth").multiple(true).takes_value(true))
-        .arg(Arg::with_name("replstr").short("I").multiple(true).takes_value(true))
+        .arg(Arg::with_name("replstr").short('I').multiple(true).takes_value(true))
         .arg(Arg::with_name("color").long("color").multiple(true).takes_value(true))
         .arg(Arg::with_name("margin").long("margin").multiple(true).takes_value(true).default_value("0,0,0,0"))
         .arg(Arg::with_name("min-height").long("min-height").multiple(true).takes_value(true).default_value("10"))
@@ -225,11 +225,11 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("read0").long("read0").multiple(true))
         .arg(Arg::with_name("print0").long("print0").multiple(true))
         .arg(Arg::with_name("sync").long("sync").multiple(true))
-        .arg(Arg::with_name("extended").long("extended").short("x").multiple(true))
+        .arg(Arg::with_name("extended").long("extended").short('x').multiple(true))
         .arg(Arg::with_name("no-sort").long("no-sort").multiple(true))
-        .arg(Arg::with_name("select-1").long("select-1").short("1").multiple(true))
-        .arg(Arg::with_name("exit-0").long("exit-0").short("0").multiple(true))
-        .arg(Arg::with_name("filter").long("filter").short("f").takes_value(true).multiple(true))
+        .arg(Arg::with_name("select-1").long("select-1").short('1').multiple(true))
+        .arg(Arg::with_name("exit-0").long("exit-0").short('0').multiple(true))
+        .arg(Arg::with_name("filter").long("filter").short('f').takes_value(true).multiple(true))
         .arg(Arg::with_name("layout").long("layout").multiple(true).takes_value(true).default_value("default"))
         .arg(Arg::with_name("keep-right").long("keep-right").multiple(true))
         .arg(Arg::with_name("skip-to-pattern").long("skip-to-pattern").multiple(true).takes_value(true).default_value(""))
@@ -255,7 +255,7 @@ fn real_main() -> Result<i32, std::io::Error> {
     let mut options = parse_options(&opts);
 
     let preview_window_joined = opts.values_of("preview-window").map(|x| x.collect::<Vec<_>>().join(":"));
-    options.preview_window = preview_window_joined.as_ref().map(|x| x.as_str());
+    options.preview_window = preview_window_joined.as_deref();
 
     //------------------------------------------------------------------------------
     // initialize collector
@@ -275,8 +275,8 @@ fn real_main() -> Result<i32, std::io::Error> {
     // read in the history file
     let fz_query_histories = opts.values_of("history").and_then(|vals| vals.last());
     let cmd_query_histories = opts.values_of("cmd-history").and_then(|vals| vals.last());
-    let query_history = fz_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
-    let cmd_history = cmd_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+    let query_history = fz_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_default();
+    let cmd_history = cmd_query_histories.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_default();
 
     if fz_query_histories.is_some() || cmd_query_histories.is_some() {
         options.query_history = &query_history;
@@ -295,8 +295,8 @@ fn real_main() -> Result<i32, std::io::Error> {
     if pre_select_n.is_some() || pre_select_pat.is_some() || pre_select_items.is_some() || pre_select_file.is_some() {
         let first_n = pre_select_n.unwrap_or(0);
         let pattern = pre_select_pat.unwrap_or("");
-        let preset_items = pre_select_items.unwrap_or(vec![]);
-        let preset_file = pre_select_file.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_else(|| vec![]);
+        let preset_items = pre_select_items.unwrap_or_default();
+        let preset_file = pre_select_file.and_then(|filename| read_file_lines(filename).ok()).unwrap_or_default();
 
         let selector = DefaultSkimSelector::default()
             .first_n(first_n)
@@ -512,7 +512,7 @@ pub fn filter(
         Ok("") | Err(_) => "find .".to_owned(),
         Ok(val) => val.to_owned(),
     };
-    let query = bin_option.filter.unwrap_or(&"");
+    let query = bin_option.filter.unwrap_or("");
     let cmd = options.cmd.unwrap_or(&default_command);
 
     // output query
