@@ -16,7 +16,7 @@ use tuikit::prelude::{Event as TermEvent, *};
 use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::spinlock::SpinLock;
-use crate::util::{atoi, depends_on_items, inject_command, InjectContext};
+use crate::util::{atoi, clear_canvas, depends_on_items, inject_command, InjectContext};
 use crate::{ItemPreview, PreviewContext, PreviewPosition, SkimItem};
 
 const TAB_STOP: usize = 8;
@@ -343,6 +343,7 @@ impl Draw for Previewer {
     fn draw(&self, canvas: &mut dyn Canvas) -> DrawResult<()> {
         canvas.clear()?;
         let (screen_width, screen_height) = canvas.size()?;
+        clear_canvas(canvas)?;
 
         if screen_width == 0 || screen_height == 0 {
             return Ok(());

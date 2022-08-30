@@ -12,6 +12,7 @@ use crate::global::current_run_num;
 use crate::item::MatchedItem;
 use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
+use crate::util::clear_canvas;
 use crate::util::{print_item, reshape_string, LinePrinter};
 use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions};
 use regex::Regex;
@@ -531,6 +532,8 @@ impl Draw for Selection {
         let item_idx_lower = self.item_cursor;
         let max_upper = self.item_cursor + screen_height;
         let item_idx_upper = min(max_upper, self.items.len());
+
+        clear_canvas(canvas)?;
 
         for item_idx in item_idx_lower..item_idx_upper {
             let line_cursor = item_idx - item_idx_lower;

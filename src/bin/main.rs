@@ -54,6 +54,7 @@ Usage: sk [options]
     --keep-right         Keep the right end of the line visible on overflow
     --skip-to-pattern    Line starts with the start of matched pattern
     --no-clear-if-empty  Do not clear previous items if command returns empty result
+    --no-clear-start     Do not clear on start
     --show-cmd-error     Send command error message if command fails
 
   Layout
@@ -92,6 +93,7 @@ Usage: sk [options]
     --expect KEYS        comma seperated keys that can be used to complete skim
     --read0              Read input delimited by ASCII NUL(\\0) characters
     --print0             Print output delimited by ASCII NUL(\\0) characters
+    --no-clear-start     Do not clear screen on start
     --no-clear           Do not clear screen on exit
     --print-query        Print query as the first line
     --print-cmd          Print command query as the first line (after --print-query)
@@ -196,6 +198,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("height").long("height").multiple(true).takes_value(true).default_value("100%"))
         .arg(Arg::with_name("no-height").long("no-height").multiple(true))
         .arg(Arg::with_name("no-clear").long("no-clear").multiple(true))
+        .arg(Arg::with_name("no-clear-start").long("no-clear-start").multiple(true))
         .arg(Arg::with_name("no-mouse").long("no-mouse").multiple(true))
         .arg(Arg::with_name("preview").long("preview").multiple(true).takes_value(true))
         .arg(Arg::with_name("preview-window").long("preview-window").multiple(true).takes_value(true).default_value("right:50%"))
@@ -420,6 +423,7 @@ fn parse_options(options: &ArgMatches) -> SkimOptions<'_> {
         .no_hscroll(options.is_present("no-hscroll"))
         .no_mouse(options.is_present("no-mouse"))
         .no_clear(options.is_present("no-clear"))
+        .no_clear_start(options.is_present("no-clear-start"))
         .tabstop(options.values_of("tabstop").and_then(|vals| vals.last()))
         .tiebreak(options.values_of("tiebreak").map(|x| x.collect::<Vec<_>>().join(",")))
         .tac(options.is_present("tac"))
