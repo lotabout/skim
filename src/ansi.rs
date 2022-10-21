@@ -79,9 +79,7 @@ impl Perform for ANSIParser {
                 4 => attr.effect |= Effect::UNDERLINE,
                 5 => attr.effect |= Effect::BLINK,
                 7 => attr.effect |= Effect::REVERSE,
-                num if (30..=37).contains(&num) => {
-                    attr.fg = Color::AnsiValue((num - 30) as u8);
-                }
+                num @ 30..=37 => attr.fg = Color::AnsiValue((num - 30) as u8),
                 38 => match iter.next() {
                     Some(&[2]) => {
                         // ESC[ 38;2;<r>;<g>;<b> m Select RGB foreground color
@@ -112,9 +110,7 @@ impl Perform for ANSIParser {
                     }
                 },
                 39 => attr.fg = Color::Default,
-                num if (40..=47).contains(&num) => {
-                    attr.bg = Color::AnsiValue((num - 40) as u8);
-                }
+                num @ 40..=47 => attr.bg = Color::AnsiValue((num - 40) as u8),
                 48 => match iter.next() {
                     Some(&[2]) => {
                         // ESC[ 48;2;<r>;<g>;<b> m Select RGB background color
@@ -145,6 +141,8 @@ impl Perform for ANSIParser {
                     }
                 },
                 49 => attr.bg = Color::Default,
+                num @ 90..=97 => attr.fg = Color::AnsiValue((num - 82) as u8),
+                num @ 100..=107 => attr.bg = Color::AnsiValue((num - 92) as u8),
                 _ => {
                     trace!("ignore CSI {:?} m", params);
                 }

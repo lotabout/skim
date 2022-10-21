@@ -1,6 +1,6 @@
 [![Crates.io](https://img.shields.io/crates/v/skim.svg)](https://crates.io/crates/skim)
 [![Build & Test](https://github.com/lotabout/skim/workflows/Build%20&%20Test/badge.svg)](https://github.com/lotabout/skim/actions?query=workflow%3A%22Build+%26+Test%22)
-
+[![Packaging status](https://repology.org/badge/tiny-repos/skim.svg)](https://repology.org/project/skim/versions)
 > Life is short, skim!
 
 Half of our life is spent on navigation: files, lines, commands… You need skim!
@@ -54,6 +54,9 @@ The skim project contains several components:
 | Fedora         | dnf               | `dnf install skim`        |
 | Alpine         | apk               | `apk add skim`            |
 | Arch           | pacman            | `pacman -S skim`          |
+
+See [repology](https://repology.org/project/skim/versions) for a comprehensive overview of package availability.
+
 
 ## Install as Vim plugin
 
