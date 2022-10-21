@@ -116,6 +116,7 @@ impl Previewer {
         self
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn on_item_change(
         &mut self,
         new_item_index: usize,
@@ -134,6 +135,7 @@ impl Previewer {
             (None, None) => false,
             (None, Some(_)) => true,
             (Some(_), None) => true,
+            #[allow(clippy::vtable_address_comparisons)]
             (Some(prev), Some(new)) => !Arc::ptr_eq(prev, new),
         };
 

@@ -152,7 +152,7 @@ impl MatchEngine for FuzzyEngine {
 
         let (score, matched_range) = matched_result.unwrap();
 
-        let begin = *matched_range.get(0).unwrap_or(&0);
+        let begin = *matched_range.first().unwrap_or(&0);
         let end = *matched_range.last().unwrap_or(&0);
 
         let item_len = item_text.len();

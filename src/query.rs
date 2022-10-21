@@ -10,8 +10,8 @@ use crate::theme::{ColorTheme, DEFAULT_THEME};
 
 #[derive(Clone, Copy, PartialEq)]
 enum QueryMode {
-    CMD,
-    QUERY,
+    Cmd,
+    Query,
 }
 
 pub struct Query {
@@ -46,7 +46,7 @@ impl Query {
             fz_query_before: Vec::new(),
             fz_query_after: Vec::new(),
             yank: Vec::new(),
-            mode: QueryMode::QUERY,
+            mode: QueryMode::Query,
             base_cmd: String::new(),
             replstr: "{}".to_string(),
             query_prompt: "> ".to_string(),
@@ -120,7 +120,7 @@ impl Query {
         }
 
         if options.interactive {
-            self.mode = QueryMode::CMD;
+            self.mode = QueryMode::Cmd;
         }
 
         if let Some(query_prompt) = options.prompt {
@@ -137,8 +137,8 @@ impl Query {
 
     pub fn in_query_mode(&self) -> bool {
         match self.mode {
-            QueryMode::CMD => false,
-            QueryMode::QUERY => true,
+            QueryMode::Cmd => false,
+            QueryMode::Query => true,
         }
     }
 
@@ -170,43 +170,43 @@ impl Query {
 
     fn get_query(&mut self) -> String {
         match self.mode {
-            QueryMode::QUERY => self.get_fz_query(),
-            QueryMode::CMD => self.get_cmd_query(),
+            QueryMode::Query => self.get_fz_query(),
+            QueryMode::Cmd => self.get_cmd_query(),
         }
     }
 
     fn get_before(&self) -> String {
         match self.mode {
-            QueryMode::CMD => self.cmd_before.iter().cloned().collect(),
-            QueryMode::QUERY => self.fz_query_before.iter().cloned().collect(),
+            QueryMode::Cmd => self.cmd_before.iter().cloned().collect(),
+            QueryMode::Query => self.fz_query_before.iter().cloned().collect(),
         }
     }
 
     fn get_after(&self) -> String {
         match self.mode {
-            QueryMode::CMD => self.cmd_after.iter().cloned().rev().collect(),
-            QueryMode::QUERY => self.fz_query_after.iter().cloned().rev().collect(),
+            QueryMode::Cmd => self.cmd_after.iter().cloned().rev().collect(),
+            QueryMode::Query => self.fz_query_after.iter().cloned().rev().collect(),
         }
     }
 
     fn get_prompt(&self) -> &str {
         match self.mode {
-            QueryMode::CMD => &self.cmd_prompt,
-            QueryMode::QUERY => &self.query_prompt,
+            QueryMode::Cmd => &self.cmd_prompt,
+            QueryMode::Query => &self.query_prompt,
         }
     }
 
     fn get_query_ref(&mut self) -> (&mut Vec<char>, &mut Vec<char>) {
         match self.mode {
-            QueryMode::QUERY => (&mut self.fz_query_before, &mut self.fz_query_after),
-            QueryMode::CMD => (&mut self.cmd_before, &mut self.cmd_after),
+            QueryMode::Query => (&mut self.fz_query_before, &mut self.fz_query_after),
+            QueryMode::Cmd => (&mut self.cmd_before, &mut self.cmd_after),
         }
     }
 
     fn get_history_ref(&mut self) -> (&mut Vec<String>, &mut Vec<String>) {
         match self.mode {
-            QueryMode::QUERY => (&mut self.fz_query_history_before, &mut self.fz_query_history_after),
-            QueryMode::CMD => (&mut self.cmd_history_before, &mut self.cmd_history_after),
+            QueryMode::Query => (&mut self.fz_query_history_before, &mut self.fz_query_history_after),
+            QueryMode::Cmd => (&mut self.cmd_history_before, &mut self.cmd_history_after),
         }
     }
 
@@ -229,8 +229,8 @@ impl Query {
     //
     pub fn act_query_toggle_interactive(&mut self) {
         self.mode = match self.mode {
-            QueryMode::QUERY => QueryMode::CMD,
-            QueryMode::CMD => QueryMode::QUERY,
+            QueryMode::Query => QueryMode::Cmd,
+            QueryMode::Cmd => QueryMode::Query,
         }
     }
 

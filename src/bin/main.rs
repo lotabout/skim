@@ -389,7 +389,7 @@ fn real_main() -> Result<i32, std::io::Error> {
     Ok(if output.selected_items.is_empty() { 1 } else { 0 })
 }
 
-fn parse_options<'a>(options: &'a ArgMatches) -> SkimOptions<'a> {
+fn parse_options(options: &ArgMatches) -> SkimOptions<'_> {
     SkimOptionsBuilder::default()
         .color(options.values_of("color").and_then(|vals| vals.last()))
         .min_height(options.values_of("min-height").and_then(|vals| vals.last()))
