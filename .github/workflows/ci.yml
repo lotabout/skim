@@ -63,6 +63,7 @@ jobs:
     - name: Cache
       uses: Swatinem/rust-cache@v1
 
+  clippy:
     name: clippy
     runs-on: ${{matrix.os}}
     strategy:
