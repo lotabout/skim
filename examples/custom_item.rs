@@ -41,9 +41,9 @@ pub fn main() {
 
     let selected_items = Skim::run_with(&options, Some(rx_item))
         .map(|out| out.selected_items)
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_else(Vec::new);
 
     for item in selected_items.iter() {
-        print!("{}{}", item.output(), "\n");
+        println!("{}", item.output());
     }
 }

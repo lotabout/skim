@@ -1,6 +1,7 @@
 name: Build & Test
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -60,6 +61,58 @@ jobs:
       env:
         LC_ALL: en_US.UTF-8
         TERM: xterm-256color
+    - name: Cache
+      uses: Swatinem/rust-cache@v1
+
+  clippy:
+    name: clippy
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        build: [linux, macos]
+        include:
+        - build: linux
+          os: ubuntu-latest
+          rust: stable
+          target: x86_64-unknown-linux-musl
+        - build: macos
+          os: macos-latest
+          rust: stable
+          target: x86_64-apple-darwin
+    steps:
+    - name: Install dependencies (for Linux)
+      run: |
+        sudo apt-get install zsh
+        python3 -V
+        tmux -V
+        locale
+      if: runner.os == 'Linux'
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: 1
+    - name: Install dependencies (for MacOS)
+      run: |
+        brew install tmux
+        brew install zsh
+        python3 -V
+        tmux -V
+        locale
+      if: runner.os == 'macOS'
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: 1
+
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 1
+    - name: Install correct toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
+        override: true
+        components: clippy
+    - name: Clippy
+      run: cargo clippy
     - name: Cache
       uses: Swatinem/rust-cache@v1
 

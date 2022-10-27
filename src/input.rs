@@ -92,7 +92,7 @@ pub fn parse_key_action(key_action: &str) -> Vec<KeyActions> {
         static ref RE_BIND: Regex = Regex::new(r#"(?si)([a-z-]+)("[^"]+?"|'[^']+?'|\([^\)]+?\)|\[[^\]]+?\]|:[^:]+?)?(?:\+|$)"#).unwrap();
     }
 
-    RE.captures_iter(&key_action)
+    RE.captures_iter(key_action)
         .map(|caps| {
             debug!("RE: caps: {:?}", caps);
             let key = caps.get(1).unwrap().as_str();
@@ -105,8 +105,8 @@ pub fn parse_key_action(key_action: &str) -> Vec<KeyActions> {
                         caps.get(2).map(|s| {
                             // (arg) => arg, :end_arg => arg
                             let action = s.as_str();
-                            if action.starts_with(':') {
-                                action[1..].to_string()
+                            if let Some(stripped) = action.strip_prefix(':') {
+                                stripped.to_owned()
                             } else {
                                 action[1..action.len() - 1].to_string()
                             }
@@ -207,7 +207,7 @@ mod test {
         assert_eq!(("ctrl-t", vec![("toggle", None)]), key_action[2]);
 
         let key_action_str = "f1:execute(less -f {}),ctrl-y:execute-silent(echo {} | pbcopy)";
-        let key_action = parse_key_action(&key_action_str);
+        let key_action = parse_key_action(key_action_str);
         assert_eq!(("f1", vec![("execute", Some("less -f {}".to_string()))]), key_action[0]);
         assert_eq!(
             ("ctrl-y", vec![("execute-silent", Some("echo {} | pbcopy".to_string()))]),
@@ -229,7 +229,7 @@ mod test {
         assert_eq!(("ctrl-t", vec![("toggle", None), ("up", None)]), key_action[0]);
 
         let key_action_str = "f1:execute(less -f {}),ctrl-y:execute-silent(echo {} | pbcopy)+abort";
-        let key_action = parse_key_action(&key_action_str);
+        let key_action = parse_key_action(key_action_str);
         assert_eq!(("f1", vec![("execute", Some("less -f {}".to_string()))]), key_action[0]);
         assert_eq!(
             (

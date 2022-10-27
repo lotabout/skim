@@ -4,20 +4,11 @@ use regex::Regex;
 
 use crate::{Selector, SkimItem};
 
+#[derive(Debug, Default)]
 pub struct DefaultSkimSelector {
     first_n: usize,
     regex: Option<Regex>,
     preset: Option<HashSet<String>>,
-}
-
-impl Default for DefaultSkimSelector {
-    fn default() -> Self {
-        Self {
-            first_n: 0,
-            regex: None,
-            preset: None,
-        }
-    }
 }
 
 impl DefaultSkimSelector {

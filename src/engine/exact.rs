@@ -19,6 +19,7 @@ pub struct ExactMatchingParam {
 
 #[derive(Debug)]
 pub struct ExactEngine {
+    #[allow(dead_code)]
     query: String,
     query_regex: Option<Regex>,
     rank_builder: Arc<RankBuilder>,
@@ -39,13 +40,13 @@ impl ExactEngine {
         }
 
         if param.prefix {
-            query_builder.push_str("^");
+            query_builder.push('^');
         }
 
         query_builder.push_str(&escape(query));
 
         if param.postfix {
-            query_builder.push_str("$");
+            query_builder.push('$');
         }
 
         let query_regex = if query.is_empty() {
