@@ -5,7 +5,7 @@ use crate::event::{Event, EventHandler};
 use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
-use crate::util::{print_item, str_lines, LinePrinter};
+use crate::util::{clear_canvas, print_item, str_lines, LinePrinter};
 use crate::{DisplayContext, Matches, SkimOptions};
 use defer_drop::DeferDrop;
 use std::cmp::max;
@@ -89,6 +89,7 @@ impl Draw for Header {
         }
 
         canvas.clear()?;
+        clear_canvas(canvas)?;
 
         for (idx, header) in self.header.iter().enumerate() {
             // print fixed header(specified by --header)

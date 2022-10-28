@@ -7,6 +7,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::options::SkimOptions;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
+use crate::util::clear_canvas;
 
 #[derive(Clone, Copy, PartialEq)]
 enum QueryMode {
@@ -546,6 +547,7 @@ impl Draw for Query {
         let before = self.get_before();
         let after = self.get_after();
         let prompt = self.get_prompt();
+        clear_canvas(canvas)?;
 
         let prompt_width = canvas.print_with_attr(0, 0, prompt, self.theme.prompt())?;
         let before_width = canvas.print_with_attr(0, prompt_width, &before, self.theme.query())?;

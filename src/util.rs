@@ -15,6 +15,16 @@ lazy_static! {
     static ref RE_NUMBER: Regex = Regex::new(r"[+|-]?\d+").unwrap();
 }
 
+pub fn clear_canvas(canvas: &mut dyn Canvas) -> DrawResult<()> {
+    let (screen_width, screen_height) = canvas.size()?;
+    for y in 0..screen_height {
+        for x in 0..screen_width {
+            canvas.print(y, x, " ")?;
+        }
+    }
+    Ok(())
+}
+
 pub fn escape_single_quote(text: &str) -> String {
     RE_ESCAPE
         .replace_all(text, |x: &Captures| match x.get(0).unwrap().as_str() {
