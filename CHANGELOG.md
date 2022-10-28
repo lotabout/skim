@@ -1,5 +1,18 @@
 # Change Log
 
+## 0.10.0: 2022-12-28
+
+Features:
+
+- transparency on start
+- add light colors parsing support
+- Update --tiebreak options with length
+
+Fixes:
+
+- fix ci.yml
+- update deps and fix lots of clippy lints
+
 ## 0.9.4: 2021-02-15
 
 Feature:
