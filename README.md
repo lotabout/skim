@@ -54,6 +54,7 @@ The skim project contains several components:
 | Fedora         | dnf               | `dnf install skim`        |
 | Alpine         | apk               | `apk add skim`            |
 | Arch           | pacman            | `pacman -S skim`          |
+| Guix           | guix              | `guix install skim`       |
 
 See [repology](https://repology.org/project/skim/versions) for a comprehensive overview of package availability.
 
