@@ -12,10 +12,8 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use skim::prelude::*;
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const USAGE: &str = "
 Usage: sk [options]
@@ -171,8 +169,8 @@ fn real_main() -> Result<i32, std::io::Error> {
     // parse options
     let opts = App::new("sk")
         .author("Jinzhou Zhang<lotabout@gmail.com>")
+        .version(crate_version!())
         .arg(Arg::with_name("help").long("help").short('h'))
-        .arg(Arg::with_name("version").long("version").short('v'))
         .arg(Arg::with_name("bind").long("bind").short('b').multiple(true).takes_value(true))
         .arg(Arg::with_name("multi").long("multi").short('m').multiple(true))
         .arg(Arg::with_name("no-multi").long("no-multi").multiple(true))
@@ -246,11 +244,6 @@ fn real_main() -> Result<i32, std::io::Error> {
 
     if opts.is_present("help") {
         write!(stdout, "{}", USAGE)?;
-        return Ok(0);
-    }
-
-    if opts.is_present("version") {
-        writeln!(stdout, "{}", VERSION)?;
         return Ok(0);
     }
 
