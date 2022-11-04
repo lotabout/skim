@@ -46,12 +46,11 @@ pub struct ColorTheme {
 }
 
 #[rustfmt::skip]
-#[allow(dead_code)]
 impl ColorTheme {
     pub fn init_from_options(options: &SkimOptions) -> ColorTheme {
         // register
-        if let Some(color) = options.color {
-            ColorTheme::from_options(color)
+        if !options.color.is_empty() {
+            ColorTheme::from_options(&options.color)
         } else {
             ColorTheme::dark256()
         }
@@ -170,9 +169,9 @@ impl ColorTheme {
     }
 
     #[allow(clippy::wildcard_in_or_patterns)]
-    fn from_options(color: &str) -> Self {
+    fn from_options(color: &[&str]) -> Self {
         let mut theme = ColorTheme::dark256();
-        for pair in color.split(',') {
+        for pair in color {
             let color: Vec<&str> = pair.split(':').collect();
             if color.len() < 2 {
                 theme = match color[0] {

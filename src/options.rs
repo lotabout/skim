@@ -1,11 +1,10 @@
-use std::rc::Rc;
-
-use derive_builder::Builder;
-
 use crate::helper::item_reader::SkimItemReader;
+use crate::item::RankCriteria;
 use crate::reader::CommandCollector;
-use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory, Selector};
+use crate::{CaseMatching, FuzzyAlgorithm, Layout, MatchEngineFactory, Selector};
+use derive_builder::Builder;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Builder)]
 #[builder(build_fn(name = "final_build"))]
@@ -15,20 +14,20 @@ pub struct SkimOptions<'a> {
     pub multi: bool,
     pub prompt: Option<&'a str>,
     pub cmd_prompt: Option<&'a str>,
-    pub expect: Option<String>,
+    pub expect: Vec<&'a str>,
     pub tac: bool,
     pub nosort: bool,
-    pub tiebreak: Option<String>,
+    pub tiebreak: Vec<RankCriteria>,
     pub exact: bool,
     pub cmd: Option<&'a str>,
     pub interactive: bool,
     pub query: Option<&'a str>,
     pub cmd_query: Option<&'a str>,
     pub regex: bool,
-    pub delimiter: Option<&'a str>,
+    pub delimiter: &'a str,
     pub replstr: Option<&'a str>,
-    pub color: Option<&'a str>,
-    pub margin: Option<&'a str>,
+    pub color: Vec<&'a str>,
+    pub margin: Vec<&'a str>,
     pub no_height: bool,
     pub no_clear: bool,
     pub no_clear_start: bool,
@@ -37,13 +36,13 @@ pub struct SkimOptions<'a> {
     pub preview: Option<&'a str>,
     pub preview_window: Option<&'a str>,
     pub reverse: bool,
-    pub tabstop: Option<&'a str>,
+    pub tabstop: Option<usize>,
     pub no_hscroll: bool,
     pub no_mouse: bool,
     pub inline_info: bool,
     pub header: Option<&'a str>,
     pub header_lines: usize,
-    pub layout: &'a str,
+    pub layout: Layout,
     pub algorithm: FuzzyAlgorithm,
     pub case: CaseMatching,
     pub engine_factory: Option<Rc<dyn MatchEngineFactory>>,
@@ -66,20 +65,20 @@ impl<'a> Default for SkimOptions<'a> {
             multi: false,
             prompt: Some("> "),
             cmd_prompt: Some("c> "),
-            expect: None,
+            expect: vec![],
             tac: false,
             nosort: false,
-            tiebreak: None,
+            tiebreak: vec![],
             exact: false,
             cmd: None,
             interactive: false,
             query: None,
             cmd_query: None,
             regex: false,
-            delimiter: None,
+            delimiter: "",
             replstr: Some("{}"),
-            color: None,
-            margin: Some("0,0,0,0"),
+            color: vec![],
+            margin: vec!["0"; 4],
             no_height: false,
             no_clear: false,
             no_clear_start: false,
@@ -94,7 +93,7 @@ impl<'a> Default for SkimOptions<'a> {
             inline_info: false,
             header: None,
             header_lines: 0,
-            layout: "",
+            layout: Layout::Default,
             algorithm: FuzzyAlgorithm::default(),
             case: CaseMatching::default(),
             engine_factory: None,
@@ -119,7 +118,7 @@ impl<'a> SkimOptionsBuilder<'a> {
         }
 
         if let Some(true) = self.reverse {
-            self.layout = Some("reverse");
+            self.layout = Some(Layout::Reverse);
         }
 
         self.final_build()

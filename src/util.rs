@@ -278,9 +278,7 @@ pub fn margin_string_to_size(margin: &str) -> Size {
 /// - `TB,RL`    Vertical, horizontal margin
 /// - `T,RL,B`   Top, horizontal, bottom margin
 /// - `T,R,B,L`  Top, right, bottom, left margin
-pub fn parse_margin(margin_option: &str) -> (Size, Size, Size, Size) {
-    let margins = margin_option.split(',').collect::<Vec<&str>>();
-
+pub fn parse_margin(margins: &[&str]) -> (Size, Size, Size, Size) {
     match margins.len() {
         1 => {
             let margin = margin_string_to_size(margins[0]);

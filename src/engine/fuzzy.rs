@@ -1,3 +1,6 @@
+#[cfg(feature = "cli")]
+use clap::ValueEnum;
+
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
 
@@ -12,8 +15,11 @@ use bitflags::_core::cmp::min;
 
 //------------------------------------------------------------------------------
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
 pub enum FuzzyAlgorithm {
+    #[cfg_attr(feature = "cli", value(name = "skim_v1"))]
     SkimV1,
+    #[cfg_attr(feature = "cli", value(name = "skim_v2"))]
     SkimV2,
     Clangd,
 }

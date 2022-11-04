@@ -3,6 +3,9 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+#[cfg(feature = "cli")]
+use clap::ValueEnum;
+
 use std::any::Any;
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -14,6 +17,8 @@ use crossbeam::channel::{Receiver, Sender};
 use tuikit::prelude::{Event as TermEvent, *};
 
 pub use crate::ansi::AnsiString;
+#[cfg(feature = "cli")]
+pub use crate::cli::Cli;
 pub use crate::engine::fuzzy::FuzzyAlgorithm;
 use crate::event::{EventReceiver, EventSender};
 use crate::model::Model;
@@ -22,6 +27,8 @@ pub use crate::output::SkimOutput;
 use crate::reader::Reader;
 
 mod ansi;
+#[cfg(feature = "cli")]
+pub mod cli;
 mod engine;
 mod event;
 pub mod field;
@@ -217,9 +224,21 @@ pub enum ItemPreview {
 }
 
 //==============================================================================
+// The layout of TUI
+
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
+pub enum Layout {
+    Default,
+    Reverse,
+    ReverseList,
+}
+
+//==============================================================================
 // A match engine will execute the matching algorithm
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
 pub enum CaseMatching {
     Respect,
     Ignore,
@@ -233,7 +252,6 @@ impl Default for CaseMatching {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-#[allow(dead_code)]
 pub enum MatchRange {
     ByteRange(usize, usize),
     // range of bytes
@@ -326,7 +344,7 @@ impl Skim {
         // input
         let mut input = input::Input::new();
         input.parse_keymaps(&options.bind);
-        input.parse_expect_keys(options.expect.as_deref());
+        input.parse_expect_keys(&options.expect);
 
         let tx_clone = tx.clone();
         let term_clone = term.clone();

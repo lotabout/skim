@@ -14,6 +14,7 @@ use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::clear_canvas;
 use crate::util::{print_item, reshape_string, LinePrinter};
+use crate::Layout;
 use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions};
 use regex::Regex;
 use std::rc::Rc;
@@ -93,18 +94,13 @@ impl Selection {
             self.multi_selection = true;
         }
 
-        if options.layout.starts_with("reverse") {
-            self.reverse = true;
-        }
+        self.reverse = matches!(options.layout, Layout::Reverse | Layout::ReverseList);
 
         if options.no_hscroll {
             self.no_hscroll = true;
         }
 
-        if let Some(tabstop_str) = options.tabstop {
-            let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
-            self.tabstop = max(1, tabstop);
-        }
+        self.tabstop = max(1, options.tabstop.unwrap_or(8));
 
         if options.tac {
             self.items.tac(true);

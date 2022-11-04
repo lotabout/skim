@@ -17,7 +17,7 @@ use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::global::current_run_num;
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{parse_criteria, ItemPool, MatchedItem, RankBuilder, RankCriteria};
+use crate::item::{ItemPool, MatchedItem, RankBuilder, RankCriteria};
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -29,7 +29,7 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::clear_canvas;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
+use crate::{FuzzyAlgorithm, Layout, MatchEngineFactory, MatchRange, SkimItem};
 use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;
@@ -84,7 +84,7 @@ pub struct Model {
     margin_bottom: Size,
     margin_left: Size,
 
-    layout: String,
+    layout: Layout,
     delimiter: Regex,
     inline_info: bool,
     no_clear_if_empty: bool,
@@ -111,8 +111,8 @@ impl Model {
             .theme(theme.clone())
             .build();
 
-        let criterion = if let Some(ref tie_breaker) = options.tiebreak {
-            tie_breaker.split(',').filter_map(parse_criteria).collect()
+        let criterion = if !options.tiebreak.is_empty() {
+            options.tiebreak.clone()
         } else {
             DEFAULT_CRITERION.clone()
         };
@@ -143,10 +143,7 @@ impl Model {
             .item_pool(item_pool.clone())
             .theme(theme.clone());
 
-        let margins = options
-            .margin
-            .map(parse_margin)
-            .expect("option margin is should be specified (by default)");
+        let margins = parse_margin(&options.margin);
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         let mut ret = Model {
@@ -182,7 +179,7 @@ impl Model {
             margin_bottom,
             margin_left,
 
-            layout: "default".to_string(),
+            layout: Layout::Default,
             delimiter: Regex::new(DELIMITER_STR).unwrap(),
             inline_info: false,
             no_clear_if_empty: false,
@@ -197,11 +194,11 @@ impl Model {
     }
 
     fn parse_options(&mut self, options: &SkimOptions) {
-        if let Some(delimiter) = options.delimiter {
-            self.delimiter = Regex::new(delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
+        if !options.delimiter.is_empty() {
+            self.delimiter = Regex::new(options.delimiter).unwrap_or_else(|_| Regex::new(DELIMITER_STR).unwrap());
         }
 
-        self.layout = options.layout.to_string();
+        self.layout = options.layout;
 
         if options.inline_info {
             self.inline_info = true;
@@ -787,21 +784,21 @@ impl Model {
             .split(Win::new(&self.query).grow(0).shrink(0))
             .split(Win::new(status_inline).grow(1).shrink(0));
 
-        let layout = &self.layout as &str;
-        let win_main = match layout {
-            "reverse" => VSplit::default()
+        // let layout = &self.layout as &str;
+        let win_main = match self.layout {
+            Layout::Reverse => VSplit::default()
                 .split(win_query_status)
                 .split(win_query)
                 .split(win_status)
                 .split(win_header)
                 .split(win_selection),
-            "reverse-list" => VSplit::default()
+            Layout::ReverseList => VSplit::default()
                 .split(win_selection)
                 .split(win_header)
                 .split(win_status)
                 .split(win_query)
                 .split(win_query_status),
-            _ => VSplit::default()
+            Layout::Default => VSplit::default()
                 .split(win_selection)
                 .split(win_header)
                 .split(win_status)

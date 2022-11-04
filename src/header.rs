@@ -6,7 +6,7 @@ use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
 use crate::util::{clear_canvas, print_item, str_lines, LinePrinter};
-use crate::{DisplayContext, Matches, SkimOptions};
+use crate::{DisplayContext, Layout, Matches, SkimOptions};
 use defer_drop::DeferDrop;
 use std::cmp::max;
 use std::sync::Arc;
@@ -44,14 +44,8 @@ impl Header {
     }
 
     pub fn with_options(mut self, options: &SkimOptions) -> Self {
-        if let Some(tabstop_str) = options.tabstop {
-            let tabstop = tabstop_str.parse::<usize>().unwrap_or(8);
-            self.tabstop = max(1, tabstop);
-        }
-
-        if options.layout.starts_with("reverse") {
-            self.reverse = true;
-        }
+        self.tabstop = max(1, options.tabstop.unwrap_or(8));
+        self.reverse = matches!(options.layout, Layout::Reverse | Layout::ReverseList);
 
         match options.header {
             None => {}

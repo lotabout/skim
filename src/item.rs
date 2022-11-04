@@ -1,5 +1,8 @@
 ///! An item is line of text that read from `find` command or stdin together with
 ///! the internal states, such as selected or not
+#[cfg(feature = "cli")]
+use clap::ValueEnum;
+
 use std::cmp::min;
 use std::default::Default;
 use std::ops::Deref;
@@ -197,27 +200,18 @@ impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
 
 //------------------------------------------------------------------------------
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(feature = "cli", derive(ValueEnum))]
 pub enum RankCriteria {
     Score,
-    Begin,
-    End,
+    #[cfg_attr(feature = "cli", value(name = "-score"))]
     NegScore,
+    Begin,
+    #[cfg_attr(feature = "cli", value(name = "-begin"))]
     NegBegin,
+    End,
+    #[cfg_attr(feature = "cli", value(name = "-end"))]
     NegEnd,
     Length,
+    #[cfg_attr(feature = "cli", value(name = "-length"))]
     NegLength,
-}
-
-pub fn parse_criteria(text: &str) -> Option<RankCriteria> {
-    match text.to_lowercase().as_ref() {
-        "score" => Some(RankCriteria::Score),
-        "begin" => Some(RankCriteria::Begin),
-        "end" => Some(RankCriteria::End),
-        "-score" => Some(RankCriteria::NegScore),
-        "-begin" => Some(RankCriteria::NegBegin),
-        "-end" => Some(RankCriteria::NegEnd),
-        "length" => Some(RankCriteria::Length),
-        "-length" => Some(RankCriteria::NegLength),
-        _ => None,
-    }
 }

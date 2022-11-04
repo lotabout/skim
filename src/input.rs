@@ -69,11 +69,9 @@ impl Input {
         }
     }
 
-    pub fn parse_expect_keys(&mut self, keys: Option<&str>) {
-        if let Some(keys) = keys {
-            for key in keys.split(',') {
-                self.bind(key, vec![Event::EvActAccept(Some(key.to_string()))]);
-            }
+    pub fn parse_expect_keys(&mut self, keys: &[&str]) {
+        for key in keys {
+            self.bind(key, vec![Event::EvActAccept(Some(key.to_string()))]);
         }
     }
 }
