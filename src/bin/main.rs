@@ -189,11 +189,11 @@ fn try_read_file_lines(path: Option<&Path>) -> Vec<String> {
             debug!("file content: {:?}", lines);
             lines.ok()
         })
-        .unwrap_or_else(|| vec![])
+        .unwrap_or_default()
 }
 
 fn to_strs(strings: &[String]) -> Vec<&str> {
-    strings.into_iter().map(String::as_str).collect()
+    strings.iter().map(String::as_str).collect()
 }
 
 fn write_history_to_file(orig_history: &[String], latest: &str, limit: usize, path: &Path) -> Result<(), io::Error> {
@@ -215,7 +215,7 @@ fn write_history_to_file(orig_history: &[String], latest: &str, limit: usize, pa
     Ok(())
 }
 
-fn parse_options<'a>(options: &'a Cli) -> SkimOptions<'a> {
+fn parse_options(options: &Cli) -> SkimOptions {
     SkimOptionsBuilder::default()
         .color(to_strs(&options.color))
         .min_height(Some(&options.min_height))
@@ -233,7 +233,7 @@ fn parse_options<'a>(options: &'a Cli) -> SkimOptions<'a> {
         .bind(to_strs(&options.bind))
         .expect(to_strs(&options.expect))
         .multi(!options.no_multi && options.multi)
-        .layout(options.layout.clone())
+        .layout(options.layout)
         .reverse(options.reverse)
         .no_hscroll(options.no_hscroll)
         .no_mouse(options.no_mouse)

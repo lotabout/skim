@@ -152,9 +152,7 @@ impl MatchEngine for FuzzyEngine {
             }
         }
 
-        if matched_result == None {
-            return None;
-        }
+        matched_result.as_ref()?;
 
         let (score, matched_range) = matched_result.unwrap();
 

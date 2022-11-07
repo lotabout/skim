@@ -778,7 +778,7 @@ impl Model {
             .shrink(0);
         let win_header = Win::new(&self.header).grow(0).shrink(0);
         let win_query_status = HSplit::default()
-            .basis(if self.inline_info { 1 } else { 0 })
+            .basis(usize::from(self.inline_info))
             .grow(0)
             .shrink(0)
             .split(Win::new(&self.query).grow(0).shrink(0))

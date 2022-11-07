@@ -4,7 +4,7 @@ use crate::{CaseMatching, Layout};
 use clap::Parser;
 use std::path::PathBuf;
 
-const USAGE: &'static str = r#"
+const USAGE: &str = r#"
 Fuzzy Finder in rust!
 
 Zhang Jinzhou <lotabout@gmail.com>

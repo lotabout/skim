@@ -38,12 +38,13 @@ impl Input {
     }
 
     pub fn bind(&mut self, key: &str, action_chain: ActionChain) {
-        let key = from_keyname(key);
-        if key == None || action_chain.is_empty() {
+        let Some(key) = from_keyname(key) else {
+            return;
+        };
+
+        if action_chain.is_empty() {
             return;
         }
-
-        let key = key.unwrap();
 
         // remove the key for existing keymap;
         let _ = self.keymap.remove(&key);
