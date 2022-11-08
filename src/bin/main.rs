@@ -1,8 +1,10 @@
 use clap::Parser;
 use derive_builder::Builder;
 use log::debug;
+use regex::Regex;
 use skim::prelude::*;
 use std::{
+    collections::{BTreeMap, VecDeque},
     env,
     fs::File,
     io::{self, BufRead, BufReader, BufWriter, Write},
@@ -36,22 +38,13 @@ fn main() {
 fn real_main() -> Result<i32, io::Error> {
     let mut stdout = io::stdout();
 
-    let mut args = Vec::new();
-    let mut cli_args = env::args();
+    let mut args: Vec<String> = env::args().collect();
 
-    args.push(
-        cli_args
-            .next()
-            .expect("there should be at least one arg: the application name"),
-    );
-    args.extend(
-        env::var("SKIM_DEFAULT_OPTIONS")
-            .ok()
-            .and_then(|val| shlex::split(&val))
-            .unwrap_or_default(),
-    );
-    for arg in cli_args {
-        args.push(arg);
+    // merge SKIM_DEFAULT_OPTIONS if it isn't empty
+    if let Some(defaults) = env::var("SKIM_DEFAULT_OPTIONS").ok().and_then(|val| shlex::split(&val)) {
+        if !defaults.is_empty() {
+            merge_default_options(&mut args, defaults);
+        }
     }
 
     //------------------------------------------------------------------------------
@@ -178,6 +171,93 @@ fn real_main() -> Result<i32, io::Error> {
     // nothing -> 1
     // something -> 0
     Ok(output.selected_items.is_empty().into())
+}
+
+fn merge_default_options(args: &mut Vec<String>, mut defaults: Vec<String>) {
+    let expander = ShortOptExpander::new();
+    let vec_args = ["bind", "color", "expect", "margin", "nth", "tiebreak", "with_nth"];
+
+    // expand all the short options to long form
+    expander.expand(args);
+    expander.expand(&mut defaults);
+
+    let mut defaults: VecDeque<String> = defaults.into(); // stack to be operated
+    let mut buffer = Vec::new(); // hold the merged values
+
+    // traverse the default options
+    while let Some(opt) = defaults.pop_front() {
+        if let Some(long) = opt.strip_prefix("--") {
+            // options would be merged if:
+            // - They belong to multiple-values arguments ;
+            // - or They aren't in the command line arguments.
+            if vec_args.contains(&long) || !args.contains(&opt) {
+                buffer.push(opt);
+
+                // read values until the next one is new option
+                while let Some(val) = defaults.pop_front() {
+                    if val.starts_with("--") {
+                        defaults.push_front(val);
+                        break;
+                    }
+
+                    // read the value of the option `opt`
+                    buffer.push(val);
+                }
+            } else {
+                while let Some(val) = defaults.pop_front() {
+                    if val.starts_with("--") {
+                        defaults.push_front(val);
+                        break;
+                    }
+                }
+            }
+        } else {
+            // it's a value
+            buffer.push(opt);
+        }
+    }
+
+    args.extend(buffer);
+}
+
+struct ShortOptExpander {
+    short2long: BTreeMap<char, &'static str>,
+    short_pat: Regex,
+}
+
+impl ShortOptExpander {
+    fn new() -> Self {
+        Self {
+            short2long: BTreeMap::from([
+                ('0', "exit-0"),
+                ('1', "select-1"),
+                ('V', "version"),
+                ('c', "cmd"),
+                ('d', "delimiter"),
+                ('e', "exact"),
+                ('f', "filter"),
+                ('h', "help"),
+                ('i', "interactive"),
+                ('m', "multi"),
+                ('p', "prompt"),
+                ('q', "query"),
+            ]),
+            short_pat: Regex::new("^-[[:alnum:]]").unwrap(),
+        }
+    }
+
+    fn expand(&self, args: &mut [String]) {
+        args.iter_mut()
+            .filter(|arg| self.short_pat.is_match(arg))
+            .for_each(|opt| {
+                let short = opt.chars().nth(1).unwrap(); // Never fail
+                let long = self.short2long.get(&short);
+
+                if let Some(&long) = long {
+                    opt.replace_range(..2, &format!("--{long}"));
+                }
+            });
+    }
 }
 
 // Because we are always using default value logic to deal with read lines,
