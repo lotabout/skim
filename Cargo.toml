@@ -42,6 +42,10 @@ crossbeam = "0.8.2"
 beef = "0.5.2" # compact cow
 defer-drop = "1.2.0"
 
+[dependencies.linked_hash_map]
+package = "linked-hash-map"
+version = "=0.5.6"
+
 [features]
 default = ["cli"]
 cli = ["dep:clap", "dep:atty", "dep:shlex", "dep:env_logger"]

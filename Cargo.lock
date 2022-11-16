@@ -501,6 +501,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "linked-hash-map"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
+
+[[package]]
 name = "log"
 version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -729,6 +735,7 @@ dependencies = [
  "env_logger",
  "fuzzy-matcher",
  "lazy_static",
+ "linked-hash-map",
  "log",
  "nix 0.25.0",
  "rayon",
