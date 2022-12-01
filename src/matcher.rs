@@ -3,8 +3,6 @@ use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
-use rayon::prelude::*;
-
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
@@ -92,7 +90,7 @@ impl Matcher {
 
             trace!("matcher start, total: {}", items.len());
             let result: Result<Vec<_>, _> = items
-                .into_par_iter()
+                .iter()
                 .enumerate()
                 .filter_map(|(index, item)| {
                     processed.fetch_add(1, Ordering::Relaxed);
