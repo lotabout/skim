@@ -13,7 +13,7 @@ use defer_drop::DeferDrop;
 use rayon::ThreadPool;
 use std::rc::Rc;
 
-static MATCHER_POOL: Lazy<ThreadPool> = Lazy::new(|| {
+static MATCHER_POOL: once_cell::sync::Lazy<ThreadPool> = Lazy::new(|| {
     const DEFAULT_STACK_SIZE: usize = 1_048_576;
 
     rayon::ThreadPoolBuilder::new()
