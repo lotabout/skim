@@ -4,6 +4,7 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use rayon::prelude::*;
+use once_cell::sync::Lazy;
 
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
@@ -12,12 +13,11 @@ use defer_drop::DeferDrop;
 use rayon::ThreadPool;
 use std::rc::Rc;
 
-static MATCHER_POOL: once_cell::sync::Lazy<ThreadPool> = once_cell::sync::Lazy::new(|| {
+static MATCHER_POOL: Lazy<ThreadPool> = Lazy::new(|| {
     const DEFAULT_STACK_SIZE: usize = 1_048_576;
 
     rayon::ThreadPoolBuilder::new()
         .stack_size(DEFAULT_STACK_SIZE)
-        .num_threads(2usize)
         .build()
         .expect("Could not initialize rayon threadpool")
 });
