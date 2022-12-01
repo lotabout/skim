@@ -1,5 +1,5 @@
 [package]
-name = "skim-httm-vendored"
+name = "skim"
 version = "0.10.2"
 authors = ["Zhang Jinzhou <lotabout@gmail.com>"]
 description = "Fuzzy Finder in rust!"
