@@ -3,9 +3,13 @@ use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
+use once_cell::sync::Lazy;
+use rayon::prelude::*;
+use rayon::ThreadPool;
+
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
-use crate::{CaseMatching, MatchEngineFactory};
+use crate::{CaseMatching, MatchEngineFactory, SkimItem};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
 
@@ -89,26 +93,39 @@ impl Matcher {
             //    check https://doc.rust-lang.org/std/result/enum.Result.html#method.from_iter
 
             trace!("matcher start, total: {}", items.len());
-            let result: Result<Vec<_>, _> = items
-                .iter()
-                .enumerate()
-                .filter_map(|(index, item)| {
-                    processed.fetch_add(1, Ordering::Relaxed);
-                    if stopped.load(Ordering::Relaxed) {
-                        Some(Err("matcher killed"))
-                    } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
-                        matched.fetch_add(1, Ordering::Relaxed);
-                        Some(Ok(MatchedItem {
-                            item: item.clone(),
-                            rank: match_result.rank,
-                            matched_range: Some(match_result.matched_range),
-                            item_idx: (num_taken + index) as u32,
-                        }))
-                    } else {
-                        None
-                    }
+
+            let filter_items = |index: usize, item: &Arc<dyn SkimItem>| {
+                processed.fetch_add(1, Ordering::Relaxed);
+                if stopped.load(Ordering::Relaxed) {
+                    Some(Err("matcher killed"))
+                } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
+                    matched.fetch_add(1, Ordering::Relaxed);
+                    Some(Ok(MatchedItem {
+                        item: item.clone(),
+                        rank: match_result.rank,
+                        matched_range: Some(match_result.matched_range),
+                        item_idx: (num_taken + index) as u32,
+                    }))
+                } else {
+                    None
+                }
+            };
+
+            let result: Result<Vec<_>, _> = if cfg!(target_os = "linux") {
+                MATCHER_POOL.install(|| {
+                    items
+                        .into_par_iter()
+                        .enumerate()
+                        .filter_map(|(index, item)| filter_items(index, item))
+                        .collect()
                 })
-                .collect();
+            } else {
+                items
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, item)| filter_items(index, item))
+                    .collect()
+            };
 
             if let Ok(items) = result {
                 let mut pool = matched_items.lock();
