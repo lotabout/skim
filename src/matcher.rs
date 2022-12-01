@@ -9,7 +9,7 @@ use rayon::ThreadPool;
 
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
-use crate::{CaseMatching, MatchEngineFactory, SkimItem};
+use crate::{CaseMatching, MatchEngineFactory};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
 
@@ -103,38 +103,28 @@ impl Matcher {
 
             trace!("matcher start, total: {}", items.len());
 
-            let filter_items = |index: usize, item: &Arc<dyn SkimItem>| {
-                processed.fetch_add(1, Ordering::Relaxed);
-                if stopped.load(Ordering::Relaxed) {
-                    Some(Err("matcher killed"))
-                } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
-                    matched.fetch_add(1, Ordering::Relaxed);
-                    Some(Ok(MatchedItem {
-                        item: item.clone(),
-                        rank: match_result.rank,
-                        matched_range: Some(match_result.matched_range),
-                        item_idx: (num_taken + index) as u32,
-                    }))
-                } else {
-                    None
-                }
-            };
-
-            let result: Result<Vec<_>, _> = if cfg!(target_os = "linux") {
-                MATCHER_POOL.install(|| {
+            let result: Result<Vec<_>, _> = MATCHER_POOL.install(|| {
                     items
                         .into_par_iter()
                         .enumerate()
-                        .filter_map(|(index, item)| filter_items(index, item))
+                        .filter_map(|(index, item)| {
+                            processed.fetch_add(1, Ordering::Relaxed);
+                            if stopped.load(Ordering::Relaxed) {
+                                Some(Err("matcher killed"))
+                            } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
+                                matched.fetch_add(1, Ordering::Relaxed);
+                                Some(Ok(MatchedItem {
+                                    item: item.clone(),
+                                    rank: match_result.rank,
+                                    matched_range: Some(match_result.matched_range),
+                                    item_idx: (num_taken + index) as u32,
+                                }))
+                            } else {
+                                None
+                            }
+                        })
                         .collect()
-                })
-            } else {
-                items
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, item)| filter_items(index, item))
-                    .collect()
-            };
+                });
 
             if let Ok(items) = result {
                 let mut pool = matched_items.lock();
