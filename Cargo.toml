@@ -12,7 +12,7 @@ license = "MIT"
 edition = "2018"
 
 [lib]
-name = "skim-httm-vendored"
+name = "skim"
 path = "src/lib.rs"
 
 [[bin]]
