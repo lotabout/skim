@@ -13,6 +13,15 @@ use crate::{CaseMatching, MatchEngineFactory, SkimItem};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
 
+static MATCHER_POOL: Lazy<ThreadPool> = Lazy::new(|| {
+    const DEFAULT_STACK_SIZE: usize = 1_048_576;
+
+    rayon::ThreadPoolBuilder::new()
+        .stack_size(DEFAULT_STACK_SIZE)
+        .build()
+        .expect("Could not initialize rayon threadpool")
+});
+
 //==============================================================================
 pub struct MatcherControl {
     stopped: Arc<AtomicBool>,
