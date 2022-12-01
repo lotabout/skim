@@ -469,7 +469,7 @@ mod tests {
         let input = "ab";
         let ansistring = ANSIParser::default().parse_ansi(input);
 
-        assert_eq!(false, ansistring.has_attrs());
+        assert!(!ansistring.has_attrs());
 
         let mut it = ansistring.iter();
         assert_eq!(Some(('a', Attr::default())), it.next());
