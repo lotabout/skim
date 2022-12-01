@@ -4,11 +4,11 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use rayon::prelude::*;
+use once_cell::sync::Lazy;
 
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
-use clap::__macro_refs::once_cell::sync::Lazy;
 use defer_drop::DeferDrop;
 use rayon::ThreadPool;
 use std::rc::Rc;
