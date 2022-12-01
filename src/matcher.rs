@@ -3,11 +3,24 @@ use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
+use rayon::prelude::*;
+use once_cell::sync::Lazy;
+
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
 use defer_drop::DeferDrop;
+use rayon::ThreadPool;
 use std::rc::Rc;
+
+static MATCHER_POOL: Lazy<ThreadPool> = Lazy::new(|| {
+    const DEFAULT_STACK_SIZE: usize = 1_048_576;
+
+    rayon::ThreadPoolBuilder::new()
+        .stack_size(DEFAULT_STACK_SIZE)
+        .build()
+        .expect("Could not initialize rayon threadpool")
+});
 
 //==============================================================================
 pub struct MatcherControl {
@@ -89,27 +102,29 @@ impl Matcher {
             //    check https://doc.rust-lang.org/std/result/enum.Result.html#method.from_iter
 
             trace!("matcher start, total: {}", items.len());
-            let result: Result<Vec<_>, _> = items
-                .iter()
-                .enumerate()
-                .filter_map(|(index, item)| {
-                    processed.fetch_add(1, Ordering::Relaxed);
-                    if stopped.load(Ordering::Relaxed) {
-                        Some(Err("matcher killed"))
-                    } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
-                        matched.fetch_add(1, Ordering::Relaxed);
-                        Some(Ok(MatchedItem {
-                            item: item.clone(),
-                            rank: match_result.rank,
-                            matched_range: Some(match_result.matched_range),
-                            item_idx: (num_taken + index) as u32,
-                        }))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
+            let result: Result<Vec<_>, _> = MATCHER_POOL.install(|| {
+                items
+                    .into_par_iter()
+                    .enumerate()
+                    .filter_map(|(index, item)| {
+                        processed.fetch_add(1, Ordering::Relaxed);
+                        if stopped.load(Ordering::Relaxed) {
+                            Some(Err("matcher killed"))
+                        } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
+                            matched.fetch_add(1, Ordering::Relaxed);
+                            Some(Ok(MatchedItem {
+                                item: item.clone(),
+                                rank: match_result.rank,
+                                matched_range: Some(match_result.matched_range),
+                                item_idx: (num_taken + index) as u32,
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            });
+            
             if let Ok(items) = result {
                 let mut pool = matched_items.lock();
                 *pool = items;
