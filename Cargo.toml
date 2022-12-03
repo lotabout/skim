@@ -41,6 +41,7 @@ chrono = "0.4.22"
 crossbeam = "0.8.2"
 beef = "0.5.2" # compact cow
 defer-drop = "1.2.0"
+once_cell = { version = "1.16.0", default-features = false }
 
 [features]
 default = ["cli"]
