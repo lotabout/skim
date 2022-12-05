@@ -9,7 +9,7 @@ use rayon::ThreadPool;
 
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
-use crate::{CaseMatching, MatchEngineFactory};
+use crate::{CaseMatching, MatchEngineFactory, MatchRange};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
 
@@ -78,7 +78,7 @@ impl Matcher {
         self
     }
 
-    pub fn run<C>(&self, query: &str, item_pool: Arc<DeferDrop<ItemPool>>, callback: C) -> MatcherControl
+    pub fn run<C>(&self, disabled: bool, query: &str, item_pool: Arc<DeferDrop<ItemPool>>, callback: C) -> MatcherControl
     where
         C: Fn(Arc<SpinLock<Vec<MatchedItem>>>) + Send + 'static,
     {
@@ -109,7 +109,16 @@ impl Matcher {
                     .enumerate()
                     .filter_map(|(index, item)| {
                         processed.fetch_add(1, Ordering::Relaxed);
-                        if stopped.load(Ordering::Relaxed) {
+                        if disabled {
+                            Some(Ok(MatchedItem {
+                                item: item.clone(),
+                                rank: [0i32; 4],
+                                matched_range: Some({
+                                    MatchRange::Chars(vec![0usize])
+                                }),
+                                item_idx: (num_taken + index) as u32,
+                            }))
+                        } else if stopped.load(Ordering::Relaxed) {
                             Some(Err("matcher killed"))
                         } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
                             matched.fetch_add(1, Ordering::Relaxed);
