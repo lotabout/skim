@@ -728,7 +728,7 @@ impl Model {
         };
 
         let tx = self.tx.clone();
-        let new_matcher_control = matcher.run(self.disabled, &query, self.item_pool.clone(), move |_| {
+        let new_matcher_control = matcher.run(&query, self.disabled, self.item_pool.clone(), move |_| {
             // notify refresh immediately
             let _ = tx.send((Key::Null, Event::EvHeartBeat));
         });
