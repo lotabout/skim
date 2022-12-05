@@ -54,6 +54,7 @@ pub struct Model {
     select1: bool,
     exit0: bool,
     sync: bool,
+    disabled: bool,
 
     use_regex: bool,
     regex_matcher: Matcher,
@@ -117,6 +118,8 @@ impl Model {
             DEFAULT_CRITERION.clone()
         };
 
+        let disabled = options.disabled;
+
         let rank_builder = Arc::new(RankBuilder::new(criterion));
 
         let selection = Selection::with_options(options).theme(theme.clone());
@@ -157,6 +160,7 @@ impl Model {
             select1: false,
             exit0: false,
             sync: false,
+            disabled,
             use_regex: options.regex,
             regex_matcher,
             matcher,
@@ -724,7 +728,7 @@ impl Model {
         };
 
         let tx = self.tx.clone();
-        let new_matcher_control = matcher.run(&query, self.item_pool.clone(), move |_| {
+        let new_matcher_control = matcher.run(&query, self.disabled, self.item_pool.clone(), move |_| {
             // notify refresh immediately
             let _ = tx.send((Key::Null, Event::EvHeartBeat));
         });
