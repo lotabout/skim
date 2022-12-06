@@ -150,22 +150,21 @@ pub enum Matches<'a> {
 pub struct DisplayContext<'a> {
     pub text: &'a str,
     pub score: i32,
-    pub matches: Option<Box<Matches<'a>>>,
+    pub matches: Option<Matches<'a>>,
     pub container_width: usize,
     pub highlight_attr: Attr,
 }
 
 impl<'a> From<DisplayContext<'a>> for AnsiString<'a> {
     fn from(context: DisplayContext<'a>) -> Self {
-        match context.matches.as_deref() {
-            Some(Matches::CharIndices(indices)) => AnsiString::from((context.text, *indices, context.highlight_attr)),
-            Some(Matches::CharRange(start, end)) => AnsiString::new_str(
-                context.text,
-                vec![(context.highlight_attr, (*start as u32, *end as u32))],
-            ),
+        match context.matches {
+            Some(Matches::CharIndices(indices)) => AnsiString::from((context.text, indices, context.highlight_attr)),
+            Some(Matches::CharRange(start, end)) => {
+                AnsiString::new_str(context.text, vec![(context.highlight_attr, (start as u32, end as u32))])
+            }
             Some(Matches::ByteRange(start, end)) => {
-                let ch_start = context.text[..*start].chars().count();
-                let ch_end = ch_start + context.text[*start..*end].chars().count();
+                let ch_start = context.text[..start].chars().count();
+                let ch_end = ch_start + context.text[start..end].chars().count();
                 AnsiString::new_str(
                     context.text,
                     vec![(context.highlight_attr, (ch_start as u32, ch_end as u32))],
