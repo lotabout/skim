@@ -156,35 +156,34 @@ impl SkimItemReader {
     }
 
     /// helper: convert bufread into SkimItemReceiver
+    #[allow(unused_assignments)]
     fn raw_bufread(&self, mut source: impl BufRead + Send + 'static) -> SkimItemReceiver {
         let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(self.option.buf_size);
         let line_ending = self.option.line_ending;
+
         thread::spawn(move || {
-            let mut buffer = Vec::with_capacity(1024);
+            let mut buffer = Vec::new();
+            let tx_item_clone = tx_item.clone();
             loop {
-                buffer.clear();
-                // start reading
-                match source.read_until(line_ending, &mut buffer) {
-                    Ok(n) => {
-                        if n == 0 {
-                            break;
-                        }
+                // first, read lots of bytes into the buffer
+                buffer = source.fill_buf().unwrap().to_vec();
+                source.consume(buffer.len());
 
-                        if buffer.ends_with(&[b'\r', b'\n']) {
-                            buffer.pop();
-                            buffer.pop();
-                        } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
-                            buffer.pop();
-                        }
+                // now, keep reading to make sure we haven't stopped in the middle of a word.
+                // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
+                // and bytes_buffer will be extended from slice to accommodate the new bytes
+                source.read_until(line_ending, &mut buffer).unwrap();
 
-                        let string = String::from_utf8_lossy(&buffer);
-                        let result = tx_item.send(Arc::new(string.into_owned()));
-                        if result.is_err() {
-                            break;
-                        }
-                    }
-                    Err(_err) => {} // String not UTF8 or other error, skip.
+                // break when there is nothing left to read
+                if buffer.is_empty() {
+                    break;
                 }
+
+                // make_ascii_lowercase(), above, and from_utf8_mut(), both convert in place
+                std::str::from_utf8_mut(&mut buffer)
+                    .unwrap()
+                    .split(&['\r', '\n', '\0', line_ending as char])
+                    .for_each(|line| tx_item_clone.send(Arc::new(line.to_owned())).unwrap());
             }
         });
         rx_item
