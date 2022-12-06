@@ -443,9 +443,7 @@ impl Selection {
         let item_text = item.text();
         let container_width = screen_width - 2;
 
-        let binding = &matched_item.md_infallible().matched_range;
-
-        let opt_matches = match binding {
+        let opt_matches = match &matched_item.md_infallible().matched_range {
             Some(MatchRange::Chars(ref matched_indices)) => Some(Matches::CharIndices(matched_indices)),
             Some(MatchRange::ByteRange(start, end)) => Some(Matches::ByteRange(*start, *end)),
             _ => None,
