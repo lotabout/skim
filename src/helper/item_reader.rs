@@ -166,13 +166,19 @@ impl SkimItemReader {
             let tx_item_clone = tx_item.clone();
             loop {
                 // first, read lots of bytes into the buffer
-                buffer = source.fill_buf().unwrap().to_vec();
+                buffer = if let Ok(res) = source.fill_buf() {
+                    res.to_vec()
+                } else {
+                    break;
+                };
                 source.consume(buffer.len());
 
                 // now, keep reading to make sure we haven't stopped in the middle of a word.
                 // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
                 // and bytes_buffer will be extended from slice to accommodate the new bytes
-                source.read_until(line_ending, &mut buffer).unwrap();
+                if source.read_until(line_ending, &mut buffer).is_err() {
+                    break;
+                };
 
                 // break when there is nothing left to read
                 if buffer.is_empty() {
@@ -187,10 +193,12 @@ impl SkimItemReader {
                 }
 
                 // make_ascii_lowercase(), above, and from_utf8_mut(), both convert in place
-                std::str::from_utf8_mut(&mut buffer)
-                    .unwrap()
-                    .split(line_ending as char)
-                    .for_each(|line| tx_item_clone.send(Arc::new(line.to_owned())).unwrap());
+                match std::str::from_utf8_mut(&mut buffer) {
+                    Ok(buf_str) => buf_str
+                        .split(line_ending as char)
+                        .for_each(|line| tx_item_clone.send(Arc::new(line.to_owned())).unwrap()),
+                    Err(_) => break,
+                }
             }
         });
         rx_item
