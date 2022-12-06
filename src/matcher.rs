@@ -114,7 +114,7 @@ impl Matcher {
 
             let result: Result<Vec<_>, _> = MATCHER_POOL.install(|| {
                 items
-                    .into_par_iter()
+                    .par_iter()
                     .enumerate()
                     .filter_map(|(index, item)| {
                         processed.fetch_add(1, Ordering::Relaxed);
