@@ -195,7 +195,7 @@ impl SkimItemReader {
                             if buffer.ends_with(&[b'\r', b'\n']) {
                                 line_buf.pop();
                                 line_buf.pop();
-                            } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
+                            } else if buffer.ends_with(&[b'\0']) {
                                 line_buf.pop();
                             }
 
