@@ -434,7 +434,7 @@ where
     let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
     while let Ok(_event) = rx_preview.recv() {
-        if let Some(thread)  = preview_thread {
+        if let Some(thread) = preview_thread {
             thread.kill();
             preview_thread = None;
         }
