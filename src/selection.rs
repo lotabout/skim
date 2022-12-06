@@ -445,16 +445,16 @@ impl Selection {
 
         let binding = &matched_item.md_infallible().matched_range;
 
-        let matches = match binding {
-            Some(MatchRange::Chars(ref matched_indices)) => Matches::CharIndices(matched_indices),
-            Some(MatchRange::ByteRange(start, end)) => Matches::ByteRange(*start, *end),
-            _ => Matches::None,
+        let opt_matches = match binding {
+            Some(MatchRange::Chars(ref matched_indices)) => Some(Box::new(Matches::CharIndices(matched_indices))),
+            Some(MatchRange::ByteRange(start, end)) => Some(Box::new(Matches::ByteRange(*start, *end))),
+            _ => None,
         };
 
         let context = DisplayContext {
             text: &item_text,
             score: 0,
-            matches,
+            matches: opt_matches,
             container_width,
             highlight_attr: matched_attr,
         };

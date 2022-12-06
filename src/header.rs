@@ -6,7 +6,7 @@ use crate::item::ItemPool;
 use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
 use crate::util::{clear_canvas, print_item, str_lines, LinePrinter};
-use crate::{DisplayContext, Matches, SkimOptions};
+use crate::{DisplayContext, SkimOptions};
 use defer_drop::DeferDrop;
 use std::cmp::max;
 use std::sync::Arc;
@@ -123,7 +123,7 @@ impl Draw for Header {
             let context = DisplayContext {
                 text: &item.text(),
                 score: 0,
-                matches: Matches::None,
+                matches: None,
                 container_width: screen_width - 2,
                 highlight_attr: self.theme.header(),
             };

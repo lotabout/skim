@@ -142,7 +142,6 @@ impl<T: AsRef<str> + Send + Sync + 'static> SkimItem for T {
 //------------------------------------------------------------------------------
 // Display Context
 pub enum Matches<'a> {
-    None,
     CharIndices(&'a [usize]),
     CharRange(usize, usize),
     ByteRange(usize, usize),
@@ -151,27 +150,28 @@ pub enum Matches<'a> {
 pub struct DisplayContext<'a> {
     pub text: &'a str,
     pub score: i32,
-    pub matches: Matches<'a>,
+    pub matches: Option<Box<Matches<'a>>>,
     pub container_width: usize,
     pub highlight_attr: Attr,
 }
 
 impl<'a> From<DisplayContext<'a>> for AnsiString<'a> {
     fn from(context: DisplayContext<'a>) -> Self {
-        match context.matches {
-            Matches::CharIndices(indices) => AnsiString::from((context.text, indices, context.highlight_attr)),
-            Matches::CharRange(start, end) => {
-                AnsiString::new_str(context.text, vec![(context.highlight_attr, (start as u32, end as u32))])
-            }
-            Matches::ByteRange(start, end) => {
-                let ch_start = context.text[..start].chars().count();
-                let ch_end = ch_start + context.text[start..end].chars().count();
+        match context.matches.as_deref() {
+            Some(Matches::CharIndices(indices)) => AnsiString::from((context.text, *indices, context.highlight_attr)),
+            Some(Matches::CharRange(start, end)) => AnsiString::new_str(
+                context.text,
+                vec![(context.highlight_attr, (*start as u32, *end as u32))],
+            ),
+            Some(Matches::ByteRange(start, end)) => {
+                let ch_start = context.text[..*start].chars().count();
+                let ch_end = ch_start + context.text[*start..*end].chars().count();
                 AnsiString::new_str(
                     context.text,
                     vec![(context.highlight_attr, (ch_start as u32, ch_end as u32))],
                 )
             }
-            Matches::None => AnsiString::new_str(context.text, vec![]),
+            None => AnsiString::new_str(context.text, vec![]),
         }
     }
 }
