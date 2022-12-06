@@ -169,10 +169,10 @@ impl Selection {
             if self
                 .selector
                 .as_ref()
-                .map(|s| s.should_select(item.item_idx as usize, item.item.as_ref()))
+                .map(|s| s.should_select(item.md_infallible().item_idx as usize, item.item.as_ref()))
                 .unwrap_or(false)
             {
-                self.act_select_raw_item(current_run_num, item.item_idx, item.item.clone());
+                self.act_select_raw_item(current_run_num, item.md_infallible().item_idx, item.item.clone());
             }
         }
         debug!("done perform pre selection for {} items", items.len());
@@ -228,7 +228,7 @@ impl Selection {
             .items
             .get(cursor)
             .unwrap_or_else(|| panic!("model:act_toggle: failed to get item {}", cursor));
-        let index = (current_run_num(), current_item.item_idx);
+        let index = (current_run_num(), current_item.md_infallible().item_idx);
         if !self.selected.contains_key(&index) {
             self.selected.insert(index, current_item.item.clone());
         } else {
@@ -244,7 +244,7 @@ impl Selection {
 
         let run_num = current_run_num();
         for current_item in self.items.iter() {
-            let index = (run_num, current_item.item_idx);
+            let index = (run_num, current_item.md_infallible().item_idx);
             if !self.selected.contains_key(&index) {
                 self.selected.insert(index, current_item.item.clone());
             } else {
@@ -254,7 +254,7 @@ impl Selection {
     }
 
     pub fn act_select_matched(&mut self, run_num: u32, matched: MatchedItem) {
-        self.act_select_raw_item(run_num, matched.item_idx, matched.item.clone());
+        self.act_select_raw_item(run_num, matched.md_infallible().item_idx, matched.item.clone());
     }
 
     pub fn act_select_raw_item(&mut self, run_num: u32, item_index: u32, item: Arc<dyn SkimItem>) {
@@ -272,7 +272,8 @@ impl Selection {
         let run_num = current_run_num();
         for current_item in self.items.iter() {
             let item = current_item.item.clone();
-            self.selected.insert((run_num, current_item.item_idx), item);
+            self.selected
+                .insert((run_num, current_item.md_infallible().item_idx), item);
         }
     }
 
@@ -431,7 +432,7 @@ impl Selection {
         };
 
         // print selection cursor
-        let index = (current_run_num(), matched_item.item_idx);
+        let index = (current_run_num(), matched_item.md_infallible().item_idx);
         if self.selected.contains_key(&index) {
             let _ = canvas.print_with_attr(row, 1, ">", default_attr.extend(self.theme.selected()));
         } else {
@@ -442,9 +443,11 @@ impl Selection {
         let item_text = item.text();
         let container_width = screen_width - 2;
 
-        let matches = match matched_item.matched_range {
+        let binding = &matched_item.md_infallible().matched_range;
+
+        let matches = match binding {
             Some(MatchRange::Chars(ref matched_indices)) => Matches::CharIndices(matched_indices),
-            Some(MatchRange::ByteRange(start, end)) => Matches::ByteRange(start, end),
+            Some(MatchRange::ByteRange(start, end)) => Matches::ByteRange(*start, *end),
             _ => Matches::None,
         };
 
@@ -460,7 +463,7 @@ impl Selection {
 
         let mut printer = if display_content.stripped() == item_text {
             // need to display the match content
-            let (match_start_char, match_end_char) = match matched_item.matched_range {
+            let (match_start_char, match_end_char) = match matched_item.md_infallible().matched_range {
                 Some(MatchRange::Chars(ref matched_indices)) => {
                     if !matched_indices.is_empty() {
                         (matched_indices[0], matched_indices[matched_indices.len() - 1] + 1)
