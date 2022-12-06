@@ -15,10 +15,10 @@ use crate::helper::item::DefaultSkimItem;
 use crate::reader::CommandCollector;
 use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
 
-const CMD_CHANNEL_SIZE: usize = 1024;
-const ITEM_CHANNEL_SIZE: usize = 10240;
+const CMD_CHANNEL_SIZE: usize = 1_024;
+const ITEM_CHANNEL_SIZE: usize = 16_384;
 const DELIMITER_STR: &str = r"[\t\n ]+";
-const READ_BUFFER_SIZE: usize = 1024;
+const READ_BUFFER_SIZE: usize = 131_072;
 
 pub enum CollectorInput {
     Pipe(Box<dyn BufRead + Send>),
