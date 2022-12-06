@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 
-use crate::item::{ItemPool, MatchedItem};
+use crate::item::{ItemPool, MatchedItem, MatchedItemMetadata};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory};
 use defer_drop::DeferDrop;
@@ -98,11 +98,9 @@ impl Matcher {
         let matched_clone = matched.clone();
         let matched_items = Arc::new(SpinLock::new(Vec::new()));
         let matched_items_clone = matched_items.clone();
-        
+
         // shortcut for when there is no query or query is disabled
-        static DUMMY_RANK: [i32; 4] = [0i32; 4];
-        static DUMMY_IDX: u32 = 0u32;
-        let matcher_disabled = if disabled || query.is_empty() { true } else { false };
+        let matcher_disabled = disabled || query.is_empty();
 
         let thread_matcher = thread::spawn(move || {
             let num_taken = item_pool.num_taken();
@@ -123,9 +121,7 @@ impl Matcher {
                         if matcher_disabled {
                             Some(Ok(MatchedItem {
                                 item: item.clone(),
-                                rank: DUMMY_RANK,
-                                matched_range: None,
-                                item_idx: DUMMY_IDX,
+                                metadata: None,
                             }))
                         } else if stopped.load(Ordering::Relaxed) {
                             Some(Err("matcher killed"))
@@ -133,9 +129,15 @@ impl Matcher {
                             matched.fetch_add(1, Ordering::Relaxed);
                             Some(Ok(MatchedItem {
                                 item: item.clone(),
-                                rank: match_result.rank,
-                                matched_range: Some(match_result.matched_range),
-                                item_idx: (num_taken + index) as u32,
+                                metadata: {
+                                    Some(Box::new({
+                                        MatchedItemMetadata {
+                                            rank: match_result.rank,
+                                            matched_range: Some(match_result.matched_range),
+                                            item_idx: (num_taken + index) as u32,
+                                        }
+                                    }))
+                                },
                             }))
                         } else {
                             None

@@ -64,18 +64,36 @@ impl RankBuilder {
 #[derive(Clone)]
 pub struct MatchedItem {
     pub item: Arc<dyn SkimItem>,
+    pub metadata: Option<Box<MatchedItemMetadata>>,
+}
+
+#[derive(Clone)]
+pub struct MatchedItemMetadata {
     pub rank: Rank,
     pub matched_range: Option<MatchRange>, // range of chars that matched the pattern
     pub item_idx: u32,
 }
 
-impl MatchedItem {}
+static DUMMY_METADATA: MatchedItemMetadata = MatchedItemMetadata {
+    rank: [0i32; 4],
+    matched_range: None,
+    item_idx: 0u32,
+};
+
+impl MatchedItem {
+    pub fn md_infallible(&self) -> &MatchedItemMetadata {
+        match &self.metadata {
+            Some(md) => md.as_ref(),
+            None => &DUMMY_METADATA,
+        }
+    }
+}
 
 use std::cmp::Ordering as CmpOrd;
 
 impl PartialEq for MatchedItem {
     fn eq(&self, other: &Self) -> bool {
-        self.rank.eq(&other.rank)
+        self.md_infallible().rank.eq(&other.md_infallible().rank)
     }
 }
 
@@ -83,13 +101,13 @@ impl std::cmp::Eq for MatchedItem {}
 
 impl PartialOrd for MatchedItem {
     fn partial_cmp(&self, other: &Self) -> Option<CmpOrd> {
-        self.rank.partial_cmp(&other.rank)
+        self.md_infallible().rank.partial_cmp(&other.md_infallible().rank)
     }
 }
 
 impl Ord for MatchedItem {
     fn cmp(&self, other: &Self) -> CmpOrd {
-        self.rank.cmp(&other.rank)
+        self.md_infallible().rank.cmp(&other.md_infallible().rank)
     }
 }
 

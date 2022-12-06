@@ -17,7 +17,7 @@ use crate::event::{Event, EventHandler, EventReceiver, EventSender};
 use crate::global::current_run_num;
 use crate::header::Header;
 use crate::input::parse_action_arg;
-use crate::item::{parse_criteria, ItemPool, MatchedItem, RankBuilder, RankCriteria};
+use crate::item::{parse_criteria, ItemPool, MatchedItem, MatchedItemMetadata, RankBuilder, RankCriteria};
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
@@ -482,9 +482,15 @@ impl Model {
         let item_idx = (max(new_len, 1) - 1) as u32;
         let matched_item = MatchedItem {
             item,
-            rank: self.rank_builder.build_rank(0, 0, 0, item_len),
-            matched_range: Some(MatchRange::ByteRange(0, 0)),
-            item_idx,
+            metadata: {
+                Some(Box::new({
+                    MatchedItemMetadata {
+                        rank: self.rank_builder.build_rank(0, 0, 0, item_len),
+                        matched_range: Some(MatchRange::ByteRange(0, 0)),
+                        item_idx,
+                    }
+                }))
+            },
         };
 
         self.selection.act_select_matched(current_run_num(), matched_item);

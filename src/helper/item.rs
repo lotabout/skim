@@ -112,18 +112,18 @@ impl SkimItem for DefaultSkimItem {
     }
 
     fn display<'a>(&'a self, context: DisplayContext<'a>) -> AnsiString<'a> {
-        let new_fragments: Vec<(Attr, (u32, u32))> = match context.matches {
-            Matches::CharIndices(indices) => indices
+        let new_fragments: Vec<(Attr, (u32, u32))> = match context.matches.as_deref() {
+            Some(Matches::CharIndices(indices)) => indices
                 .iter()
                 .map(|&idx| (context.highlight_attr, (idx as u32, idx as u32 + 1)))
                 .collect(),
-            Matches::CharRange(start, end) => vec![(context.highlight_attr, (start as u32, end as u32))],
-            Matches::ByteRange(start, end) => {
-                let ch_start = context.text[..start].chars().count();
-                let ch_end = ch_start + context.text[start..end].chars().count();
+            Some(Matches::CharRange(start, end)) => vec![(context.highlight_attr, (*start as u32, *end as u32))],
+            Some(Matches::ByteRange(start, end)) => {
+                let ch_start = context.text[..*start].chars().count();
+                let ch_end = ch_start + context.text[*start..*end].chars().count();
                 vec![(context.highlight_attr, (ch_start as u32, ch_end as u32))]
             }
-            Matches::None => vec![],
+            None => vec![],
         };
         let mut ret = self.text.clone();
         ret.override_attrs(new_fragments);
