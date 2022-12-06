@@ -98,6 +98,11 @@ impl Matcher {
         let matched_clone = matched.clone();
         let matched_items = Arc::new(SpinLock::new(Vec::new()));
         let matched_items_clone = matched_items.clone();
+        
+        // shortcut for when there is no query or query is disabled
+        static DUMMY_RANK: [i32; 4] = [0i32; 4];
+        static DUMMY_IDX: u32 = 0u32;
+        let matcher_disabled = if disabled || query.is_empty() { true } else { false };
 
         let thread_matcher = thread::spawn(move || {
             let num_taken = item_pool.num_taken();
@@ -115,12 +120,12 @@ impl Matcher {
                     .enumerate()
                     .filter_map(|(index, item)| {
                         processed.fetch_add(1, Ordering::Relaxed);
-                        if disabled {
+                        if matcher_disabled {
                             Some(Ok(MatchedItem {
                                 item: item.clone(),
-                                rank: [0i32; 4],
+                                rank: DUMMY_RANK,
                                 matched_range: None,
-                                item_idx: (num_taken + index) as u32,
+                                item_idx: DUMMY_IDX,
                             }))
                         } else if stopped.load(Ordering::Relaxed) {
                             Some(Err("matcher killed"))
