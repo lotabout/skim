@@ -126,36 +126,36 @@ impl FuzzyEngine {
 impl MatchEngine for FuzzyEngine {
     fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
         // iterate over all matching fields:
-        let mut matched_result = None;
         let item_text = item.text();
         let default_range = [(0, item_text.len())];
-        for &(start, end) in item.get_matching_ranges().unwrap_or(&default_range) {
-            let start = min(start, item_text.len());
-            let end = min(end, item_text.len());
-            matched_result = self.fuzzy_match(&item_text[start..end], &self.query).map(|(s, vec)| {
-                if start != 0 {
-                    let start_char = &item_text[..start].chars().count();
-                    (s, vec.iter().map(|x| x + start_char).collect())
-                } else {
-                    (s, vec)
-                }
+        let matched_result: Option<(i64, Vec<usize>)> = item
+            .get_matching_ranges()
+            .unwrap_or(&default_range)
+            .iter()
+            .find_map(|(start, end)| {
+                let start = min(*start, item_text.len());
+                let end = min(*end, item_text.len());
+                self.fuzzy_match(&item_text[start..end], &self.query).map(|(s, vec)| {
+                    if start != 0 {
+                        let start_char = &item_text[..start].chars().count();
+                        (s, vec.iter().map(|x| x + start_char).collect())
+                    } else {
+                        (s, vec)
+                    }
+                })
             });
 
-            if matched_result.is_some() {
-                break;
-            }
-        }
-
-        if matched_result == None {
+        let (score, matched_range) = if let Some((score, matched_range)) = matched_result {
+            (score, matched_range)
+        } else {
             return None;
-        }
-
-        let (score, matched_range) = matched_result.unwrap();
+        };
 
         let begin = *matched_range.first().unwrap_or(&0);
         let end = *matched_range.last().unwrap_or(&0);
 
         let item_len = item_text.len();
+
         Some(MatchResult {
             rank: self.rank_builder.build_rank(score as i32, begin, end, item_len),
             matched_range: MatchRange::Chars(matched_range),
