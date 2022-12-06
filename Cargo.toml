@@ -51,5 +51,4 @@ default = ["cli"]
 cli = ["dep:clap", "dep:atty", "dep:shlex", "dep:env_logger"]
 
 [profile.release]
-lto = true
 debug = false
