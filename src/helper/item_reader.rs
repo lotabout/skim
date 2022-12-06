@@ -179,10 +179,17 @@ impl SkimItemReader {
                     break;
                 }
 
+                if buffer.ends_with(&[b'\r', b'\n']) {
+                    buffer.pop();
+                    buffer.pop();
+                } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
+                    buffer.pop();
+                }
+
                 // make_ascii_lowercase(), above, and from_utf8_mut(), both convert in place
                 std::str::from_utf8_mut(&mut buffer)
                     .unwrap()
-                    .split(&['\r', '\n', '\0', line_ending as char])
+                    .split(line_ending as char)
                     .for_each(|line| tx_item_clone.send(Arc::new(line.to_owned())).unwrap());
             }
         });
