@@ -824,7 +824,7 @@ dependencies = [
 [[package]]
 name = "timer"
 version = "0.2.0"
-source = "git+https://github.com/kimono-koans/timer.rs#85c9e56ab20ea530c934433636406f8b585bef59"
+source = "git+https://github.com/Yoric/timer.rs#4ba32a90432c50224d5a2c447cb213e8432b10a8"
 dependencies = [
  "chrono",
 ]
