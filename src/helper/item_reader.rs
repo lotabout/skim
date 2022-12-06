@@ -185,18 +185,26 @@ impl SkimItemReader {
                     break;
                 }
 
-                if buffer.ends_with(&[b'\r', b'\n']) {
-                    buffer.pop();
-                    buffer.pop();
-                } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
-                    buffer.pop();
-                }
+                // from_utf8_mut(), convert in place
+                match std::str::from_utf8(&buffer) {
+                    Ok(buf_str) => {
+                        let res = buf_str.split(line_ending as char).try_for_each(|line| {
+                            // pop things we don't want in the buffer
+                            let mut line_buf = line.to_owned();
 
-                // make_ascii_lowercase(), above, and from_utf8_mut(), both convert in place
-                match std::str::from_utf8_mut(&mut buffer) {
-                    Ok(buf_str) => buf_str
-                        .split(line_ending as char)
-                        .for_each(|line| tx_item_clone.send(Arc::new(line.to_owned())).unwrap()),
+                            if buffer.ends_with(&[b'\r', b'\n']) {
+                                line_buf.pop();
+                                line_buf.pop();
+                            } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
+                                line_buf.pop();
+                            }
+
+                            tx_item_clone.send(Arc::new(line_buf))
+                        });
+                        if res.is_err() {
+                            break;
+                        }
+                    }
                     Err(_) => break,
                 }
             }
