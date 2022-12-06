@@ -94,13 +94,13 @@ impl SkimItem for DefaultSkimItem {
     }
 
     fn output(&self) -> Cow<str> {
-        if self.orig_text.is_some() {
+        if let Some(orig_text) = &self.orig_text {
             if self.text.has_attrs() {
                 let mut ansi_parser: ANSIParser = Default::default();
-                let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
+                let text = ansi_parser.parse_ansi(orig_text);
                 text.into_inner()
             } else {
-                Cow::Borrowed(self.orig_text.as_ref().unwrap())
+                Cow::Borrowed(orig_text)
             }
         } else {
             Cow::Borrowed(self.text.stripped())
