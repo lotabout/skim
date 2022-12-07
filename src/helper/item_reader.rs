@@ -172,49 +172,50 @@ impl SkimItemReader {
 
     #[allow(unused_assignments)]
     fn ingest_loop(mut source: impl BufRead + Send + 'static, line_ending: u8) -> Vec<String> {
-        let mut buffer = Vec::new();
+        let mut bytes_buffer = Vec::new();
         let mut res = Vec::new();
 
         loop {
             // first, read lots of bytes into the buffer
-            buffer = if let Ok(res) = source.fill_buf() {
+            bytes_buffer = if let Ok(res) = source.fill_buf() {
                 res.to_vec()
             } else {
                 break;
             };
-            source.consume(buffer.len());
+            source.consume(bytes_buffer.len());
 
             // now, keep reading to make sure we haven't stopped in the middle of a word.
             // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
             // and bytes_buffer will be extended from slice to accommodate the new bytes
-            if source.read_until(line_ending, &mut buffer).is_err() {
+            if source.read_until(line_ending, &mut bytes_buffer).is_err() {
                 break;
             };
 
             // break when there is nothing left to read
-            if buffer.is_empty() {
+            if bytes_buffer.is_empty() {
                 break;
             }
 
-            res.extend_from_slice(&buffer);
-        }
+            let mut vec_str = match std::str::from_utf8_mut(&mut bytes_buffer) {
+                Ok(unwrapped) => unwrapped
+                    .split(&['\n', line_ending as char])
+                    .map(|line| {
+                        if line.ends_with("\r\n") {
+                            line.trim_end_matches("\r\n")
+                        } else if line.ends_with('\r') {
+                            line.trim_end_matches('\r')
+                        } else {
+                            line
+                        }
+                    })
+                    .map(|line| line.to_owned())
+                    .collect::<Vec<String>>(),
+                Err(_) => vec![],
+            };
 
-        match std::str::from_utf8_mut(&mut res) {
-            Ok(unwrapped) => unwrapped
-                .split(&['\n', line_ending as char])
-                .map(|line| {
-                    if line.ends_with("\r\n") {
-                        line.trim_end_matches("\r\n")
-                    } else if line.ends_with('\r') {
-                        line.trim_end_matches('\r')
-                    } else {
-                        line
-                    }
-                })
-                .map(|line| line.to_owned())
-                .collect(),
-            Err(_) => vec![],
+            res.append(&mut vec_str)
         }
+        res
     }
 
     /// components_to_stop == 0 => all the threads have been stopped
