@@ -2,6 +2,7 @@
 use std::env;
 use std::error::Error;
 use std::io::{BufRead, BufReader};
+
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -18,7 +19,7 @@ use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
 const CMD_CHANNEL_SIZE: usize = 1_024;
 const ITEM_CHANNEL_SIZE: usize = 16_384;
 const DELIMITER_STR: &str = r"[\t\n ]+";
-const READ_BUFFER_SIZE: usize = 131_072;
+const READ_BUFFER_SIZE: usize = 65_536;
 
 pub enum CollectorInput {
     Pipe(Box<dyn BufRead + Send>),
@@ -156,60 +157,68 @@ impl SkimItemReader {
     }
 
     /// helper: convert bufread into SkimItemReceiver
-    #[allow(unused_assignments)]
-    fn raw_bufread(&self, mut source: impl BufRead + Send + 'static) -> SkimItemReceiver {
+    fn raw_bufread(&self, source: impl BufRead + Send + 'static) -> SkimItemReceiver {
         let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(self.option.buf_size);
         let line_ending = self.option.line_ending;
 
         thread::spawn(move || {
-            let mut buffer = Vec::new();
-            let tx_item_clone = tx_item.clone();
-            loop {
-                // first, read lots of bytes into the buffer
-                buffer = if let Ok(res) = source.fill_buf() {
-                    res.to_vec()
-                } else {
-                    break;
-                };
-                source.consume(buffer.len());
+            let _tx_item_clone = tx_item.clone();
 
-                // now, keep reading to make sure we haven't stopped in the middle of a word.
-                // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
-                // and bytes_buffer will be extended from slice to accommodate the new bytes
-                if source.read_until(line_ending, &mut buffer).is_err() {
-                    break;
-                };
-
-                // break when there is nothing left to read
-                if buffer.is_empty() {
-                    break;
-                }
-
-                // from_utf8_mut(), convert in place
-                match std::str::from_utf8(&buffer) {
-                    Ok(buf_str) => {
-                        let res = buf_str.split(line_ending as char).try_for_each(|line| {
-                            // pop things we don't want in the buffer
-                            let mut line_buf = line.to_owned();
-
-                            if buffer.ends_with(&[b'\r', b'\n']) {
-                                line_buf.pop();
-                                line_buf.pop();
-                            } else if buffer.ends_with(&[b'\0']) {
-                                line_buf.pop();
-                            }
-
-                            tx_item_clone.send(Arc::new(line_buf))
-                        });
-                        if res.is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
+            // from_utf8_mut(), convert in place
+            let _ = Self::ingest_loop(source, line_ending)
+                .into_iter()
+                .try_for_each(|line| tx_item.send(Arc::new(line)));
         });
         rx_item
+    }
+
+    #[allow(unused_assignments)]
+    fn ingest_loop(mut source: impl BufRead + Send + 'static, line_ending: u8) -> Vec<String> {
+        let mut buffer = Vec::new();
+        let mut res = Vec::new();
+
+        loop {
+            // first, read lots of bytes into the buffer
+            buffer = if let Ok(res) = source.fill_buf() {
+                res.to_vec()
+            } else {
+                break;
+            };
+            source.consume(buffer.len());
+
+            // now, keep reading to make sure we haven't stopped in the middle of a word.
+            // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
+            // and bytes_buffer will be extended from slice to accommodate the new bytes
+            if source.read_until(line_ending, &mut buffer).is_err() {
+                break;
+            };
+
+            // break when there is nothing left to read
+            if buffer.is_empty() {
+                break;
+            }
+
+            if let Ok(string) = std::str::from_utf8(&buffer) {
+                res.extend(
+                    string
+                        .split(&['\n', line_ending as char])
+                        .map(|line| {
+                            if line.ends_with("\r\n") {
+                                line.trim_end_matches("\r\n")
+                            } else if line.ends_with('\r') {
+                                line.trim_end_matches('\r')
+                            } else {
+                                line
+                            }
+                        })
+                        .map(|line| line.to_owned()),
+                );
+            } else {
+                break;
+            };
+        }
+
+        res
     }
 
     /// components_to_stop == 0 => all the threads have been stopped
@@ -219,7 +228,7 @@ impl SkimItemReader {
         components_to_stop: Arc<AtomicUsize>,
         input: CollectorInput,
     ) -> (Receiver<Arc<dyn SkimItem>>, Sender<i32>) {
-        let (command, mut source) = match input {
+        let (command, source) = match input {
             CollectorInput::Pipe(pipe) => (None, pipe),
             CollectorInput::Command(cmd) => get_command_output(&cmd).expect("command not found"),
         };
@@ -275,45 +284,18 @@ impl SkimItemReader {
             components_to_stop.fetch_add(1, Ordering::SeqCst);
             started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
-            let mut buffer = Vec::with_capacity(option.buf_size);
-            loop {
-                buffer.clear();
-
-                // start reading
-                match source.read_until(option.line_ending, &mut buffer) {
-                    Ok(n) => {
-                        if n == 0 {
-                            break;
-                        }
-
-                        if buffer.ends_with(&[b'\r', b'\n']) {
-                            buffer.pop();
-                            buffer.pop();
-                        } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
-                            buffer.pop();
-                        }
-
-                        let line = String::from_utf8_lossy(&buffer).to_string();
-
-                        let raw_item = DefaultSkimItem::new(
-                            line,
-                            option.use_ansi_color,
-                            &option.transform_fields,
-                            &option.matching_fields,
-                            &option.delimiter,
-                        );
-
-                        match tx_item.send(Arc::new(raw_item)) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                debug!("collector: failed to send item, quit");
-                                break;
-                            }
-                        }
-                    }
-                    Err(_err) => {} // String not UTF8 or other error, skip.
-                }
-            }
+            let _ = Self::ingest_loop(source, option.line_ending)
+                .into_iter()
+                .map(|line| {
+                    DefaultSkimItem::new(
+                        line,
+                        option.use_ansi_color,
+                        &option.transform_fields,
+                        &option.matching_fields,
+                        &option.delimiter,
+                    )
+                })
+                .try_for_each(|raw_item| tx_item.send(Arc::new(raw_item)));
 
             let _ = tx_interrupt_clone.send(1); // ensure the waiting thread will exit
             components_to_stop.fetch_sub(1, Ordering::SeqCst);
