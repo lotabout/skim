@@ -261,7 +261,7 @@ impl MatchResult {
 }
 
 pub trait MatchEngine: Sync + Send + Display {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult>;
+    fn match_item(&self, item: &dyn SkimItem) -> Option<MatchResult>;
 }
 
 pub trait MatchEngineFactory {

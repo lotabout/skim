@@ -46,7 +46,7 @@ impl RegexEngine {
 }
 
 impl MatchEngine for RegexEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
+    fn match_item(&self, item: &dyn SkimItem) -> Option<MatchResult> {
         let mut matched_result = None;
         let item_text = item.text();
         let default_range = [(0, item_text.len())];

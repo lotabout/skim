@@ -124,7 +124,7 @@ impl FuzzyEngine {
 }
 
 impl MatchEngine for FuzzyEngine {
-    fn match_item(&self, item: Arc<dyn SkimItem>) -> Option<MatchResult> {
+    fn match_item(&self, item: &dyn SkimItem) -> Option<MatchResult> {
         // iterate over all matching fields:
         let item_text = item.text();
         let default_range = [(0, item_text.len())];

@@ -122,7 +122,7 @@ impl Matcher {
                             }))
                         } else if stopped.load(Ordering::Relaxed) {
                             Some(Err("matcher killed"))
-                        } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
+                        } else if let Some(match_result) = matcher_engine.match_item(item.as_ref()) {
                             matched.fetch_add(1, Ordering::Relaxed);
                             Some(Ok(MatchedItem {
                                 item: item.clone(),

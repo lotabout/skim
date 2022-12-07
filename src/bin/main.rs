@@ -551,7 +551,7 @@ pub fn filter(
     let mut num_matched = 0;
     stream_of_item
         .into_iter()
-        .filter_map(|item| engine.match_item(item.clone()).map(|result| (item, result)))
+        .filter_map(|item| engine.match_item(item.as_ref()).map(|result| (item, result)))
         .try_for_each(|(item, _match_result)| {
             num_matched += 1;
             write!(stdout, "{}{}", item.output(), bin_option.output_ending)
