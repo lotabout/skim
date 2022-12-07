@@ -12,7 +12,7 @@ use crossbeam::channel::{bounded, Receiver, Sender};
 use regex::Regex;
 
 use crate::field::FieldRange;
-use crate::helper::item::DefaultSkimItem;
+use crate::helper::ingest::{ingest_loop, BuildOptions, SendRawOrBuild};
 use crate::reader::CommandCollector;
 use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
 
@@ -162,60 +162,9 @@ impl SkimItemReader {
         let line_ending = self.option.line_ending;
 
         thread::spawn(move || {
-            // from_utf8_mut(), convert in place
-            let _ = Self::ingest_loop(source, line_ending)
-                .into_iter()
-                .try_for_each(|line| tx_item.send(Arc::new(line)));
+            ingest_loop(source, line_ending, tx_item, SendRawOrBuild::Raw);
         });
         rx_item
-    }
-
-    #[allow(unused_assignments)]
-    fn ingest_loop(mut source: impl BufRead + Send + 'static, line_ending: u8) -> Vec<String> {
-        let mut bytes_buffer = Vec::new();
-        let mut res = Vec::new();
-
-        loop {
-            // first, read lots of bytes into the buffer
-            bytes_buffer = if let Ok(res) = source.fill_buf() {
-                res.to_vec()
-            } else {
-                break;
-            };
-            source.consume(bytes_buffer.len());
-
-            // now, keep reading to make sure we haven't stopped in the middle of a word.
-            // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
-            // and bytes_buffer will be extended from slice to accommodate the new bytes
-            if source.read_until(line_ending, &mut bytes_buffer).is_err() {
-                break;
-            };
-
-            // break when there is nothing left to read
-            if bytes_buffer.is_empty() {
-                break;
-            }
-
-            let mut vec_str = match std::str::from_utf8_mut(&mut bytes_buffer) {
-                Ok(unwrapped) => unwrapped
-                    .split(&['\n', line_ending as char])
-                    .map(|line| {
-                        if line.ends_with("\r\n") {
-                            line.trim_end_matches("\r\n")
-                        } else if line.ends_with('\r') {
-                            line.trim_end_matches('\r')
-                        } else {
-                            line
-                        }
-                    })
-                    .map(|line| line.to_owned())
-                    .collect::<Vec<String>>(),
-                Err(_) => vec![],
-            };
-
-            res.append(&mut vec_str)
-        }
-        res
     }
 
     /// components_to_stop == 0 => all the threads have been stopped
@@ -279,20 +228,17 @@ impl SkimItemReader {
         thread::spawn(move || {
             debug!("collector: command collector start");
             components_to_stop.fetch_add(1, Ordering::SeqCst);
-            started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
+            started_clone.store(true, Ordering::SeqCst);
+            // notify parent that it is started
 
-            let _ = Self::ingest_loop(source, option.line_ending)
-                .into_iter()
-                .map(|line| {
-                    DefaultSkimItem::new(
-                        line,
-                        option.use_ansi_color,
-                        &option.transform_fields,
-                        &option.matching_fields,
-                        &option.delimiter,
-                    )
-                })
-                .try_for_each(|raw_item| tx_item.send(Arc::new(raw_item)));
+            let opts = BuildOptions {
+                ansi_enabled: option.use_ansi_color,
+                trans_fields: &option.transform_fields,
+                matching_fields: &option.matching_fields,
+                delimiter: &option.delimiter,
+            };
+
+            ingest_loop(source, option.line_ending, tx_item, SendRawOrBuild::Build(opts));
 
             let _ = tx_interrupt_clone.send(1); // ensure the waiting thread will exit
             components_to_stop.fetch_sub(1, Ordering::SeqCst);
