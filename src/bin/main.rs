@@ -132,6 +132,7 @@ Usage: sk [options]
 ";
 
 const DEFAULT_HISTORY_SIZE: usize = 1000;
+const READ_BUFFER_CAPACITY: usize = 65_536;
 
 //------------------------------------------------------------------------------
 fn main() {
@@ -317,7 +318,7 @@ fn real_main() -> Result<i32, std::io::Error> {
     //------------------------------------------------------------------------------
     // read from pipe or command
     let rx_item = if atty::isnt(atty::Stream::Stdin) {
-            let rx_item = cmd_collector.borrow().of_bufread(BufReader::new(std::io::stdin()));
+            let rx_item = cmd_collector.borrow().of_bufread(BufReader::with_capacity(READ_BUFFER_CAPACITY, std::io::stdin()));
             Some(rx_item)
         } else {
          None
