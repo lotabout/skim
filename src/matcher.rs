@@ -115,16 +115,21 @@ impl Matcher {
                     .enumerate()
                     .filter_map(|(index, item)| {
                         processed.fetch_add(1, Ordering::Relaxed);
+
                         if matcher_disabled {
-                            Some(Ok(MatchedItem {
+                            return Some(Ok(MatchedItem {
                                 item: item.clone(),
                                 metadata: None,
-                            }))
-                        } else if stopped.load(Ordering::Relaxed) {
-                            Some(Err("matcher killed"))
-                        } else if let Some(match_result) = matcher_engine.match_item(item.as_ref()) {
+                            }));
+                        }
+
+                        if stopped.load(Ordering::Relaxed) {
+                            return Some(Err("matcher killed"));
+                        }
+
+                        matcher_engine.match_item(item.as_ref()).map(|match_result| {
                             matched.fetch_add(1, Ordering::Relaxed);
-                            Some(Ok(MatchedItem {
+                            Ok(MatchedItem {
                                 item: item.clone(),
                                 metadata: {
                                     Some(Box::new({
@@ -135,10 +140,8 @@ impl Matcher {
                                         }
                                     }))
                                 },
-                            }))
-                        } else {
-                            None
-                        }
+                            })
+                        })
                     })
                     .collect()
             });
