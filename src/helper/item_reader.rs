@@ -162,18 +162,26 @@ impl SkimItemReader {
         let line_ending = self.option.line_ending;
 
         thread::spawn(move || {
-            let _tx_item_clone = tx_item.clone();
-
             // from_utf8_mut(), convert in place
             let _ = Self::ingest_loop(source, line_ending)
-                .into_iter()
+                .split(&['\n', line_ending as char])
+                .map(|line| {
+                    if line.ends_with("\r\n") {
+                        line.trim_end_matches("\r\n")
+                    } else if line.ends_with('\r') {
+                        line.trim_end_matches('\r')
+                    } else {
+                        line
+                    }
+                })
+                .map(|line| line.to_owned())
                 .try_for_each(|line| tx_item.send(Arc::new(line)));
         });
         rx_item
     }
 
     #[allow(unused_assignments)]
-    fn ingest_loop(mut source: impl BufRead + Send + 'static, line_ending: u8) -> Vec<String> {
+    fn ingest_loop(mut source: impl BufRead + Send + 'static, line_ending: u8) -> String {
         let mut buffer = Vec::new();
         let mut res = Vec::new();
 
@@ -198,27 +206,13 @@ impl SkimItemReader {
                 break;
             }
 
-            if let Ok(string) = std::str::from_utf8(&buffer) {
-                res.extend(
-                    string
-                        .split(&['\n', line_ending as char])
-                        .map(|line| {
-                            if line.ends_with("\r\n") {
-                                line.trim_end_matches("\r\n")
-                            } else if line.ends_with('\r') {
-                                line.trim_end_matches('\r')
-                            } else {
-                                line
-                            }
-                        })
-                        .map(|line| line.to_owned()),
-                );
-            } else {
-                break;
-            };
+            res.extend_from_slice(&buffer);
         }
 
-        res
+        match std::str::from_utf8_mut(&mut res) {
+            Ok(unwrapped) => unwrapped.into(),
+            Err(_) => "".to_owned(),
+        }
     }
 
     /// components_to_stop == 0 => all the threads have been stopped
@@ -285,7 +279,17 @@ impl SkimItemReader {
             started_clone.store(true, Ordering::SeqCst); // notify parent that it is started
 
             let _ = Self::ingest_loop(source, option.line_ending)
-                .into_iter()
+                .split(&['\n', option.line_ending as char])
+                .map(|line| {
+                    if line.ends_with("\r\n") {
+                        line.trim_end_matches("\r\n")
+                    } else if line.ends_with('\r') {
+                        line.trim_end_matches('\r')
+                    } else {
+                        line
+                    }
+                })
+                .map(|line| line.to_owned())
                 .map(|line| {
                     DefaultSkimItem::new(
                         line,
