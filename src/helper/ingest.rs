@@ -68,7 +68,7 @@ pub fn ingest_loop(
                 })
                 .map(|line| line.to_owned())
                 .try_for_each(|line| match &opts {
-                    SendRawOrBuild::Raw => tx_item.send(Arc::new(line)),
+                    SendRawOrBuild::Raw => tx_item.try_send(Arc::new(line)),
                     SendRawOrBuild::Build(opts) => {
                         let item = DefaultSkimItem::new(
                             line,
@@ -78,7 +78,7 @@ pub fn ingest_loop(
                             opts.delimiter,
                         );
 
-                        tx_item.send(Arc::new(item))
+                        tx_item.try_send(Arc::new(item))
                     }
                 });
             if res.is_err() {
