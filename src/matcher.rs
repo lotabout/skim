@@ -145,18 +145,14 @@ impl Matcher {
                 items
                     .iter()
                     .enumerate()
-                    .filter_map(|(index, item)| {
-                        filter_op(index, item)
-                    })
+                    .filter_map(|(index, item)| filter_op(index, item))
                     .collect()
             } else {
                 MATCHER_POOL.install(|| {
                     items
                         .par_iter()
                         .enumerate()
-                        .filter_map(|(index, item)| {
-                            filter_op(index, item)
-                        })
+                        .filter_map(|(index, item)| filter_op(index, item))
                         .collect()
                 })
             };
