@@ -120,6 +120,12 @@ impl MatchEngine for ExactEngine {
 
 impl Display for ExactEngine {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        write!(f, "(Exact|{}{})", if self.inverse { "!" } else { "" }, self.query)
+        write!(f, "(Exact|{}{})", if self.inverse { "!" } else { "" }, {
+            if self.query_regex.is_some() {
+                self.query_regex.as_ref().map(|x| x.as_str()).unwrap_or("")
+            } else {
+                self.query.as_str()
+            }
+        })
     }
 }
