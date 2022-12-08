@@ -19,7 +19,7 @@ use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
 const CMD_CHANNEL_SIZE: usize = 1_024;
 const ITEM_CHANNEL_SIZE: usize = 16_384;
 const DELIMITER_STR: &str = r"[\t\n ]+";
-const READ_BUFFER_SIZE: usize = 65_536;
+pub const READ_BUFFER_SIZE: usize = 65_536;
 
 pub enum CollectorInput {
     Pipe(Box<dyn BufRead + Send>),
@@ -28,7 +28,6 @@ pub enum CollectorInput {
 
 #[derive(Debug)]
 pub struct SkimItemReaderOption {
-    buf_size: usize,
     use_ansi_color: bool,
     transform_fields: Vec<FieldRange>,
     matching_fields: Vec<FieldRange>,
@@ -40,7 +39,6 @@ pub struct SkimItemReaderOption {
 impl Default for SkimItemReaderOption {
     fn default() -> Self {
         Self {
-            buf_size: READ_BUFFER_SIZE,
             line_ending: b'\n',
             use_ansi_color: false,
             transform_fields: Vec::new(),
@@ -52,11 +50,6 @@ impl Default for SkimItemReaderOption {
 }
 
 impl SkimItemReaderOption {
-    pub fn buf_size(mut self, buf_size: usize) -> Self {
-        self.buf_size = buf_size;
-        self
-    }
-
     pub fn line_ending(mut self, line_ending: u8) -> Self {
         self.line_ending = line_ending;
         self
@@ -158,7 +151,7 @@ impl SkimItemReader {
 
     /// helper: convert bufread into SkimItemReceiver
     fn raw_bufread(&self, source: impl BufRead + Send + 'static) -> SkimItemReceiver {
-        let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(self.option.buf_size);
+        let (tx_item, rx_item): (SkimItemSender, SkimItemReceiver) = bounded(ITEM_CHANNEL_SIZE);
         let line_ending = self.option.line_ending;
 
         thread::spawn(move || {
