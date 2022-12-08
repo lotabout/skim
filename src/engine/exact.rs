@@ -1,7 +1,7 @@
-use crate::engine::util::contains_upper;
+use crate::engine::util::{contains_upper, regex_match};
 use crate::item::RankBuilder;
 use crate::{CaseMatching, MatchEngine, MatchRange, MatchResult, SkimItem};
-use regex::escape;
+use regex::{escape, Regex};
 use std::cmp::min;
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
@@ -21,6 +21,7 @@ pub struct ExactMatchingParam {
 pub struct ExactEngine {
     #[allow(dead_code)]
     query: String,
+    query_regex: Option<Regex>,
     rank_builder: Arc<RankBuilder>,
     inverse: bool,
 }
@@ -33,23 +34,31 @@ impl ExactEngine {
             CaseMatching::Smart => contains_upper(query),
         };
 
-        let mut query_builder = String::new();
-        if !case_sensitive {
-            query_builder.push_str("(?i)");
-        }
+        let query_regex = if case_sensitive && !param.postfix && !param.prefix {
+            None
+        } else {
+            let mut query_builder = String::new();
 
-        if param.prefix {
-            query_builder.push('^');
-        }
+            if !case_sensitive {
+                query_builder.push_str("(?i)");
+            }
 
-        query_builder.push_str(&escape(query));
+            if param.prefix {
+                query_builder.push('^');
+            }
 
-        if param.postfix {
-            query_builder.push('$');
-        }
+            query_builder.push_str(&escape(query));
+
+            if param.postfix {
+                query_builder.push('$');
+            }
+
+            Regex::new(&query_builder).ok()
+        };
 
         ExactEngine {
             query: query.to_string(),
+            query_regex,
             rank_builder: Default::default(),
             inverse: param.inverse,
         }
@@ -85,10 +94,17 @@ impl MatchEngine for ExactEngine {
                 let start = min(*start, item_text.len());
                 let end = min(*end, item_text.len());
 
+                let res = match &self.query_regex {
+                    Some(_regex) => {
+                        regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start))
+                    }
+                    None => self.exact_match(&item_text[start..end]),
+                };
+
                 if self.inverse {
-                    self.exact_match(&item_text[start..end]).xor(Some((0, 0)))
+                    res.xor(Some((0, 0)))
                 } else {
-                    self.exact_match(&item_text[start..end])
+                    res
                 }
             });
 
