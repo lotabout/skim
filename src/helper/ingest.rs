@@ -54,7 +54,9 @@ pub fn ingest_loop(
             break;
         }
 
-        if let Ok(unwrapped) = std::str::from_utf8_mut(&mut bytes_buffer) {
+        let static_ref: &'static mut [u8] = bytes_buffer.leak();
+
+        if let Ok(unwrapped) = std::str::from_utf8_mut(static_ref) {
             let res = unwrapped
                 .split(&['\n', line_ending as char])
                 .map(|line| {
@@ -66,7 +68,6 @@ pub fn ingest_loop(
                         line
                     }
                 })
-                .map(|line| line.to_owned())
                 .try_for_each(|line| match &opts {
                     SendRawOrBuild::Raw => tx_item.send(Arc::new(line)),
                     SendRawOrBuild::Build(opts) => {
