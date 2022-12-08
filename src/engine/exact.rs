@@ -1,7 +1,7 @@
-use crate::engine::util::{contains_upper, regex_match};
+use crate::engine::util::contains_upper;
 use crate::item::RankBuilder;
 use crate::{CaseMatching, MatchEngine, MatchRange, MatchResult, SkimItem};
-use regex::{escape, Regex};
+use regex::escape;
 use std::cmp::min;
 use std::fmt::{Display, Error, Formatter};
 use std::sync::Arc;
@@ -21,7 +21,6 @@ pub struct ExactMatchingParam {
 pub struct ExactEngine {
     #[allow(dead_code)]
     query: String,
-    query_regex: Option<Regex>,
     rank_builder: Arc<RankBuilder>,
     inverse: bool,
 }
@@ -49,15 +48,8 @@ impl ExactEngine {
             query_builder.push('$');
         }
 
-        let query_regex = if query.is_empty() {
-            None
-        } else {
-            Regex::new(&query_builder).ok()
-        };
-
         ExactEngine {
             query: query.to_string(),
-            query_regex,
             rank_builder: Default::default(),
             inverse: param.inverse,
         }
@@ -70,6 +62,14 @@ impl ExactEngine {
 
     pub fn build(self) -> Self {
         self
+    }
+
+    pub fn exact_match(&self, haystack: &str) -> Option<(usize, usize)> {
+        let pattern = &self.query;
+        // this cleaner with the experimental nightly pattern API
+        let index = haystack.find(pattern);
+
+        index.map(|idx| (idx, (idx + pattern.len())))
     }
 }
 
@@ -85,17 +85,11 @@ impl MatchEngine for ExactEngine {
                 let start = min(*start, item_text.len());
                 let end = min(*end, item_text.len());
 
-                if self.query_regex.is_none() {
-                    return Some((0, 0));
-                }
-
-                let mut res =
-                    regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
-
                 if self.inverse {
-                    res = res.xor(Some((0, 0)))
+                    self.exact_match(&item_text[start..end]).xor(Some((0, 0)))
+                } else {
+                    self.exact_match(&item_text[start..end])
                 }
-                res
             });
 
         let (begin, end) = matched_result?;
@@ -110,11 +104,6 @@ impl MatchEngine for ExactEngine {
 
 impl Display for ExactEngine {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        write!(
-            f,
-            "(Exact|{}{})",
-            if self.inverse { "!" } else { "" },
-            self.query_regex.as_ref().map(|x| x.as_str()).unwrap_or("")
-        )
+        write!(f, "(Exact|{}{})", if self.inverse { "!" } else { "" }, self.query)
     }
 }
