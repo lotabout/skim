@@ -1,7 +1,6 @@
 /// helper for turn a BufRead into a skim stream
 use std::io::BufRead;
 use std::sync::Arc;
-use std::borrow::Cow;
 
 use crossbeam::channel::Sender;
 use regex::Regex;
@@ -55,63 +54,39 @@ pub fn ingest_loop(
             break;
         }
 
-        let res = match &opts {
-            SendRawOrBuild::Raw => {
-                let static_ref: &'static mut [u8] = bytes_buffer.leak();
+        let static_ref: &'static mut [u8] = bytes_buffer.leak();
 
-                if let Ok(unwrapped) = std::str::from_utf8_mut(static_ref) {
-                    unwrapped
-                        .split(&['\n', line_ending as char])
-                        .map(|line| {
-                            if line.ends_with("\r\n") {
-                                line.trim_end_matches("\r\n")
-                            } else if line.ends_with('\r') {
-                                line.trim_end_matches('\r')
-                            } else {
-                                line
-                            }
-                        })
-                        .try_for_each(|line| {
-                            tx_item.send(Arc::new(Cow::Borrowed(line)))
-                        })
+        if let Ok(unwrapped) = std::str::from_utf8_mut(static_ref) {
+            let res = unwrapped
+                .split(&['\n', line_ending as char])
+                .map(|line| {
+                    if line.ends_with("\r\n") {
+                        line.trim_end_matches("\r\n")
+                    } else if line.ends_with('\r') {
+                        line.trim_end_matches('\r')
                     } else {
-                        break
+                        line
                     }
-            },
-            SendRawOrBuild::Build(opts) => {
-                if let Ok(unwrapped) = std::str::from_utf8_mut(&mut bytes_buffer) {
-                    unwrapped
-                        .split(&['\n', line_ending as char])
-                        .map(|line| {
-                            if line.ends_with("\r\n") {
-                                line.trim_end_matches("\r\n")
-                            } else if line.ends_with('\r') {
-                                line.trim_end_matches('\r')
-                            } else {
-                                line
-                            }
-                        })
-                        .map(|line| {
-                            DefaultSkimItem::new(
-                                Cow::Owned(line.to_owned()),
-                                opts.ansi_enabled,
-                                opts.trans_fields,
-                                opts.matching_fields,
-                                opts.delimiter,
-                            )
-                        })
-                        .try_for_each(|item| {
-                            tx_item.send(Arc::new( item))
-                        })
-                } else {
-                    break
-                }
-            }
-        };
+                })
+                .try_for_each(|line| match &opts {
+                    SendRawOrBuild::Raw => tx_item.send(Arc::new(line)),
+                    SendRawOrBuild::Build(opts) => {
+                        let item = DefaultSkimItem::new(
+                            line,
+                            opts.ansi_enabled,
+                            opts.trans_fields,
+                            opts.matching_fields,
+                            opts.delimiter,
+                        );
 
-        if res.is_err() {
-            break
+                        tx_item.send(Arc::new(item))
+                    }
+                });
+            if res.is_err() {
+                break;
+            }
+        } else {
+            break;
         }
-        
     }
 }
