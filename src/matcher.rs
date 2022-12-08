@@ -9,7 +9,7 @@ use rayon::ThreadPool;
 
 use crate::item::{ItemPool, MatchedItem, MatchedItemMetadata};
 use crate::spinlock::SpinLock;
-use crate::{CaseMatching, MatchEngineFactory};
+use crate::{CaseMatching, MatchEngineFactory, SkimItem};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
 
@@ -79,6 +79,7 @@ impl Matcher {
         &self,
         query: &str,
         disabled: bool,
+        exact: bool,
         item_pool: Arc<DeferDrop<ItemPool>>,
         callback: C,
     ) -> MatcherControl
@@ -109,42 +110,56 @@ impl Matcher {
 
             trace!("matcher start, total: {}", items.len());
 
-            let result: Result<Vec<_>, _> = MATCHER_POOL.install(|| {
+            let filter_op = |index: usize, item: &Arc<dyn SkimItem>| -> Option<Result<MatchedItem, &str>> {
+                processed.fetch_add(1, Ordering::Relaxed);
+
+                if matcher_disabled {
+                    return Some(Ok(MatchedItem {
+                        item: item.clone(),
+                        metadata: None,
+                    }));
+                }
+
+                if stopped.load(Ordering::Relaxed) {
+                    return Some(Err("matcher killed"));
+                }
+
+                matcher_engine.match_item(item.as_ref()).map(|match_result| {
+                    matched.fetch_add(1, Ordering::Relaxed);
+                    Ok(MatchedItem {
+                        item: item.clone(),
+                        metadata: {
+                            Some(Box::new({
+                                MatchedItemMetadata {
+                                    rank: match_result.rank,
+                                    matched_range: Some(match_result.matched_range),
+                                    item_idx: (num_taken + index) as u32,
+                                }
+                            }))
+                        },
+                    })
+                })
+            };
+
+            let result: Result<Vec<_>, _> = if exact {
                 items
-                    .par_iter()
+                    .iter()
                     .enumerate()
                     .filter_map(|(index, item)| {
-                        processed.fetch_add(1, Ordering::Relaxed);
-
-                        if matcher_disabled {
-                            return Some(Ok(MatchedItem {
-                                item: item.clone(),
-                                metadata: None,
-                            }));
-                        }
-
-                        if stopped.load(Ordering::Relaxed) {
-                            return Some(Err("matcher killed"));
-                        }
-
-                        matcher_engine.match_item(item.as_ref()).map(|match_result| {
-                            matched.fetch_add(1, Ordering::Relaxed);
-                            Ok(MatchedItem {
-                                item: item.clone(),
-                                metadata: {
-                                    Some(Box::new({
-                                        MatchedItemMetadata {
-                                            rank: match_result.rank,
-                                            matched_range: Some(match_result.matched_range),
-                                            item_idx: (num_taken + index) as u32,
-                                        }
-                                    }))
-                                },
-                            })
-                        })
+                        filter_op(index, item)
                     })
                     .collect()
-            });
+            } else {
+                MATCHER_POOL.install(|| {
+                    items
+                        .par_iter()
+                        .enumerate()
+                        .filter_map(|(index, item)| {
+                            filter_op(index, item)
+                        })
+                        .collect()
+                })
+            };
 
             if let Ok(items) = result {
                 let mut pool = matched_items.lock();
