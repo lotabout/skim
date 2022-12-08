@@ -21,7 +21,7 @@ pub struct DefaultSkimItem {
     /// The text that will be output when user press `enter`
     /// `Some(..)` => the original input is transformed, could not output `text` directly
     /// `None` => that it is safe to output `text` directly
-    orig_text: Option<Cow<'static, str>>,
+    orig_text: Option<String>,
 
     /// The text that will be shown on screen and matched.
     text: AnsiString<'static>,
@@ -33,7 +33,7 @@ pub struct DefaultSkimItem {
 
 impl DefaultSkimItem {
     pub fn new(
-        orig_text: &'static str,
+        orig_text: String,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -55,15 +55,15 @@ impl DefaultSkimItem {
 
         let (orig_text, text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
-            let transformed = ansi_parser.parse_ansi(&parse_transform_fields(delimiter, orig_text, trans_fields));
-            (Some(Cow::Borrowed(orig_text)), transformed)
+            let transformed = ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields));
+            (Some(orig_text), transformed)
         } else if using_transform_fields {
             // transformed, not ansi
-            let transformed = parse_transform_fields(delimiter, orig_text, trans_fields).into();
-            (Some(Cow::Borrowed(orig_text)), transformed)
+            let transformed = parse_transform_fields(delimiter, &orig_text, trans_fields).into();
+            (Some(orig_text), transformed)
         } else if ansi_enabled {
             // not transformed, ansi
-            (None, ansi_parser.parse_ansi(orig_text))
+            (None, ansi_parser.parse_ansi(&orig_text))
         } else {
             // normal case
             (None, orig_text.into())
