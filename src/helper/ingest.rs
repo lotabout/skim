@@ -6,7 +6,6 @@ use crossbeam::channel::Sender;
 use regex::Regex;
 
 use crate::field::FieldRange;
-use crate::helper::item_reader::READ_BUFFER_SIZE;
 use crate::SkimItem;
 
 use super::item::DefaultSkimItem;
@@ -32,7 +31,7 @@ pub fn ingest_loop(
     tx_item: Sender<Arc<dyn SkimItem>>,
     opts: SendRawOrBuild,
 ) {
-    let mut bytes_buffer = Vec::with_capacity(READ_BUFFER_SIZE);
+    let mut bytes_buffer = Vec::new();
 
     loop {
         // first, read lots of bytes into the buffer
