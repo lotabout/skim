@@ -1,7 +1,6 @@
 /// helper for turn a BufRead into a skim stream
 use std::io::BufRead;
 use std::sync::Arc;
-use std::borrow::Cow;
 
 use crossbeam::channel::Sender;
 use regex::Regex;
@@ -53,7 +52,13 @@ pub fn ingest_loop(
             break;
         }
 
-        if let Ok(unwrapped) = std::str::from_utf8_mut(&mut bytes_buffer) {
+        // logic to intentionally leaking here:
+        // 1) its some 30ms wall clock time faster
+        // 2) ANSIStrings created from this buffer, that we store, 
+        //    will have a static lifetime anyway
+        let static_ref = bytes_buffer.leak();
+
+        if let Ok(unwrapped) = std::str::from_utf8(static_ref) {
             let _ = unwrapped
                 .split(&['\n', line_ending as char])
                 .map(|line| {
@@ -65,29 +70,21 @@ pub fn ingest_loop(
                         line
                     }
                 })
-                .try_for_each(|line| {
-                    match &opts {
-                        SendRawOrBuild::Build(opts) => {
-                            let item = DefaultSkimItem::new(
-                                Cow::Borrowed(line),
-                                opts.ansi_enabled,
-                                opts.trans_fields,
-                                opts.matching_fields,
-                                opts.delimiter,
-                            );
-                            tx_item.send(Arc::new(item))
-                        },
-                        SendRawOrBuild::Raw => {
-                            let item = Cow::Owned(line.to_owned());
-                            tx_item.send(Arc::new(item))
-                        }
+                .try_for_each(|line| match &opts {
+                    SendRawOrBuild::Build(opts) => {
+                        let item = DefaultSkimItem::new(
+                            line,
+                            opts.ansi_enabled,
+                            opts.trans_fields,
+                            opts.matching_fields,
+                            opts.delimiter,
+                        );
+                        tx_item.send(Arc::new(item))
                     }
-                    
+                    SendRawOrBuild::Raw => tx_item.send(Arc::new(line)),
                 });
         } else {
             break;
         };
-
-        
     }
 }
