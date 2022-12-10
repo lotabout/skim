@@ -1,6 +1,7 @@
 /// helper for turn a BufRead into a skim stream
 use std::io::BufRead;
 use std::sync::Arc;
+use std::borrow::Cow;
 
 use crossbeam::channel::Sender;
 use regex::Regex;
@@ -45,67 +46,48 @@ pub fn ingest_loop(
         // now, keep reading to make sure we haven't stopped in the middle of a word.
         // no need to add the bytes to the total buf_len, as these bytes are auto-"consumed()",
         // and bytes_buffer will be extended from slice to accommodate the new bytes
-        if source.read_until(line_ending, &mut bytes_buffer).is_err() {
-            break;
-        };
+        let _ = source.read_until(line_ending, &mut bytes_buffer);
 
         // break when there is nothing left to read
         if bytes_buffer.is_empty() {
             break;
         }
 
-        let res = match &opts {
-            SendRawOrBuild::Raw => {
-                let static_ref: &'static mut [u8] = bytes_buffer.leak();
-
-                if let Ok(unwrapped) = std::str::from_utf8_mut(static_ref) {
-                    unwrapped
-                        .split(&['\n', line_ending as char])
-                        .map(|line| {
-                            if line.ends_with("\r\n") {
-                                line.trim_end_matches("\r\n")
-                            } else if line.ends_with('\r') {
-                                line.trim_end_matches('\r')
-                            } else {
-                                line
-                            }
-                        })
-                        .try_for_each(|line| tx_item.send(Arc::new(line)))
-                } else {
-                    break;
-                }
-            }
-            SendRawOrBuild::Build(opts) => {
-                if let Ok(unwrapped) = std::str::from_utf8_mut(&mut bytes_buffer) {
-                    unwrapped
-                        .split(&['\n', line_ending as char])
-                        .map(|line| {
-                            if line.ends_with("\r\n") {
-                                line.trim_end_matches("\r\n")
-                            } else if line.ends_with('\r') {
-                                line.trim_end_matches('\r')
-                            } else {
-                                line
-                            }
-                        })
-                        .map(|line| {
-                            DefaultSkimItem::new(
-                                line.to_owned(),
+        if let Ok(unwrapped) = std::str::from_utf8_mut(&mut bytes_buffer) {
+            let _ = unwrapped
+                .split(&['\n', line_ending as char])
+                .map(|line| {
+                    if line.ends_with("\r\n") {
+                        line.trim_end_matches("\r\n")
+                    } else if line.ends_with('\r') {
+                        line.trim_end_matches('\r')
+                    } else {
+                        line
+                    }
+                })
+                .try_for_each(|line| {
+                    match &opts {
+                        SendRawOrBuild::Build(opts) => {
+                            let item = DefaultSkimItem::new(
+                                Cow::Borrowed(line),
                                 opts.ansi_enabled,
                                 opts.trans_fields,
                                 opts.matching_fields,
                                 opts.delimiter,
-                            )
-                        })
-                        .try_for_each(|item| tx_item.send(Arc::new(item)))
-                } else {
-                    break;
-                }
-            }
+                            );
+                            tx_item.send(Arc::new(item))
+                        },
+                        SendRawOrBuild::Raw => {
+                            let item = Cow::Owned(line.to_owned());
+                            tx_item.send(Arc::new(item))
+                        }
+                    }
+                    
+                });
+        } else {
+            break;
         };
 
-        if res.is_err() {
-            break;
-        }
+        
     }
 }

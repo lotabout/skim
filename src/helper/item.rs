@@ -33,7 +33,7 @@ pub struct DefaultSkimItem {
 
 impl DefaultSkimItem {
     pub fn new(
-        orig_text: String,
+        orig_text: Cow<'_, str>,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -56,17 +56,17 @@ impl DefaultSkimItem {
         let (orig_text, text) = if using_transform_fields && ansi_enabled {
             // ansi and transform
             let transformed = ansi_parser.parse_ansi(&parse_transform_fields(delimiter, &orig_text, trans_fields));
-            (Some(orig_text), transformed)
+            (Some(orig_text.to_string()), transformed)
         } else if using_transform_fields {
             // transformed, not ansi
             let transformed = parse_transform_fields(delimiter, &orig_text, trans_fields).into();
-            (Some(orig_text), transformed)
+            (Some(orig_text.to_string()), transformed)
         } else if ansi_enabled {
             // not transformed, ansi
             (None, ansi_parser.parse_ansi(&orig_text))
         } else {
             // normal case
-            (None, orig_text.into())
+            (None, orig_text.to_string().into())
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
