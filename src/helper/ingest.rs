@@ -54,7 +54,7 @@ pub fn ingest_loop(
 
         // logic to intentionally leaking here:
         // 1) its some 30ms wall clock time faster
-        // 2) ANSIStrings created from this buffer, that we store, 
+        // 2) ANSIStrings created from this buffer, that we store,
         //    will have a static lifetime anyway
         let static_ref = bytes_buffer.leak();
 

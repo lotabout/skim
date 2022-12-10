@@ -33,7 +33,7 @@ pub struct DefaultSkimItem {
 
 impl DefaultSkimItem {
     pub fn new(
-        orig_text: &str,
+        orig_text: &'static str,
         ansi_enabled: bool,
         trans_fields: &[FieldRange],
         matching_fields: &[FieldRange],
@@ -66,7 +66,7 @@ impl DefaultSkimItem {
             (None, ansi_parser.parse_ansi(orig_text))
         } else {
             // normal case
-            (None, orig_text.to_string().into())
+            (None, orig_text.into())
         };
 
         let matching_ranges = if !matching_fields.is_empty() {
