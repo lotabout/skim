@@ -179,7 +179,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .arg(Arg::with_name("cmd-prompt").long("cmd-prompt").multiple(true).takes_value(true).default_value("c> "))
         .arg(Arg::with_name("expect").long("expect").multiple(true).takes_value(true))
         .arg(Arg::with_name("tac").long("tac").multiple(true))
-        .arg(Arg::with_name("tiebreak").long("tiebreak").short('t').multiple(true).takes_value(true)).default_missing_valur()
+        .arg(Arg::with_name("tiebreak").long("tiebreak").short('t').multiple(true).takes_value(true))
         .arg(Arg::with_name("ansi").long("ansi").multiple(true))
         .arg(Arg::with_name("exact").long("exact").short('e').multiple(true))
         .arg(Arg::with_name("disabled").long("disabled").multiple(true))
