@@ -55,7 +55,6 @@ pub struct Model {
     exit0: bool,
     sync: bool,
     disabled: bool,
-    exact: bool,
 
     use_regex: bool,
     regex_matcher: Matcher,
@@ -120,7 +119,6 @@ impl Model {
         };
 
         let disabled = options.disabled;
-        let exact = options.exact;
 
         let rank_builder = Arc::new(RankBuilder::new(criterion));
 
@@ -163,7 +161,6 @@ impl Model {
             exit0: false,
             sync: false,
             disabled,
-            exact,
             use_regex: options.regex,
             regex_matcher,
             matcher,
@@ -737,7 +734,7 @@ impl Model {
         };
 
         let tx = self.tx.clone();
-        let new_matcher_control = matcher.run(&query, self.disabled, self.exact, self.item_pool.clone(), move |_| {
+        let new_matcher_control = matcher.run(&query, self.disabled, self.item_pool.clone(), move |_| {
             // notify refresh immediately
             let _ = tx.send((Key::Null, Event::EvHeartBeat));
         });

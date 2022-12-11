@@ -79,7 +79,6 @@ impl Matcher {
         &self,
         query: &str,
         disabled: bool,
-        exact: bool,
         item_pool: Arc<DeferDrop<ItemPool>>,
         callback: C,
     ) -> MatcherControl
@@ -141,21 +140,13 @@ impl Matcher {
                 })
             };
 
-            let result: Result<Vec<_>, _> = if exact {
+            let result: Result<Vec<_>, _> = MATCHER_POOL.install(|| {
                 items
-                    .iter()
+                    .par_iter()
                     .enumerate()
                     .filter_map(|(index, item)| filter_op(index, item))
                     .collect()
-            } else {
-                MATCHER_POOL.install(|| {
-                    items
-                        .par_iter()
-                        .enumerate()
-                        .filter_map(|(index, item)| filter_op(index, item))
-                        .collect()
-                })
-            };
+            });
 
             if let Ok(items) = result {
                 let mut pool = matched_items.lock();
