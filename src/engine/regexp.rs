@@ -47,24 +47,21 @@ impl RegexEngine {
 
 impl MatchEngine for RegexEngine {
     fn match_item(&self, item: &dyn SkimItem) -> Option<MatchResult> {
-        let mut matched_result = None;
         let item_text = item.text();
         let default_range = [(0, item_text.len())];
-        for &(start, end) in item.get_matching_ranges().unwrap_or(&default_range) {
-            let start = min(start, item_text.len());
-            let end = min(end, item_text.len());
-            if self.query_regex.is_none() {
-                matched_result = Some((0, 0));
-                break;
-            }
+        let matched_result = item
+            .get_matching_ranges()
+            .unwrap_or(&default_range)
+            .iter()
+            .find_map(|(start, end)| {
+                let start = min(*start, item_text.len());
+                let end = min(*end, item_text.len());
+                if self.query_regex.is_none() {
+                    return Some((0, 0));
+                }
 
-            matched_result =
-                regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
-
-            if matched_result.is_some() {
-                break;
-            }
-        }
+                regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start))
+            });
 
         let (begin, end) = matched_result?;
         let score = (end - begin) as i32;
