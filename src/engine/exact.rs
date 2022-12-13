@@ -34,25 +34,24 @@ impl ExactEngine {
             CaseMatching::Smart => contains_upper(query),
         };
 
-        let query_regex = if case_sensitive && !param.postfix && !param.prefix {
+        let mut query_builder = String::new();
+        if !case_sensitive {
+            query_builder.push_str("(?i)");
+        }
+
+        if param.prefix {
+            query_builder.push('^');
+        }
+
+        query_builder.push_str(&escape(query));
+
+        if param.postfix {
+            query_builder.push('$');
+        }
+
+        let query_regex = if query.is_empty() {
             None
         } else {
-            let mut query_builder = String::new();
-
-            if !case_sensitive {
-                query_builder.push_str("(?i)");
-            }
-
-            if param.prefix {
-                query_builder.push('^');
-            }
-
-            query_builder.push_str(&escape(query));
-
-            if param.postfix {
-                query_builder.push('$');
-            }
-
             Regex::new(&query_builder).ok()
         };
 
@@ -72,14 +71,6 @@ impl ExactEngine {
     pub fn build(self) -> Self {
         self
     }
-
-    pub fn exact_match(&self, haystack: &str) -> Option<(usize, usize)> {
-        let pattern = &self.query;
-        // this cleaner with the experimental nightly pattern API
-        let index = haystack.find(pattern);
-
-        index.map(|idx| (idx, (idx + pattern.len())))
-    }
 }
 
 impl MatchEngine for ExactEngine {
@@ -93,14 +84,12 @@ impl MatchEngine for ExactEngine {
             .find_map(|(start, end)| {
                 let start = min(*start, item_text.len());
                 let end = min(*end, item_text.len());
+                if self.query_regex.is_none() {
+                    return Some((0, 0));
+                }
 
-                let res = match &self.query_regex {
-                    Some(_regex) => {
-                        regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start))
-                    }
-                    None => self.exact_match(&item_text[start..end]),
-                };
-
+                let res = regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
+                    
                 if self.inverse {
                     res.xor(Some((0, 0)))
                 } else {
