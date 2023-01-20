@@ -89,7 +89,7 @@ impl MatchEngine for ExactEngine {
                 }
 
                 let res = regex_match(&item_text[start..end], &self.query_regex).map(|(s, e)| (s + start, e + start));
-                    
+
                 if self.inverse {
                     res.xor(Some((0, 0)))
                 } else {
