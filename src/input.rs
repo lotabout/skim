@@ -39,7 +39,7 @@ impl Input {
 
     pub fn bind(&mut self, key: &str, action_chain: ActionChain) {
         let key = from_keyname(key);
-        if key == None || action_chain.is_empty() {
+        if key.is_none() || action_chain.is_empty() {
             return;
         }
 

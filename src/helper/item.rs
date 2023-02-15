@@ -17,21 +17,21 @@ use tuikit::prelude::Attr;
 /// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
 /// more than one line.
 #[derive(Debug)]
-pub struct DefaultSkimItem {
+pub struct DefaultSkimItem<'b> {
     /// The text that will be output when user press `enter`
     /// `Some(..)` => the original input is transformed, could not output `text` directly
     /// `None` => that it is safe to output `text` directly
     orig_text: Option<Box<str>>,
 
     /// The text that will be shown on screen and matched.
-    text: AnsiString<'static>,
+    text: AnsiString<'b>,
 
     // Option<Box<_>> to reduce memory use in normal cases where no matching ranges are specified.
     #[allow(clippy::box_collection)]
     matching_ranges: Option<Box<Vec<(usize, usize)>>>,
 }
 
-impl DefaultSkimItem {
+impl<'b> DefaultSkimItem<'b> {
     pub fn new(
         orig_text: &str,
         ansi_enabled: bool,
@@ -84,7 +84,7 @@ impl DefaultSkimItem {
     }
 }
 
-impl SkimItem for DefaultSkimItem {
+impl<'b> SkimItem for DefaultSkimItem<'b> {
     #[inline]
     fn text(&self) -> Cow<str> {
         Cow::Borrowed(self.text.stripped())

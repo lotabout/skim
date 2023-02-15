@@ -464,7 +464,7 @@ where
                     .env("LINES", preview_cmd.lines.to_string())
                     .env("COLUMNS", preview_cmd.columns.to_string())
                     .arg("-c")
-                    .arg(&cmd)
+                    .arg(cmd)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn();

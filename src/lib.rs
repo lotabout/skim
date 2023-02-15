@@ -100,7 +100,7 @@ impl<T: Any> AsAny for T {
 ///     .expect("something wrong with downcast");
 /// assert_eq!(immutable.immutable(), 0)
 /// ```
-pub trait SkimItem: AsAny + Send + Sync + 'static {
+pub trait SkimItem: Send + Sync {
     /// The string to be used for matching (without color)
     fn text(&self) -> Cow<str>;
 
