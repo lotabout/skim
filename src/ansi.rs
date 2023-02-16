@@ -1,7 +1,6 @@
 // Parse ANSI attr code
 use std::default::Default;
 
-use beef::lean::Cow;
 use std::cmp::max;
 use tuikit::prelude::*;
 use vte::{Params, Perform};
@@ -189,7 +188,7 @@ impl ANSIParser {
         self.last_attr = new_attr;
     }
 
-    pub fn parse_ansi(&mut self, text: &str) -> AnsiString<'static> {
+    pub fn parse_ansi(&mut self, text: &str) -> AnsiString {
         let mut statemachine = vte::Parser::new();
 
         for byte in text.as_bytes() {
@@ -208,39 +207,39 @@ impl ANSIParser {
 ///
 /// It is internally represented as Vec<(attr, string)>
 #[derive(Clone, Debug)]
-pub struct AnsiString<'a> {
-    stripped: Cow<'a, str>,
+pub struct AnsiString {
+    stripped: Box<str>,
     // attr: start, end
     fragments: Option<Vec<(Attr, (u32, u32))>>,
 }
 
-impl<'a> AnsiString<'a> {
+impl AnsiString {
     pub fn new_empty() -> Self {
         Self {
-            stripped: Cow::borrowed(""),
+            stripped: "".into(),
             fragments: None,
         }
     }
 
     fn new_raw_string(string: String) -> Self {
         Self {
-            stripped: Cow::owned(string),
+            stripped: string.into(),
             fragments: None,
         }
     }
 
-    fn new_raw_str(str_ref: &'a str) -> Self {
+    fn new_raw_str(str_ref: &str) -> Self {
         Self {
-            stripped: Cow::borrowed(str_ref),
+            stripped: str_ref.into(),
             fragments: None,
         }
     }
 
     /// assume the fragments are ordered by (start, end) while end is exclusive
-    pub fn new_str(stripped: &'a str, fragments: Vec<(Attr, (u32, u32))>) -> Self {
+    pub fn new_str(stripped: &str, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
-            stripped: Cow::borrowed(stripped),
+            stripped: stripped.into(),
             fragments: if fragments_empty { None } else { Some(fragments) },
         }
     }
@@ -249,12 +248,12 @@ impl<'a> AnsiString<'a> {
     pub fn new_string(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
-            stripped: Cow::owned(stripped),
+            stripped: stripped.into(),
             fragments: if fragments_empty { None } else { Some(fragments) },
         }
     }
 
-    pub fn parse(raw: &'a str) -> AnsiString<'static> {
+    pub fn parse(raw: &str) -> AnsiString {
         ANSIParser::default().parse_ansi(raw)
     }
 
@@ -264,17 +263,17 @@ impl<'a> AnsiString<'a> {
     }
 
     #[inline]
-    pub fn into_inner(self) -> std::borrow::Cow<'a, str> {
-        std::borrow::Cow::Owned(self.stripped.into_owned())
+    pub fn into_inner(self) -> Box<str> {
+        self.stripped
     }
 
-    pub fn iter(&'a self) -> Box<dyn Iterator<Item = (char, Attr)> + 'a> {
+    pub fn iter(&self) -> Box<dyn Iterator<Item = (char, Attr)> + '_> {
         if self.fragments.is_none() {
-            return Box::new(self.stripped.chars().map(|c| (c, Attr::default())));
+            return Box::new(self.stripped.chars().map(|c| (c, Attr::default())).to_owned());
         }
 
         Box::new(AnsiStringIterator::new(
-            &self.stripped,
+            self.stripped.as_ref(),
             self.fragments.as_ref().unwrap(),
         ))
     }
@@ -301,21 +300,21 @@ impl<'a> AnsiString<'a> {
     }
 }
 
-impl<'a> From<&'a str> for AnsiString<'a> {
-    fn from(s: &'a str) -> AnsiString<'a> {
+impl From<&str> for AnsiString {
+    fn from(s: &str) -> AnsiString {
         AnsiString::new_raw_str(s)
     }
 }
 
-impl From<String> for AnsiString<'static> {
+impl<'a> From<String> for AnsiString {
     fn from(s: String) -> Self {
         AnsiString::new_raw_string(s)
     }
 }
 
 // (text, indices, highlight attribute) -> AnsiString
-impl<'a> From<(&'a str, &'a [usize], Attr)> for AnsiString<'a> {
-    fn from((text, indices, attr): (&'a str, &'a [usize], Attr)) -> Self {
+impl From<(&str, &[usize], Attr)> for AnsiString {
+    fn from((text, indices, attr): (&str, &[usize], Attr)) -> Self {
         let fragments = indices
             .iter()
             .map(|&idx| (attr, (idx as u32, 1 + idx as u32)))

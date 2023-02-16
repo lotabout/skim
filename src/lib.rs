@@ -105,7 +105,7 @@ pub trait SkimItem: Send + Sync {
     fn text(&self) -> Cow<str>;
 
     /// The content to be displayed on the item list, could contain ANSI properties
-    fn display<'a>(&'a self, context: DisplayContext<'a>) -> AnsiString<'a> {
+    fn display<'a>(&self, context: DisplayContext<'a>) -> AnsiString {
         AnsiString::from(context)
     }
 
@@ -155,7 +155,7 @@ pub struct DisplayContext<'a> {
     pub highlight_attr: Attr,
 }
 
-impl<'a> From<DisplayContext<'a>> for AnsiString<'a> {
+impl<'a> From<DisplayContext<'a>> for AnsiString {
     fn from(context: DisplayContext<'a>) -> Self {
         match context.matches {
             Some(Matches::CharIndices(indices)) => AnsiString::from((context.text, indices, context.highlight_attr)),

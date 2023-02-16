@@ -17,21 +17,21 @@ use tuikit::prelude::Attr;
 /// About the ANSI, we made assumption that it is linewise, that means no ANSI codes will affect
 /// more than one line.
 #[derive(Debug)]
-pub struct DefaultSkimItem<'b> {
+pub struct DefaultSkimItem {
     /// The text that will be output when user press `enter`
     /// `Some(..)` => the original input is transformed, could not output `text` directly
     /// `None` => that it is safe to output `text` directly
     orig_text: Option<Box<str>>,
 
     /// The text that will be shown on screen and matched.
-    text: AnsiString<'b>,
+    text: AnsiString,
 
     // Option<Box<_>> to reduce memory use in normal cases where no matching ranges are specified.
     #[allow(clippy::box_collection)]
     matching_ranges: Option<Box<Vec<(usize, usize)>>>,
 }
 
-impl<'b> DefaultSkimItem<'b> {
+impl DefaultSkimItem {
     pub fn new(
         orig_text: &str,
         ansi_enabled: bool,
@@ -84,7 +84,7 @@ impl<'b> DefaultSkimItem<'b> {
     }
 }
 
-impl<'b> SkimItem for DefaultSkimItem<'b> {
+impl SkimItem for DefaultSkimItem {
     #[inline]
     fn text(&self) -> Cow<str> {
         Cow::Borrowed(self.text.stripped())
@@ -95,7 +95,7 @@ impl<'b> SkimItem for DefaultSkimItem<'b> {
             if self.text.has_attrs() {
                 let mut ansi_parser: ANSIParser = Default::default();
                 let text = ansi_parser.parse_ansi(orig_text);
-                text.into_inner()
+                Cow::Owned(text.stripped().to_owned())
             } else {
                 Cow::Borrowed(orig_text)
             }
@@ -108,7 +108,7 @@ impl<'b> SkimItem for DefaultSkimItem<'b> {
         self.matching_ranges.as_ref().map(|vec| vec as &[(usize, usize)])
     }
 
-    fn display<'a>(&'a self, context: DisplayContext<'a>) -> AnsiString<'a> {
+    fn display<'a>(&self, context: DisplayContext<'a>) -> AnsiString {
         let new_fragments: Vec<(Attr, (u32, u32))> = match context.matches {
             Some(Matches::CharIndices(indices)) => indices
                 .iter()

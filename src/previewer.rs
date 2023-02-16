@@ -24,7 +24,7 @@ const DELIMITER_STR: &str = r"[\t\n ]+";
 
 pub struct Previewer {
     tx_preview: Sender<PreviewEvent>,
-    content_lines: Arc<SpinLock<Vec<AnsiString<'static>>>>,
+    content_lines: Arc<SpinLock<Vec<AnsiString>>>,
 
     width: Arc<AtomicUsize>,
     height: Arc<AtomicUsize>,
@@ -429,7 +429,7 @@ impl PreviewThread {
 
 fn run<C>(rx_preview: Receiver<PreviewEvent>, on_return: C)
 where
-    C: Fn(Vec<AnsiString<'static>>, PreviewPosition) + Send + Sync + 'static,
+    C: Fn(Vec<AnsiString>, PreviewPosition) + Send + Sync + 'static,
 {
     let callback = Arc::new(on_return);
     let mut preview_thread: Option<PreviewThread> = None;
@@ -506,7 +506,7 @@ where
 
 fn wait<C>(spawned: std::process::Child, callback: C)
 where
-    C: Fn(Vec<AnsiString<'static>>),
+    C: Fn(Vec<AnsiString>),
 {
     let output = spawned.wait_with_output();
 

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tuikit::prelude::*;
 
 pub struct Header {
-    header: Vec<AnsiString<'static>>,
+    header: Vec<AnsiString>,
     tabstop: usize,
     reverse: bool,
     theme: Arc<ColorTheme>,
