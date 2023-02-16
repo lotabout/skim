@@ -133,7 +133,7 @@ pub trait SkimItem: Send + Sync {
 //------------------------------------------------------------------------------
 // Implement SkimItem for raw strings
 
-impl<T: AsRef<str> + Send + Sync + 'static> SkimItem for T {
+impl<T: AsRef<str> + Send + Sync> SkimItem for T {
     fn text(&self) -> Cow<str> {
         Cow::Borrowed(self.as_ref())
     }

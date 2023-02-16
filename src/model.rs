@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Duration as TimerDuration;
-use defer_drop::DeferDrop;
 use regex::Regex;
 use timer::{Guard as TimerGuard, Timer};
 use tuikit::prelude::{Event as TermEvent, *};
@@ -62,7 +61,7 @@ pub struct Model {
 
     term: Arc<Term>,
 
-    item_pool: Arc<DeferDrop<ItemPool>>,
+    item_pool: Arc<ItemPool>,
 
     rx: EventReceiver,
     tx: EventSender,
@@ -140,7 +139,7 @@ impl Model {
             Matcher::builder(fuzzy_engine_factory).case(options.case).build()
         };
 
-        let item_pool = Arc::new(DeferDrop::new(ItemPool::new().lines_to_reserve(options.header_lines)));
+        let item_pool = Arc::new(ItemPool::new().lines_to_reserve(options.header_lines));
         let header = Header::empty()
             .with_options(options)
             .item_pool(item_pool.clone())

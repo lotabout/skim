@@ -7,7 +7,6 @@ use crate::theme::ColorTheme;
 use crate::theme::DEFAULT_THEME;
 use crate::util::{clear_canvas, print_item, str_lines, LinePrinter};
 use crate::{DisplayContext, SkimOptions};
-use defer_drop::DeferDrop;
 use std::cmp::max;
 use std::sync::Arc;
 use tuikit::prelude::*;
@@ -19,7 +18,7 @@ pub struct Header {
     theme: Arc<ColorTheme>,
 
     // for reserved header items
-    item_pool: Arc<DeferDrop<ItemPool>>,
+    item_pool: Arc<ItemPool>,
 }
 
 impl Header {
@@ -29,11 +28,11 @@ impl Header {
             tabstop: 8,
             reverse: false,
             theme: Arc::new(*DEFAULT_THEME),
-            item_pool: Arc::new(DeferDrop::new(ItemPool::new())),
+            item_pool: Arc::new(ItemPool::new()),
         }
     }
 
-    pub fn item_pool(mut self, item_pool: Arc<DeferDrop<ItemPool>>) -> Self {
+    pub fn item_pool(mut self, item_pool: Arc<ItemPool>) -> Self {
         self.item_pool = item_pool;
         self
     }

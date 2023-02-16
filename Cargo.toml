@@ -40,7 +40,6 @@ timer = { version = "0.2.0", default-features = false }
 chrono = { version = "0.4.23", default-features = false }
 crossbeam = { version = "0.8.2" }
 beef = { version = "0.5.2",  default-features = false } # compact cow
-defer-drop = { version = "1.3.0", default-features = false }
 once_cell = { version = "1.16.0", default-features = false }
 
 [patch.crates-io]

@@ -10,7 +10,6 @@ use rayon::ThreadPool;
 use crate::item::{ItemPool, MatchedItem, MatchedItemMetadata};
 use crate::spinlock::SpinLock;
 use crate::{CaseMatching, MatchEngineFactory, SkimItem};
-use defer_drop::DeferDrop;
 use std::rc::Rc;
 
 static MATCHER_POOL: Lazy<ThreadPool> = Lazy::new(|| {
@@ -75,13 +74,7 @@ impl Matcher {
         self
     }
 
-    pub fn run<C>(
-        &self,
-        query: &str,
-        disabled: bool,
-        item_pool: Arc<DeferDrop<ItemPool>>,
-        callback: C,
-    ) -> MatcherControl
+    pub fn run<C>(&self, query: &str, disabled: bool, item_pool: Arc<ItemPool>, callback: C) -> MatcherControl
     where
         C: Fn(Arc<SpinLock<Vec<MatchedItem>>>) + Send + 'static,
     {
