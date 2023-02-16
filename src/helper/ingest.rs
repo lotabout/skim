@@ -56,9 +56,7 @@ pub fn ingest_loop(
         // 1) its some 30ms wall clock time faster
         // 2) ANSIStrings created from this buffer, that we store,
         //    will have a static lifetime anyway
-        let static_ref = bytes_buffer.leak();
-
-        if let Ok(unwrapped) = std::str::from_utf8(static_ref) {
+        if let Ok(unwrapped) = std::str::from_utf8_mut(&mut bytes_buffer) {
             let _ = unwrapped
                 .split(&['\n', line_ending as char])
                 .map(|line| {
@@ -81,7 +79,10 @@ pub fn ingest_loop(
                         );
                         tx_item.send(Arc::new(item))
                     }
-                    SendRawOrBuild::Raw => tx_item.send(Arc::new(line)),
+                    SendRawOrBuild::Raw => tx_item.send({
+                        let boxed_str: Box<str> = line.into();
+                        Arc::new(boxed_str)
+                    }),
                 });
         } else {
             break;
