@@ -683,7 +683,7 @@ checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
 
 [[package]]
 name = "skim"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "atty",
  "beef",
