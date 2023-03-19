@@ -1,6 +1,18 @@
-[![Crates.io](https://img.shields.io/crates/v/skim.svg)](https://crates.io/crates/skim)
-[![Build & Test](https://github.com/lotabout/skim/workflows/Build%20&%20Test/badge.svg)](https://github.com/lotabout/skim/actions?query=workflow%3A%22Build+%26+Test%22)
-[![Packaging status](https://repology.org/badge/tiny-repos/skim.svg)](https://repology.org/project/skim/versions)
+<p align="center">
+  <a href="https://crates.io/crates/skim">
+    <img src="https://img.shields.io/crates/v/skim.svg" alt="Crates.io" />
+  </a>
+  <a href="https://github.com/lotabout/skim/actions?query=workflow%3A%22Build+%26+Test%22">
+    <img src="https://github.com/lotabout/skim/workflows/Build%20&%20Test/badge.svg" alt="Build & Test" />
+  </a>
+  <a href="https://repology.org/project/skim/versions">
+    <img src="https://repology.org/badge/tiny-repos/skim.svg" alt="Packaging status" />
+  </a>
+  <a href="https://discord.gg/23PuxttufP">
+    <img alt="Skim Discord" src="https://img.shields.io/discord/1031830957432504361?label=&color=7389d8&labelColor=6a7ec2&logoColor=ffffff&logo=discord" />
+  </a>
+</p>
+
 > Life is short, skim!
 
 Half of our life is spent on navigation: files, lines, commands… You need skim!
