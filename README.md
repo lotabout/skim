@@ -59,13 +59,14 @@ The skim project contains several components:
 
 ## Package Managers
 
-| Distribution   | Package Manager   | Command                   |
-| -------------- | ----------------- | ------------------------- |
-| macOS          | Homebrew          | `brew install sk`         |
-| macOS          | MacPorts          | `sudo port install skim`  |
-| Fedora         | dnf               | `dnf install skim`        |
-| Alpine         | apk               | `apk add skim`            |
-| Arch           | pacman            | `pacman -S skim`          |
+| Distribution   | Package Manager   | Command                      |
+| -------------- | ----------------- | ---------------------------- |
+| macOS          | Homebrew          | `brew install sk`            |
+| macOS          | MacPorts          | `sudo port install skim`     |
+| Fedora         | dnf               | `dnf install skim`           |
+| Alpine         | apk               | `apk add skim`               |
+| Arch           | pacman            | `pacman -S skim`             |
+| Gentoo         | Portage           | `emerge --ask app-misc/skim` |
 
 See [repology](https://repology.org/project/skim/versions) for a comprehensive overview of package availability.
 
