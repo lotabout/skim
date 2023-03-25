@@ -387,7 +387,7 @@ fn real_main() -> Result<i32, std::io::Error> {
 
 fn parse_options(options: &ArgMatches) -> SkimOptions<'_> {
     SkimOptionsBuilder::default()
-        .color(options.values_of("color").and_then(|vals| vals.last()))
+        .color(options.values_of("color").map(|x| x.collect::<Vec<_>>().join(",")))
         .min_height(options.values_of("min-height").and_then(|vals| vals.last()))
         .no_height(options.is_present("no-height"))
         .height(options.values_of("height").and_then(|vals| vals.last()))
