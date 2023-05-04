@@ -450,3 +450,27 @@ different from fzf. For example:
 
 [Create new issues](https://github.com/lotabout/skim/issues/new) if you meet any bugs
 or have any ideas. Pull requests are warmly welcomed.
+
+# Troubleshooting
+
+## No line feed issues with nix , FreeBSD, termux
+
+If you encounter display issues like:
+
+```bash
+$ for n in {1..10}; do echo "$n"; done | sk
+  0/10 0/0.> 10/10  10  9  8  7  6  5  4  3  2> 1
+```
+
+For example
+
+- https://github.com/lotabout/skim/issues/412
+- https://github.com/lotabout/skim/issues/455
+
+You need to set TERMINFO or TERMINFO_DIRS to the path to a correct terminfo database path
+
+For example, with termux, you can add in your bashr:
+
+```
+export TERMINFO=/data/data/com.termux/files/usr/share/terminfo
+```
