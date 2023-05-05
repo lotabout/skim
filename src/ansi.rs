@@ -324,6 +324,24 @@ impl<'a> From<(&'a str, &'a [usize], Attr)> for AnsiString<'a> {
     }
 }
 
+impl<'a> std::ops::Add for AnsiString<'a> {
+    type Output = AnsiString<'a>;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        let len = self.stripped.as_ref().len() as u32;
+        if let Some(fragments) = rhs.fragments {
+            if self.fragments.is_none() {
+                self.fragments = Some(vec![]);
+            }
+            for (attr, (start, end)) in fragments.iter() {
+                self.fragments.as_mut().unwrap().push((*attr, (start + len, end + len)));
+            }
+        }
+        self.stripped = Cow::owned(self.stripped.into_owned() + rhs.stripped.as_ref());
+        self
+    }
+}
+
 /// An iterator over all the (char, attr) characters.
 pub struct AnsiStringIterator<'a> {
     fragments: &'a [(Attr, (u32, u32))],
@@ -593,6 +611,26 @@ mod tests {
             merge_fragments(&[(ao, (1, 3)), (ao, (5, 7)), (ao, (9, 11))], &[(an, (2, 6))]),
             vec![(ao, (1, 2)), (an, (2, 6)), (ao, (6, 7)), (ao, (9, 11))]
         );
+    }
+
+    #[test]
+    fn test_ansi_string_add() {
+        let default_attr = Attr::default();
+        let ar = Attr::default().bg(Color::RED);
+        let ab = Attr::default().bg(Color::BLUE);
+
+        let string_a = AnsiString::new_str("foo", vec![(ar, (1, 3))]);
+        let string_b = AnsiString::new_str("bar", vec![(ab, (0, 2))]);
+        let string_c = string_a + string_b;
+
+        let mut it = string_c.iter();
+        assert_eq!(Some(('f', default_attr)), it.next());
+        assert_eq!(Some(('o', ar)), it.next());
+        assert_eq!(Some(('o', ar)), it.next());
+        assert_eq!(Some(('b', ab)), it.next());
+        assert_eq!(Some(('a', ab)), it.next());
+        assert_eq!(Some(('r', default_attr)), it.next());
+        assert_eq!(None, it.next());
     }
 
     #[test]
