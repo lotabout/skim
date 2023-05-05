@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::max;
 use std::env;
 
 use std::process::Command;
@@ -21,7 +22,7 @@ use crate::item::{parse_criteria, ItemPool, MatchedItem, RankBuilder, RankCriter
 use crate::matcher::{Matcher, MatcherControl};
 use crate::options::SkimOptions;
 use crate::output::SkimOutput;
-use crate::previewer::Previewer;
+use crate::previewer::{PreviewSource, Previewer};
 use crate::query::Query;
 use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
@@ -30,7 +31,6 @@ use crate::theme::ColorTheme;
 use crate::util::clear_canvas;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
 use crate::{FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
-use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;
 const SPINNER_DURATION: u32 = 200;
@@ -222,10 +222,18 @@ impl Model {
         self.preview_size = preview_size;
         self.preview_hidden = !preview_shown;
 
-        if let Some(preview_cmd) = options.preview {
-            let tx = Arc::new(SpinLock::new(self.tx.clone()));
+        let preview_source = if let Some(cmd) = options.preview {
+            PreviewSource::Command(cmd.to_string())
+        } else if let Some(ref callback) = options.preview_fn {
+            PreviewSource::Callback(callback.clone())
+        } else {
+            PreviewSource::Empty
+        };
+
+        let tx = Arc::new(SpinLock::new(self.tx.clone()));
+        if !matches!(preview_source, PreviewSource::Empty) {
             self.previewer = Some(
-                Previewer::new(Some(preview_cmd.to_string()), move || {
+                Previewer::new(preview_source, move || {
                     let _ = tx.lock().send((Key::Null, Event::EvHeartBeat));
                 })
                 .wrap(preview_wrap)
