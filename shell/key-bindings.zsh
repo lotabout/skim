@@ -118,8 +118,23 @@ bindkey '\ec' skim-cd-widget
 skim-history-widget() {
   local selected num
   setopt localoptions noglobsubst noposixbuiltins pipefail no_aliases 2> /dev/null
-  selected=( $(fc -rl 1 | perl -ne 'print if !$seen{(/^\s*[0-9]+\**\s+(.*)/, $1)}++' |
-    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS -n2..,.. --tiebreak=index --bind=ctrl-r:toggle-sort $SKIM_CTRL_R_OPTS --query=${(qqq)LBUFFER} --no-multi" $(__skimcmd)) )
+  local awk_filter='{ cmd=$0; sub(/^\s*[0-9]+\**\s+/, "", cmd); if (!seen[cmd]++) print $0 }'  # filter out duplicates
+  local n=2 fc_opts=''
+  if [[ -o extended_history ]]; then
+    local today=$(date +%Y-%m-%d)
+    # For today's commands, replace date ($2) with "today", otherwise remove time ($3).
+    # And filter out duplicates.
+    awk_filter='{
+      if ($2 == "'$today'") sub($2 " ", "today'\''")
+      else sub($3, "")
+      line=$0; $1=""; $2=""; $3=""
+      if (!seen[$0]++) print line
+    }'
+    fc_opts='-i'
+    n=3
+  fi
+  selected=( $(fc -rl $fc_opts 1 | awk "$awk_filter" |
+    SKIM_DEFAULT_OPTIONS="--height ${SKIM_TMUX_HEIGHT:-40%} $SKIM_DEFAULT_OPTIONS -n$n..,.. --tiebreak=index --bind=ctrl-r:toggle-sort $SKIM_CTRL_R_OPTS --query=${(qqq)LBUFFER} --no-multi" $(__skimcmd)) )
   local ret=$?
   if [ -n "$selected" ]; then
     num=$selected[1]
