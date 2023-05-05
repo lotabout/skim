@@ -57,6 +57,7 @@ pub struct Selection {
     // To avoid remember all items, we'll track the latest run_num and index.
     latest_select_run_num: u32,
     pre_selected_watermark: usize,
+    to_run_auto_line_select: bool,
     selector: Option<Rc<dyn Selector>>,
 }
 
@@ -78,6 +79,7 @@ impl Selection {
             theme: Arc::new(*DEFAULT_THEME),
             latest_select_run_num: 0,
             pre_selected_watermark: 0,
+            to_run_auto_line_select: false,
             selector: None,
         }
     }
@@ -137,6 +139,7 @@ impl Selection {
 
         if self.items.len() >= self.pre_selected_watermark {
             self.pre_select(&items);
+            self.to_run_auto_line_select = true;
         }
 
         self.items.append(items);
@@ -352,6 +355,34 @@ impl EventHandler for Selection {
     fn handle(&mut self, event: &Event) -> UpdateScreen {
         use crate::event::Event::*;
         match event {
+            Event::EvHeartBeat => {
+                // self is immutable in the draw function, so we're using the heartbeat to check whether the selection can be moved
+                if self.to_run_auto_line_select && (self.height.load(Ordering::Relaxed) as i32) > 0 {
+                    if self.selector.is_none() == false {
+
+                        let mut diff = 0;
+                        for (i, item) in self.items.iter().enumerate() {
+                            // use the same logic as in pre-select - reuse the existing arguments
+                            if self
+                                .selector
+                                .as_ref()
+                                .map(|s| s.should_select(item.item_idx as usize, item.item.as_ref()))
+                                .unwrap_or(false)
+                            {
+                                diff = -((self.line_cursor as i32)-(i as i32));
+                            }
+                        }
+                        if diff != 0 {
+                            self.act_move_line_cursor(diff);
+                        }
+                    }
+
+                    // pre-select is tried everytime the pre-select watermark changes
+                    // TODO: if `act_move_line_cursor` is every called, don't allow pre-select to move again
+                    self.to_run_auto_line_select = false;
+                }        
+            }
+
             EvActUp(diff) => {
                 self.act_move_line_cursor(*diff);
             }
