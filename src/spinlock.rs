@@ -69,12 +69,9 @@ impl<'mutex, T: ?Sized> DerefMut for SpinLockGuard<'mutex, T> {
 impl<'a, T: ?Sized> Drop for SpinLockGuard<'a, T> {
     #[inline]
     fn drop(&mut self) {
-        while self
-            .__lock
-            .locked
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {}
+        // Safety: While a SpinLock is locked, othre thread cannot acquire the
+        // lock, its internal status cannot be changed, no CAS needed.
+        self.__lock.locked.store(false, Ordering::SeqCst);
     }
 }
 
