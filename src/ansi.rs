@@ -211,7 +211,7 @@ impl ANSIParser {
 pub struct AnsiString<'a> {
     stripped: Cow<'a, str>,
     // attr: start, end
-    fragments: Option<Vec<(Attr, (u32, u32))>>,
+    fragments: Option<Box<Vec<(Attr, (u32, u32))>>>,
 }
 
 impl<'a> AnsiString<'a> {
@@ -241,7 +241,7 @@ impl<'a> AnsiString<'a> {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
             stripped: Cow::borrowed(stripped),
-            fragments: if fragments_empty { None } else { Some(fragments) },
+            fragments: if fragments_empty { None } else { Some(Box::new(fragments)) },
         }
     }
 
@@ -250,7 +250,7 @@ impl<'a> AnsiString<'a> {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
             stripped: Cow::owned(stripped),
-            fragments: if fragments_empty { None } else { Some(fragments) },
+            fragments: if fragments_empty { None } else { Some(Box::new(fragments)) },
         }
     }
 
@@ -292,11 +292,11 @@ impl<'a> AnsiString<'a> {
         if attrs.is_empty() {
             // pass
         } else if self.fragments.is_none() {
-            self.fragments = Some(attrs);
+            self.fragments = Some(Box::new(attrs));
         } else {
             let current_fragments = self.fragments.take().expect("unreachable");
             let new_fragments = merge_fragments(&current_fragments, &attrs);
-            self.fragments.replace(new_fragments);
+            self.fragments.replace(Box::new(new_fragments));
         }
     }
 }
