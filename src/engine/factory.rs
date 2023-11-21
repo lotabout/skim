@@ -4,9 +4,8 @@ use crate::engine::exact::{ExactEngine, ExactMatchingParam};
 use crate::engine::fuzzy::{FuzzyAlgorithm, FuzzyEngine};
 use crate::engine::regexp::RegexEngine;
 use crate::item::RankBuilder;
-use crate::{CaseMatching, MatchEngine, MatchEngineFactory};
+use crate::{Arc, CaseMatching, MatchEngine, MatchEngineFactory};
 use regex::Regex;
-use std::sync::Arc;
 
 lazy_static! {
     static ref RE_AND: Regex = Regex::new(r"([^ |]+( +\| +[^ |]*)+)|( +)").unwrap();

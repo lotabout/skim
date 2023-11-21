@@ -4,7 +4,6 @@ use std::error::Error;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::thread;
 
 use crossbeam::channel::{bounded, Receiver, Sender};
@@ -13,7 +12,7 @@ use regex::Regex;
 use crate::field::FieldRange;
 use crate::helper::item::DefaultSkimItem;
 use crate::reader::CommandCollector;
-use crate::{SkimItem, SkimItemReceiver, SkimItemSender};
+use crate::{Arc, SkimItem, SkimItemReceiver, SkimItemSender};
 
 const CMD_CHANNEL_SIZE: usize = 1024;
 const ITEM_CHANNEL_SIZE: usize = 10240;

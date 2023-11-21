@@ -39,12 +39,14 @@ bitflags = "1.3.2"
 timer = "0.2.0"
 chrono = "0.4.22"
 crossbeam = "0.8.2"
-beef = "0.5.2" # compact cow
+beef = { version = "0.5.2", optional = true } # compact cow
+triomphe = {version = "0.1.9", optional = true }
 defer-drop = "1.3.0"
 
 [features]
-default = ["cli"]
+default = ["cli", "compact"]
 cli = ["dep:clap", "dep:atty", "dep:shlex", "dep:env_logger"]
+compact = ["dep:beef", "dep:triomphe"]
 
 [profile.release]
 lto = true

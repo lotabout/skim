@@ -1,12 +1,11 @@
 use std::fmt::{Display, Error, Formatter};
-use std::sync::Arc;
 
 use fuzzy_matcher::clangd::ClangdMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
 use crate::item::RankBuilder;
-use crate::{CaseMatching, MatchEngine};
+use crate::{Arc, CaseMatching, MatchEngine};
 use crate::{MatchRange, MatchResult, SkimItem};
 use bitflags::_core::cmp::min;
 

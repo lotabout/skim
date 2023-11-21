@@ -1,7 +1,6 @@
 use std::fmt::{Display, Error, Formatter};
-use std::sync::Arc;
 
-use crate::{MatchEngine, MatchRange, MatchResult, SkimItem};
+use crate::{Arc, MatchEngine, MatchRange, MatchResult, SkimItem};
 
 //------------------------------------------------------------------------------
 // OrEngine, a combinator

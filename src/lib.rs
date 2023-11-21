@@ -4,10 +4,8 @@ extern crate lazy_static;
 extern crate log;
 
 use std::any::Any;
-use std::borrow::Cow;
 use std::fmt::Display;
 use std::sync::mpsc::channel;
-use std::sync::Arc;
 use std::thread;
 
 use crossbeam::channel::{Receiver, Sender};
@@ -27,7 +25,7 @@ mod event;
 pub mod field;
 mod global;
 mod header;
-mod helper;
+pub mod helper;
 mod input;
 mod item;
 mod matcher;
@@ -43,6 +41,37 @@ mod selection;
 mod spinlock;
 mod theme;
 mod util;
+
+//------------------------------------------------------------------------------
+// compact types
+#[cfg(feature = "compact")]
+pub type Cow<'a, T> = beef::lean::Cow<'a, T>;
+
+#[cfg(feature = "compact")]
+fn cow_borrowed(val: &str) -> Cow<str> {
+    Cow::borrowed(val)
+}
+
+#[cfg(feature = "compact")]
+fn cow_owned<'a>(val: String) -> Cow<'a, str> {
+    Cow::owned(val)
+}
+
+#[cfg(not(feature = "compact"))]
+pub type Cow<'a, B> = std::borrow::Cow<'a, B>;
+
+
+#[cfg(not(feature = "compact"))]
+fn cow_borrowed<'a, B: ?Sized + 'a + ToOwned>(val: &'a B) -> Cow<'a, B> {
+    Cow::Borrowed(val)
+}
+
+#[cfg(not(feature = "compact"))]
+fn cow_owned<'a, B: ?Sized + 'a + ToOwned>(val: B::Owned) -> Cow<'a, B> {
+    Cow::Owned(val)
+}
+
+pub type Arc<T> = std::sync::Arc<T>;
 
 //------------------------------------------------------------------------------
 pub trait AsAny {
@@ -135,7 +164,7 @@ pub trait SkimItem: AsAny + Send + Sync + 'static {
 
 impl<T: AsRef<str> + Send + Sync + 'static> SkimItem for T {
     fn text(&self) -> Cow<str> {
-        Cow::Borrowed(self.as_ref())
+        cow_borrowed(self.as_ref())
     }
 }
 

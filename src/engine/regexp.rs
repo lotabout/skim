@@ -1,11 +1,10 @@
 use std::fmt::{Display, Error, Formatter};
-use std::sync::Arc;
 
 use regex::Regex;
 
 use crate::engine::util::regex_match;
 use crate::item::RankBuilder;
-use crate::{CaseMatching, MatchEngine};
+use crate::{Arc, CaseMatching, MatchEngine};
 use crate::{MatchRange, MatchResult, SkimItem};
 use std::cmp::min;
 

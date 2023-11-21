@@ -2,7 +2,6 @@ use std::cmp::max;
 use std::cmp::min;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 
 use tuikit::prelude::{Event as TermEvent, *};
 
@@ -14,7 +13,7 @@ use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::clear_canvas;
 use crate::util::{print_item, reshape_string, LinePrinter};
-use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions};
+use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions, Arc};
 use regex::Regex;
 use std::rc::Rc;
 use unicode_width::UnicodeWidthStr;

@@ -1,5 +1,4 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -7,7 +6,7 @@ use rayon::prelude::*;
 
 use crate::item::{ItemPool, MatchedItem};
 use crate::spinlock::SpinLock;
-use crate::{CaseMatching, MatchEngineFactory};
+use crate::{Arc, CaseMatching, MatchEngineFactory};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
 

@@ -1,6 +1,5 @@
 use crate::event::Event;
-use crate::SkimItem;
-use std::sync::Arc;
+use crate::{Arc, SkimItem};
 use tuikit::key::Key;
 
 pub struct SkimOutput {

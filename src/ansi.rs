@@ -1,10 +1,10 @@
 // Parse ANSI attr code
 use std::default::Default;
 
-use beef::lean::Cow;
 use std::cmp::max;
 use tuikit::prelude::*;
 use vte::{Params, Perform};
+use crate::{Cow, cow_borrowed, cow_owned};
 
 /// An ANSI Parser, will parse one line at a time.
 ///
@@ -217,21 +217,21 @@ pub struct AnsiString<'a> {
 impl<'a> AnsiString<'a> {
     pub fn new_empty() -> Self {
         Self {
-            stripped: Cow::borrowed(""),
+            stripped: cow_borrowed(""),
             fragments: None,
         }
     }
 
     fn new_raw_string(string: String) -> Self {
         Self {
-            stripped: Cow::owned(string),
+            stripped: cow_owned(string),
             fragments: None,
         }
     }
 
     fn new_raw_str(str_ref: &'a str) -> Self {
         Self {
-            stripped: Cow::borrowed(str_ref),
+            stripped: cow_borrowed(str_ref),
             fragments: None,
         }
     }
@@ -240,7 +240,7 @@ impl<'a> AnsiString<'a> {
     pub fn new_str(stripped: &'a str, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
-            stripped: Cow::borrowed(stripped),
+            stripped: cow_borrowed(stripped),
             fragments: if fragments_empty { None } else { Some(Box::new(fragments)) },
         }
     }
@@ -249,7 +249,7 @@ impl<'a> AnsiString<'a> {
     pub fn new_string(stripped: String, fragments: Vec<(Attr, (u32, u32))>) -> Self {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
-            stripped: Cow::owned(stripped),
+            stripped: cow_owned(stripped),
             fragments: if fragments_empty { None } else { Some(Box::new(fragments)) },
         }
     }
@@ -264,8 +264,8 @@ impl<'a> AnsiString<'a> {
     }
 
     #[inline]
-    pub fn into_inner(self) -> std::borrow::Cow<'a, str> {
-        std::borrow::Cow::Owned(self.stripped.into_owned())
+    pub fn into_inner(self) -> Cow<'a, str> {
+        self.stripped
     }
 
     pub fn iter(&'a self) -> Box<dyn Iterator<Item = (char, Attr)> + 'a> {

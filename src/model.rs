@@ -1,9 +1,7 @@
-use std::borrow::Cow;
 use std::env;
 
 use std::process::Command;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Duration as TimerDuration;
@@ -29,7 +27,7 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::clear_canvas;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
+use crate::{Arc, Cow, cow_borrowed, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
 use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;
@@ -442,7 +440,7 @@ impl Model {
         let current_selection = current_item
             .as_ref()
             .map(|item| item.output())
-            .unwrap_or_else(|| Cow::Borrowed(""));
+            .unwrap_or_else(|| cow_borrowed(""));
         let query = self.query.get_fz_query();
         let cmd_query = self.query.get_cmd_query();
 

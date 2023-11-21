@@ -1,8 +1,7 @@
 use crate::ansi::ANSIParser;
 use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
-use crate::{AnsiString, DisplayContext, Matches, SkimItem};
+use crate::{AnsiString, Cow, cow_borrowed, DisplayContext, Matches, SkimItem};
 use regex::Regex;
-use std::borrow::Cow;
 use tuikit::prelude::Attr;
 
 //------------------------------------------------------------------------------
@@ -90,7 +89,7 @@ impl DefaultSkimItem {
 impl SkimItem for DefaultSkimItem {
     #[inline]
     fn text(&self) -> Cow<str> {
-        Cow::Borrowed(self.text.stripped())
+        cow_borrowed(self.text.stripped())
     }
 
     fn output(&self) -> Cow<str> {
@@ -100,10 +99,10 @@ impl SkimItem for DefaultSkimItem {
                 let text = ansi_parser.parse_ansi(self.orig_text.as_ref().unwrap());
                 text.into_inner()
             } else {
-                Cow::Borrowed(self.orig_text.as_ref().unwrap())
+                cow_borrowed(self.orig_text.as_ref().unwrap())
             }
         } else {
-            Cow::Borrowed(self.text.stripped())
+            cow_borrowed(self.text.stripped())
         }
     }
 

@@ -1,8 +1,7 @@
 use std::fmt::{Display, Error, Formatter};
-use std::sync::Arc;
 
 use crate::item::RankBuilder;
-use crate::{MatchEngine, MatchRange, MatchResult, SkimItem};
+use crate::{Arc, MatchEngine, MatchRange, MatchResult, SkimItem};
 
 //------------------------------------------------------------------------------
 #[derive(Debug)]

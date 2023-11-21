@@ -1,10 +1,8 @@
-use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::env;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -17,7 +15,7 @@ use crate::ansi::{ANSIParser, AnsiString};
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::spinlock::SpinLock;
 use crate::util::{atoi, clear_canvas, depends_on_items, inject_command, InjectContext};
-use crate::{ItemPreview, PreviewContext, PreviewPosition, SkimItem};
+use crate::{Arc, Cow, ItemPreview, PreviewContext, PreviewPosition, SkimItem};
 
 const TAB_STOP: usize = 8;
 const DELIMITER_STR: &str = r"[\t\n ]+";
