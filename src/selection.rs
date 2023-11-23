@@ -13,7 +13,7 @@ use crate::orderedvec::OrderedVec;
 use crate::theme::{ColorTheme, DEFAULT_THEME};
 use crate::util::clear_canvas;
 use crate::util::{print_item, reshape_string, LinePrinter};
-use crate::{DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions, Arc};
+use crate::{Arc, DisplayContext, MatchRange, Matches, Selector, SkimItem, SkimOptions};
 use regex::Regex;
 use std::rc::Rc;
 use unicode_width::UnicodeWidthStr;

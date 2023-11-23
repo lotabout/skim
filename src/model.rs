@@ -27,7 +27,7 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::clear_canvas;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{Arc, Cow, cow_borrowed, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
+use crate::{cow_borrowed, Arc, Cow, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
 use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;

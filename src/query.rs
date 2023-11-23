@@ -1,8 +1,8 @@
 use std::mem;
 
+use crate::Arc;
 use tuikit::prelude::*;
 use unicode_width::UnicodeWidthStr;
-use crate::Arc;
 
 use crate::event::{Event, EventHandler, UpdateScreen};
 use crate::options::SkimOptions;

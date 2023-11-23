@@ -1,6 +1,6 @@
 use crate::ansi::ANSIParser;
 use crate::field::{parse_matching_fields, parse_transform_fields, FieldRange};
-use crate::{AnsiString, Cow, cow_borrowed, DisplayContext, Matches, SkimItem};
+use crate::{cow_borrowed, AnsiString, Cow, DisplayContext, Matches, SkimItem};
 use regex::Regex;
 use tuikit::prelude::Attr;
 

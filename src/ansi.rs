@@ -1,10 +1,10 @@
 // Parse ANSI attr code
 use std::default::Default;
 
+use crate::{cow_borrowed, cow_owned, Cow};
 use std::cmp::max;
 use tuikit::prelude::*;
 use vte::{Params, Perform};
-use crate::{Cow, cow_borrowed, cow_owned};
 
 /// An ANSI Parser, will parse one line at a time.
 ///
@@ -241,7 +241,11 @@ impl<'a> AnsiString<'a> {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
             stripped: cow_borrowed(stripped),
-            fragments: if fragments_empty { None } else { Some(Box::new(fragments)) },
+            fragments: if fragments_empty {
+                None
+            } else {
+                Some(Box::new(fragments))
+            },
         }
     }
 
@@ -250,7 +254,11 @@ impl<'a> AnsiString<'a> {
         let fragments_empty = fragments.is_empty() || (fragments.len() == 1 && fragments[0].0 == Attr::default());
         Self {
             stripped: cow_owned(stripped),
-            fragments: if fragments_empty { None } else { Some(Box::new(fragments)) },
+            fragments: if fragments_empty {
+                None
+            } else {
+                Some(Box::new(fragments))
+            },
         }
     }
 

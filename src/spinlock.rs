@@ -81,9 +81,9 @@ impl<'a, T: ?Sized> Drop for SpinLockGuard<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Arc;
     use std::sync::mpsc::channel;
     use std::thread;
-    use crate::Arc;
 
     #[derive(Eq, PartialEq, Debug)]
     struct NonCopy(i32);

@@ -20,6 +20,8 @@ pub use crate::output::SkimOutput;
 use crate::reader::Reader;
 
 mod ansi;
+mod chunklist;
+mod consts;
 mod engine;
 mod event;
 pub mod field;
@@ -59,7 +61,6 @@ fn cow_owned<'a>(val: String) -> Cow<'a, str> {
 
 #[cfg(not(feature = "compact"))]
 pub type Cow<'a, B> = std::borrow::Cow<'a, B>;
-
 
 #[cfg(not(feature = "compact"))]
 fn cow_borrowed<'a, B: ?Sized + 'a + ToOwned>(val: &'a B) -> Cow<'a, B> {
