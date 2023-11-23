@@ -9,6 +9,7 @@ use crate::spinlock::SpinLock;
 use crate::{Arc, CaseMatching, MatchEngineFactory};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
+use crate::consts::CHUNK_SIZE;
 
 //==============================================================================
 pub struct MatcherControl {
@@ -90,28 +91,35 @@ impl Matcher {
             //    check https://doc.rust-lang.org/std/result/enum.Result.html#method.from_iter
 
             trace!("matcher start, total: {}", items.len());
-            let result: Result<Vec<_>, _> = items
+            let result_chunks: Result<Vec<Vec<_>>, _> = items
                 .into_par_iter()
                 .enumerate()
-                .filter_map(|(index, item)| {
-                    processed.fetch_add(1, Ordering::Relaxed);
-                    if stopped.load(Ordering::Relaxed) {
-                        Some(Err("matcher killed"))
-                    } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
-                        matched.fetch_add(1, Ordering::Relaxed);
-                        Some(Ok(MatchedItem {
-                            item: item.clone(),
-                            rank: match_result.rank,
-                            matched_range: Some(match_result.matched_range),
-                            item_idx: (num_taken + index) as u32,
-                        }))
-                    } else {
+                .filter_map(|(chunk_index, chunk)| {
+                    let mut ret_chunk = Vec::with_capacity(chunk.len());
+                    for (i, item) in chunk.iter().enumerate() {
+                        processed.fetch_add(1, Ordering::Relaxed);
+                        if stopped.load(Ordering::Relaxed) {
+                            return Some(Err("matcher killed"))
+                        } else if let Some(match_result) = matcher_engine.match_item(item.clone()) {
+                            matched.fetch_add(1, Ordering::Relaxed);
+                            ret_chunk.push(MatchedItem {
+                                item: item.clone(),
+                                rank: match_result.rank,
+                                matched_range: Some(match_result.matched_range),
+                                item_idx: (num_taken + chunk_index+CHUNK_SIZE+i) as u32,
+                            });
+                        }
+                    }
+                    if ret_chunk.is_empty() {
                         None
+                    } else {
+                        Some(Ok(ret_chunk))
                     }
                 })
                 .collect();
 
-            if let Ok(items) = result {
+            if let Ok(chunks) = result_chunks {
+                let items = chunks.into_iter().flatten().collect();
                 let mut pool = matched_items.lock();
                 *pool = items;
                 trace!("matcher stop, total matched: {}", pool.len());

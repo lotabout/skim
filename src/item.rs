@@ -64,13 +64,15 @@ impl RankBuilder {
 pub struct MatchedItem {
     pub item: Arc<dyn SkimItem>,
     pub rank: Rank,
-    pub matched_range: Option<MatchRange>, // range of chars that matched the pattern
+    pub matched_range: Option<MatchRange>,
+    // range of chars that matched the pattern
     pub item_idx: u32,
 }
 
 impl MatchedItem {}
 
 use std::cmp::Ordering as CmpOrd;
+use crate::chunklist::{Chunk, ChunkList};
 
 impl PartialEq for MatchedItem {
     fn eq(&self, other: &Self) -> bool {
@@ -97,7 +99,7 @@ const ITEM_POOL_CAPACITY: usize = 1024;
 
 pub struct ItemPool {
     length: AtomicUsize,
-    pool: SpinLock<Vec<Arc<dyn SkimItem>>>,
+    pool: Arc<ChunkList<Arc<dyn SkimItem>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
 
@@ -110,7 +112,7 @@ impl ItemPool {
     pub fn new() -> Self {
         Self {
             length: AtomicUsize::new(0),
-            pool: SpinLock::new(Vec::with_capacity(ITEM_POOL_CAPACITY)),
+            pool: Arc::new(ChunkList::new()),
             taken: AtomicUsize::new(0),
             reserved_items: SpinLock::new(Vec::new()),
             lines_to_reserve: 0,
@@ -135,8 +137,7 @@ impl ItemPool {
     }
 
     pub fn clear(&self) {
-        let mut items = self.pool.lock();
-        items.clear();
+        self.pool.clear();
         let mut header_items = self.reserved_items.lock();
         header_items.clear();
         self.taken.store(0, Ordering::SeqCst);
@@ -145,7 +146,6 @@ impl ItemPool {
 
     pub fn reset(&self) {
         // lock to ensure consistency
-        let _items = self.pool.lock();
         self.taken.store(0, Ordering::SeqCst);
     }
 
@@ -153,26 +153,28 @@ impl ItemPool {
     pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) -> usize {
         let len = items.len();
         trace!("item pool, append {} items", len);
-        let mut pool = self.pool.lock();
         let mut header_items = self.reserved_items.lock();
 
         let to_reserve = self.lines_to_reserve - header_items.len();
         if to_reserve > 0 {
-            let to_reserve = min(to_reserve, items.len());
-            header_items.extend_from_slice(&items[..to_reserve]);
-            pool.extend_from_slice(&items[to_reserve..]);
+            let num_to_reserve = min(to_reserve, items.len());
+            let to_append = items.split_off(num_to_reserve);
+            header_items.extend(items);
+            self.pool.append_vec(to_append);
         } else {
-            pool.append(&mut items);
+            self.pool.append_vec(items);
         }
-        self.length.store(pool.len(), Ordering::SeqCst);
+        self.length.store(self.pool.len(), Ordering::SeqCst);
         trace!("item pool, done append {} items", len);
-        pool.len()
+        self.pool.len()
     }
 
-    pub fn take(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {
-        let guard = self.pool.lock();
-        let taken = self.taken.swap(guard.len(), Ordering::SeqCst);
-        ItemPoolGuard { guard, start: taken }
+    pub fn take(&self) -> Vec<Chunk<Arc<dyn SkimItem>>> {
+        // TODO: fix state: taken
+        let ret = self.pool.snapshot();
+        let num = ret.iter().map(|c| c.len()).sum();
+        let taken = self.taken.swap(num, Ordering::SeqCst);
+        ret
     }
 
     pub fn reserved(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {

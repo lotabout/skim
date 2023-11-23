@@ -49,21 +49,28 @@ impl<T: Clone> Default for ChunkList<T> {
 }
 
 impl<T: Clone> ChunkList<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    fn push(&self, item: T) {
+    pub fn push(&self, item: T) {
         let mut inner = self.inner.lock().expect("lock failed? ask the developer");
         inner.push(item);
     }
 
-    fn clear(&self) {
+    pub fn append_vec(&self, vec: Vec<T>) {
+        let mut inner = self.inner.lock().expect("lock failed? ask the developer");
+        for item in vec.into_iter() {
+            inner.push(item);
+        }
+    }
+
+    pub fn clear(&self) {
         let mut inner = self.inner.lock().expect("lock failed? ask the developer");
         *inner = ChunkListInner::new();
     }
 
-    fn snapshot(&self) -> Vec<Chunk<T>> {
+    pub fn snapshot(&self) -> Vec<Chunk<T>> {
         let inner = self.inner.lock().expect("lock failed? ask the developer");
         let mut ret = inner.frozen.clone();
         // copy the last chunk
@@ -71,7 +78,7 @@ impl<T: Clone> ChunkList<T> {
         ret
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         let inner = self.inner.lock().expect("lock failed? ask the developer");
         inner.frozen.iter().map(|c| c.len()).sum::<usize>() + inner.pending.len()
     }
