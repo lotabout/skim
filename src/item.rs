@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::spinlock::{SpinLock, SpinLockGuard};
-use crate::{Arc, MatchRange, Rank, SkimItem};
+use crate::{Arc, MatchRange, Rank, SkimItem, SkimItemPool};
 
 //------------------------------------------------------------------------------
 
@@ -182,6 +182,19 @@ impl ItemPool {
         ItemPoolGuard { guard, start: 0 }
     }
 }
+
+impl SkimItemPool for ItemPool {
+    fn push(&self, item: Arc<dyn SkimItem>) {
+        self.append(vec![item]); // TODO: optimize
+    }
+}
+
+impl SkimItemPool for defer_drop::DeferDrop<ItemPool> {
+    fn push(&self, item: Arc<dyn SkimItem>) {
+        self.append(vec![item]); // TODO: optimize
+    }
+}
+
 
 pub struct ItemPoolGuard<'a, T: Sized + 'a> {
     guard: SpinLockGuard<'a, Vec<T>>,

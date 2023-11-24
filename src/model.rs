@@ -21,13 +21,12 @@ use crate::options::SkimOptions;
 use crate::output::SkimOutput;
 use crate::previewer::Previewer;
 use crate::query::Query;
-use crate::reader::{Reader, ReaderControl};
 use crate::selection::Selection;
 use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::clear_canvas;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{cow_borrowed, Arc, Cow, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem};
+use crate::{cow_borrowed, Arc, Cow, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem, SkimItemProvider, SkimItemProviderControl};
 use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;
@@ -45,7 +44,7 @@ lazy_static! {
 }
 
 pub struct Model {
-    reader: Reader,
+    provider: Arc<dyn SkimItemProvider>,
     query: Query,
     selection: Selection,
     num_options: usize,
@@ -67,7 +66,7 @@ pub struct Model {
     fuzzy_algorithm: FuzzyAlgorithm,
     reader_timer: Instant,
     matcher_timer: Instant,
-    reader_control: Option<ReaderControl>,
+    provider_control: Option<Box<dyn SkimItemProviderControl>>,
     matcher_control: Option<MatcherControl>,
 
     header: Header,
@@ -97,7 +96,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn new(rx: EventReceiver, tx: EventSender, reader: Reader, term: Arc<Term>, options: &SkimOptions) -> Self {
+    pub fn new(rx: EventReceiver, tx: EventSender, provider: Arc<dyn SkimItemProvider>, term: Arc<Term>, options: &SkimOptions) -> Self {
         let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
             Ok("") | Err(_) => "find .".to_owned(),
             Ok(val) => val.to_owned(),
@@ -148,7 +147,7 @@ impl Model {
         let (margin_top, margin_right, margin_bottom, margin_left) = margins;
 
         let mut ret = Model {
-            reader,
+            provider,
             query,
             selection,
             num_options: 0,
@@ -165,7 +164,7 @@ impl Model {
             tx,
             reader_timer: Instant::now(),
             matcher_timer: Instant::now(),
-            reader_control: None,
+            provider_control: None,
             matcher_control: None,
             fuzzy_algorithm: FuzzyAlgorithm::default(),
 
@@ -299,7 +298,7 @@ impl Model {
             .unwrap_or(false);
 
         if matcher_stopped {
-            let reader_stopped = self.reader_control.as_ref().map(ReaderControl::is_done).unwrap_or(true);
+            let reader_stopped = self.provider_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
             let ctrl = self.matcher_control.take().unwrap();
             let lock = ctrl.into_items();
             let mut items = lock.lock();
@@ -323,7 +322,7 @@ impl Model {
         }
 
         let items_consumed = self.item_pool.num_not_taken() == 0;
-        let reader_stopped = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
+        let reader_stopped = self.provider_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
         let processed = reader_stopped && items_consumed;
 
         // run matcher if matcher had been stopped and reader had new items.
@@ -363,7 +362,7 @@ impl Model {
         }
 
         let items_consumed = self.item_pool.num_not_taken() == 0;
-        let reader_stopped = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
+        let reader_stopped = self.provider_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
         let matcher_stopped = self.matcher_control.as_ref().map(|ctrl| ctrl.stopped()).unwrap_or(true);
 
         let processed = reader_stopped && items_consumed && matcher_stopped;
@@ -387,8 +386,8 @@ impl Model {
 
     fn on_cmd_query_change(&mut self, env: &mut ModelEnv) {
         // stop matcher
-        if let Some(ctrl) = self.reader_control.take() {
-            ctrl.kill();
+        if let Some(mut ctrl) = self.provider_control.take() {
+            ctrl.kill_and_wait();
         }
         if let Some(ctrl) = self.matcher_control.take() {
             ctrl.kill();
@@ -399,7 +398,7 @@ impl Model {
         self.num_options = 0;
 
         // restart reader
-        self.reader_control.replace(self.reader.run(&env.cmd));
+        self.provider_control.replace(self.provider.run(self.item_pool.clone(), &env.cmd));
         self.restart_matcher();
         self.reader_timer = Instant::now();
     }
@@ -495,7 +494,7 @@ impl Model {
             clear_selection: ClearStrategy::DontClear,
         };
 
-        self.reader_control = Some(self.reader.run(&env.cmd));
+        self.provider_control = Some(self.provider.run(self.item_pool.clone(), &env.cmd));
 
         // In the event loop, there might need
         let mut next_event = Some((Key::Null, Event::EvHeartBeat));
@@ -544,8 +543,8 @@ impl Model {
                 }
 
                 Event::EvActAccept(accept_key) => {
-                    if let Some(ctrl) = self.reader_control.take() {
-                        ctrl.kill();
+                    if let Some(mut ctrl) = self.provider_control.take() {
+                        ctrl.kill_and_wait();
                     }
                     if let Some(ctrl) = self.matcher_control.take() {
                         ctrl.kill();
@@ -562,8 +561,8 @@ impl Model {
                 }
 
                 Event::EvActAbort => {
-                    if let Some(ctrl) = self.reader_control.take() {
-                        ctrl.kill();
+                    if let Some(mut ctrl) = self.provider_control.take() {
+                        ctrl.kill_and_wait();
                     }
                     if let Some(ctrl) = self.matcher_control.take() {
                         ctrl.kill();
@@ -704,14 +703,6 @@ impl Model {
             ctrl.kill();
         }
 
-        // if there are new items, move them to item pool
-        let processed = self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true);
-        if !processed {
-            // take out new items and put them into items
-            let new_items = self.reader_control.as_ref().map(|c| c.take()).unwrap();
-            let _ = self.item_pool.append(new_items);
-        };
-
         // send heart beat (so that heartbeat/refresh is triggered)
         let _ = self.tx.send((Key::Null, Event::EvHeartBeat));
 
@@ -759,7 +750,7 @@ impl Model {
             selected: self.selection.get_num_selected(),
             current_item_idx: self.selection.get_current_item_idx(),
             hscroll_offset: self.selection.get_hscroll_offset(),
-            reading: !self.reader_control.as_ref().map(|c| c.is_done()).unwrap_or(true),
+            reading: !self.provider_control.as_ref().map(|c| c.is_done()).unwrap_or(true),
             time_since_read: self.reader_timer.elapsed(),
             time_since_match: self.matcher_timer.elapsed(),
             matcher_mode,

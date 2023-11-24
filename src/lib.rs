@@ -17,7 +17,6 @@ use crate::event::{EventReceiver, EventSender};
 use crate::model::Model;
 pub use crate::options::SkimOptions;
 pub use crate::output::SkimOutput;
-use crate::reader::Reader;
 
 mod ansi;
 mod chunklist;
@@ -311,6 +310,26 @@ pub trait Selector {
 }
 
 //------------------------------------------------------------------------------
+// Item provider
+
+/// for SkimItemProvider to push a new item into the ItemPool
+pub trait SkimItemPool {
+    fn push(&self, item: Arc<dyn SkimItem>);
+}
+
+pub trait SkimItemProviderControl {
+    fn kill_and_wait(&mut self);
+    fn is_done(&self) -> bool;
+}
+
+// Provider is responsible for handing Sync itself
+pub trait SkimItemProvider {
+    /// This function is meant to be called multiple times (e.g. skill the previous run and start a new run)
+    /// Normally the provider should create a new thread and return a control of the thread.
+    fn run(&self, pool: Arc<dyn SkimItemPool>, cmd_query: &str) -> Box<dyn SkimItemProviderControl>;
+}
+
+//------------------------------------------------------------------------------
 pub type SkimItemSender = Sender<Arc<dyn SkimItem>>;
 pub type SkimItemReceiver = Receiver<Arc<dyn SkimItem>>;
 
@@ -325,7 +344,7 @@ impl Skim {
     /// return:
     /// - None: on internal errors.
     /// - SkimOutput: the collected key, event, query, selected items, etc.
-    pub fn run_with(options: &SkimOptions, source: Option<SkimItemReceiver>) -> Option<SkimOutput> {
+    pub fn run_with(options: &SkimOptions, provider: Arc<dyn SkimItemProvider>) -> Option<SkimOutput> {
         let min_height = options
             .min_height
             .map(Skim::parse_height_string)
@@ -346,7 +365,7 @@ impl Skim {
                     .clear_on_start(!options.no_clear_start)
                     .hold(options.select1 || options.exit0 || options.sync),
             )
-            .unwrap(),
+                .unwrap(),
         );
         if !options.no_mouse {
             let _ = term.enable_mouse_support();
@@ -376,11 +395,9 @@ impl Skim {
         //------------------------------------------------------------------------------
         // reader
 
-        let reader = Reader::with_options(options).source(source);
-
         //------------------------------------------------------------------------------
         // model + previewer
-        let mut model = Model::new(rx, tx, reader, term.clone(), options);
+        let mut model = Model::new(rx, tx, provider, term.clone(), options);
         let ret = model.start();
         let _ = term.send_event(TermEvent::User(())); // interrupt the input thread
         let _ = input_thread.join();
