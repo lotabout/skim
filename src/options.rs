@@ -2,8 +2,6 @@ use std::rc::Rc;
 
 use derive_builder::Builder;
 
-use crate::helper::item_reader::SkimItemReader;
-use crate::reader::CommandCollector;
 use crate::{CaseMatching, FuzzyAlgorithm, MatchEngineFactory, Selector};
 use std::cell::RefCell;
 
@@ -49,7 +47,6 @@ pub struct SkimOptions<'a> {
     pub engine_factory: Option<Rc<dyn MatchEngineFactory>>,
     pub query_history: &'a [String],
     pub cmd_history: &'a [String],
-    pub cmd_collector: Rc<RefCell<dyn CommandCollector>>,
     pub keep_right: bool,
     pub skip_to_pattern: &'a str,
     pub select1: bool,
@@ -100,7 +97,6 @@ impl<'a> Default for SkimOptions<'a> {
             engine_factory: None,
             query_history: &[],
             cmd_history: &[],
-            cmd_collector: Rc::new(RefCell::new(SkimItemReader::new(Default::default()))),
             keep_right: false,
             skip_to_pattern: "",
             select1: false,

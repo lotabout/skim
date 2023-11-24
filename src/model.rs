@@ -26,7 +26,7 @@ use crate::spinlock::SpinLock;
 use crate::theme::ColorTheme;
 use crate::util::clear_canvas;
 use crate::util::{depends_on_items, inject_command, margin_string_to_size, parse_margin, InjectContext};
-use crate::{cow_borrowed, Arc, Cow, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem, SkimItemProvider, SkimItemProviderControl};
+use crate::{cow_borrowed, Arc, Cow, FuzzyAlgorithm, MatchEngineFactory, MatchRange, SkimItem, SkimItemProvider, SkimItemProviderControl, ProviderSource};
 use std::cmp::max;
 
 const REFRESH_DURATION: i64 = 100;
@@ -398,7 +398,7 @@ impl Model {
         self.num_options = 0;
 
         // restart reader
-        self.provider_control.replace(self.provider.run(self.item_pool.clone(), &env.cmd));
+        self.provider_control.replace(self.provider.run(self.item_pool.clone(), ProviderSource::Command(env.cmd.clone())));
         self.restart_matcher();
         self.reader_timer = Instant::now();
     }
@@ -494,7 +494,7 @@ impl Model {
             clear_selection: ClearStrategy::DontClear,
         };
 
-        self.provider_control = Some(self.provider.run(self.item_pool.clone(), &env.cmd));
+        self.provider_control = Some(self.provider.run(self.item_pool.clone(), ProviderSource::Command(env.cmd.clone())));
 
         // In the event loop, there might need
         let mut next_event = Some((Key::Null, Event::EvHeartBeat));

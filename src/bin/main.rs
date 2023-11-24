@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
 use clap::{crate_version, App, Arg, ArgMatches};
+use skim::helper::item_provider::{DefaultSkimProvider, DefaultSkimProviderOption};
 use skim::prelude::*;
 
 const USAGE: &str = "
@@ -255,7 +256,7 @@ fn real_main() -> Result<i32, std::io::Error> {
 
     //------------------------------------------------------------------------------
     // initialize collector
-    let item_reader_option = SkimItemReaderOption::default()
+    let provider_option = DefaultSkimProviderOption::default()
         .ansi(opts.is_present("ansi"))
         .delimiter(opts.values_of("delimiter").and_then(|vals| vals.last()).unwrap_or(""))
         .with_nth(opts.values_of("with-nth").and_then(|vals| vals.last()).unwrap_or(""))
@@ -264,8 +265,7 @@ fn real_main() -> Result<i32, std::io::Error> {
         .show_error(opts.is_present("show-cmd-error"))
         .build();
 
-    let cmd_collector = Rc::new(RefCell::new(SkimItemReader::new(item_reader_option)));
-    options.cmd_collector = cmd_collector.clone();
+    let skim_item_provider = DefaultSkimProvider::new(provider_option);
 
     //------------------------------------------------------------------------------
     // read in the history file
@@ -315,21 +315,21 @@ fn real_main() -> Result<i32, std::io::Error> {
 
     //------------------------------------------------------------------------------
     // read from pipe or command
-    let rx_item = if atty::isnt(atty::Stream::Stdin) {
-            let rx_item = cmd_collector.borrow().of_bufread(BufReader::new(std::io::stdin()));
-            Some(rx_item)
-        } else {
-         None
-    };
+    // let rx_item = if atty::isnt(atty::Stream::Stdin) {
+    //         let rx_item = cmd_collector.borrow().of_bufread(BufReader::new(std::io::stdin()));
+    //         Some(rx_item)
+    //     } else {
+    //      None
+    // };
 
     //------------------------------------------------------------------------------
     // filter mode
-    if opts.is_present("filter") {
-        return filter(&bin_options, &options, rx_item);
-    }
+    // if opts.is_present("filter") {
+    //     return filter(&bin_options, &options, rx_item);
+    // }
 
     //------------------------------------------------------------------------------
-    let output = Skim::run_with(&options, rx_item);
+    let output = Skim::run_with(&options, Arc::new(skim_item_provider));
     if output.is_none() { // error
         return Ok(135);
     }
@@ -498,61 +498,61 @@ pub struct BinOptions<'a> {
     print_cmd: bool,
 }
 
-pub fn filter(
-    bin_option: &BinOptions,
-    options: &SkimOptions,
-    source: Option<SkimItemReceiver>,
-) -> Result<i32, std::io::Error> {
-    let mut stdout = std::io::stdout();
-
-    let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
-        Ok("") | Err(_) => "find .".to_owned(),
-        Ok(val) => val.to_owned(),
-    };
-    let query = bin_option.filter.unwrap_or("");
-    let cmd = options.cmd.unwrap_or(&default_command);
-
-    // output query
-    if bin_option.print_query {
-        write!(stdout, "{}{}", query, bin_option.output_ending)?;
-    }
-
-    if bin_option.print_cmd {
-        write!(stdout, "{}{}", cmd, bin_option.output_ending)?;
-    }
-
-    //------------------------------------------------------------------------------
-    // matcher
-    let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
-        Box::new(RegexEngineFactory::builder())
-    } else {
-        let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
-            .fuzzy_algorithm(options.algorithm)
-            .exact_mode(options.exact)
-            .build();
-        Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
-    };
-
-    let engine = engine_factory.create_engine_with_case(query, options.case);
-
-    //------------------------------------------------------------------------------
-    // start
-    let components_to_stop = Arc::new(AtomicUsize::new(0));
-
-    let stream_of_item = source.unwrap_or_else(|| {
-        let cmd_collector = options.cmd_collector.clone();
-        let (ret, _control) = cmd_collector.borrow_mut().invoke(cmd, components_to_stop);
-        ret
-    });
-
-    let mut num_matched = 0;
-    stream_of_item
-        .into_iter()
-        .filter_map(|item| engine.match_item(item.clone()).map(|result| (item, result)))
-        .try_for_each(|(item, _match_result)| {
-            num_matched += 1;
-            write!(stdout, "{}{}", item.output(), bin_option.output_ending)
-        })?;
-
-    Ok(if num_matched == 0 { 1 } else { 0 })
-}
+// pub fn filter(
+//     bin_option: &BinOptions,
+//     options: &SkimOptions,
+//     source: Option<SkimItemReceiver>,
+// ) -> Result<i32, std::io::Error> {
+//     let mut stdout = std::io::stdout();
+//
+//     let default_command = match env::var("SKIM_DEFAULT_COMMAND").as_ref().map(String::as_ref) {
+//         Ok("") | Err(_) => "find .".to_owned(),
+//         Ok(val) => val.to_owned(),
+//     };
+//     let query = bin_option.filter.unwrap_or("");
+//     let cmd = options.cmd.unwrap_or(&default_command);
+//
+//     // output query
+//     if bin_option.print_query {
+//         write!(stdout, "{}{}", query, bin_option.output_ending)?;
+//     }
+//
+//     if bin_option.print_cmd {
+//         write!(stdout, "{}{}", cmd, bin_option.output_ending)?;
+//     }
+//
+//     //------------------------------------------------------------------------------
+//     // matcher
+//     let engine_factory: Box<dyn MatchEngineFactory> = if options.regex {
+//         Box::new(RegexEngineFactory::builder())
+//     } else {
+//         let fuzzy_engine_factory = ExactOrFuzzyEngineFactory::builder()
+//             .fuzzy_algorithm(options.algorithm)
+//             .exact_mode(options.exact)
+//             .build();
+//         Box::new(AndOrEngineFactory::new(fuzzy_engine_factory))
+//     };
+//
+//     let engine = engine_factory.create_engine_with_case(query, options.case);
+//
+//     //------------------------------------------------------------------------------
+//     // start
+//     let components_to_stop = Arc::new(AtomicUsize::new(0));
+//
+//     let stream_of_item = source.unwrap_or_else(|| {
+//         let cmd_collector = options.cmd_collector.clone();
+//         let (ret, _control) = cmd_collector.borrow_mut().invoke(cmd, components_to_stop);
+//         ret
+//     });
+//
+//     let mut num_matched = 0;
+//     stream_of_item
+//         .into_iter()
+//         .filter_map(|item| engine.match_item(item.clone()).map(|result| (item, result)))
+//         .try_for_each(|(item, _match_result)| {
+//             num_matched += 1;
+//             write!(stdout, "{}{}", item.output(), bin_option.output_ending)
+//         })?;
+//
+//     Ok(if num_matched == 0 { 1 } else { 0 })
+// }

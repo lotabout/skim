@@ -4,7 +4,7 @@ use crate::global::mark_new_run;
 ///! After reading in a line, reader will save an item into the pool(items)
 use crate::options::SkimOptions;
 use crate::spinlock::SpinLock;
-use crate::{Arc, SkimItem, SkimItemReceiver};
+use crate::{Arc, SkimItem, SkimItemProviderControl, SkimItemReceiver};
 use crossbeam::channel::{bounded, select, Sender};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -28,11 +28,10 @@ pub struct ReaderControl {
     tx_interrupt: Sender<i32>,
     tx_interrupt_cmd: Option<Sender<i32>>,
     components_to_stop: Arc<AtomicUsize>,
-    items: Arc<SpinLock<Vec<Arc<dyn SkimItem>>>>,
 }
 
-impl ReaderControl {
-    pub fn kill(self) {
+impl SkimItemProviderControl for ReaderControl {
+    fn kill_and_wait(self) {
         debug!(
             "kill reader, components before: {}",
             self.components_to_stop.load(Ordering::SeqCst)
@@ -43,16 +42,8 @@ impl ReaderControl {
         while self.components_to_stop.load(Ordering::SeqCst) != 0 {}
     }
 
-    pub fn take(&self) -> Vec<Arc<dyn SkimItem>> {
-        let mut items = self.items.lock();
-        let mut ret = Vec::with_capacity(items.len());
-        ret.append(&mut items);
-        ret
-    }
-
-    pub fn is_done(&self) -> bool {
-        let items = self.items.lock();
-        self.components_to_stop.load(Ordering::SeqCst) == 0 && items.is_empty()
+    fn is_done(&self) -> bool {
+        self.components_to_stop.load(Ordering::SeqCst) == 0
     }
 }
 

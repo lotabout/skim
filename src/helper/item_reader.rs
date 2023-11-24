@@ -11,7 +11,6 @@ use regex::Regex;
 
 use crate::field::FieldRange;
 use crate::helper::item::DefaultSkimItem;
-use crate::reader::CommandCollector;
 use crate::{Arc, SkimItem, SkimItemReceiver, SkimItemSender};
 
 const CMD_CHANNEL_SIZE: usize = 1024;
@@ -302,12 +301,6 @@ impl SkimItemReader {
         }
 
         (rx_item, tx_interrupt)
-    }
-}
-
-impl CommandCollector for SkimItemReader {
-    fn invoke(&mut self, cmd: &str, components_to_stop: Arc<AtomicUsize>) -> (SkimItemReceiver, Sender<i32>) {
-        self.read_and_collect_from_command(components_to_stop, CollectorInput::Command(cmd.to_string()))
     }
 }
 

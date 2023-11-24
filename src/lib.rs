@@ -5,6 +5,8 @@ extern crate log;
 
 use std::any::Any;
 use std::fmt::Display;
+use std::io::Read;
+use std::os::fd::AsRawFd;
 use std::sync::mpsc::channel;
 use std::thread;
 
@@ -37,7 +39,6 @@ mod output;
 pub mod prelude;
 mod previewer;
 mod query;
-mod reader;
 mod selection;
 mod spinlock;
 mod theme;
@@ -313,7 +314,7 @@ pub trait Selector {
 // Item provider
 
 /// for SkimItemProvider to push a new item into the ItemPool
-pub trait SkimItemPool {
+pub trait SkimItemPool: Send + Sync {
     fn push(&self, item: Arc<dyn SkimItem>);
 }
 
@@ -322,11 +323,20 @@ pub trait SkimItemProviderControl {
     fn is_done(&self) -> bool;
 }
 
+pub trait ReadAndAsRawFd: Read + AsRawFd + Send {}
+
+impl<T> ReadAndAsRawFd for T where T: Read + AsRawFd + Send {}
+
+pub enum ProviderSource {
+    Pipe(Box<dyn ReadAndAsRawFd + Send>),
+    Command(String),
+}
+
 // Provider is responsible for handing Sync itself
 pub trait SkimItemProvider {
     /// This function is meant to be called multiple times (e.g. skill the previous run and start a new run)
     /// Normally the provider should create a new thread and return a control of the thread.
-    fn run(&self, pool: Arc<dyn SkimItemPool>, cmd_query: &str) -> Box<dyn SkimItemProviderControl>;
+    fn run(&self, pool: Arc<dyn SkimItemPool>, source: ProviderSource) -> Box<dyn SkimItemProviderControl>;
 }
 
 //------------------------------------------------------------------------------
