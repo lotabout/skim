@@ -1,6 +1,18 @@
-[![Crates.io](https://img.shields.io/crates/v/skim.svg)](https://crates.io/crates/skim)
-[![Build & Test](https://github.com/lotabout/skim/workflows/Build%20&%20Test/badge.svg)](https://github.com/lotabout/skim/actions?query=workflow%3A%22Build+%26+Test%22)
-[![Packaging status](https://repology.org/badge/tiny-repos/skim.svg)](https://repology.org/project/skim/versions)
+<p align="center">
+  <a href="https://crates.io/crates/skim">
+    <img src="https://img.shields.io/crates/v/skim.svg" alt="Crates.io" />
+  </a>
+  <a href="https://github.com/lotabout/skim/actions?query=workflow%3A%22Build+%26+Test%22">
+    <img src="https://github.com/lotabout/skim/workflows/Build%20&%20Test/badge.svg" alt="Build & Test" />
+  </a>
+  <a href="https://repology.org/project/skim/versions">
+    <img src="https://repology.org/badge/tiny-repos/skim.svg" alt="Packaging status" />
+  </a>
+  <a href="https://discord.gg/23PuxttufP">
+    <img alt="Skim Discord" src="https://img.shields.io/discord/1031830957432504361?label=&color=7389d8&labelColor=6a7ec2&logoColor=ffffff&logo=discord" />
+  </a>
+</p>
+
 > Life is short, skim!
 
 Half of our life is spent on navigation: files, lines, commands… You need skim!
@@ -47,13 +59,14 @@ The skim project contains several components:
 
 ## Package Managers
 
-| Distribution   | Package Manager   | Command                   |
-| -------------- | ----------------- | ------------------------- |
-| macOS          | Homebrew          | `brew install sk`         |
-| macOS          | MacPorts          | `sudo port install skim`  |
-| Fedora         | dnf               | `dnf install skim`        |
-| Alpine         | apk               | `apk add skim`            |
-| Arch           | pacman            | `pacman -S skim`          |
+| Distribution   | Package Manager   | Command                      |
+| -------------- | ----------------- | ---------------------------- |
+| macOS          | Homebrew          | `brew install sk`            |
+| macOS          | MacPorts          | `sudo port install skim`     |
+| Fedora         | dnf               | `dnf install skim`           |
+| Alpine         | apk               | `apk add skim`               |
+| Arch           | pacman            | `pacman -S skim`             |
+| Gentoo         | Portage           | `emerge --ask app-misc/skim` |
 
 See [repology](https://repology.org/project/skim/versions) for a comprehensive overview of package availability.
 
@@ -437,3 +450,27 @@ different from fzf. For example:
 
 [Create new issues](https://github.com/lotabout/skim/issues/new) if you meet any bugs
 or have any ideas. Pull requests are warmly welcomed.
+
+# Troubleshooting
+
+## No line feed issues with nix , FreeBSD, termux
+
+If you encounter display issues like:
+
+```bash
+$ for n in {1..10}; do echo "$n"; done | sk
+  0/10 0/0.> 10/10  10  9  8  7  6  5  4  3  2> 1
+```
+
+For example
+
+- https://github.com/lotabout/skim/issues/412
+- https://github.com/lotabout/skim/issues/455
+
+You need to set TERMINFO or TERMINFO_DIRS to the path to a correct terminfo database path
+
+For example, with termux, you can add in your bashr:
+
+```
+export TERMINFO=/data/data/com.termux/files/usr/share/terminfo
+```
