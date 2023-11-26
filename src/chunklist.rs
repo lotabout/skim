@@ -7,14 +7,13 @@ use std::cmp::{max, min};
 use crate::consts::{CHUNK_LIST_INIT_CAPACITY, CHUNK_SIZE};
 use std::sync::{Arc};
 use parking_lot::Mutex;
-use crate::spinlock::SpinLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub type Chunk<T> = Arc<Vec<T>>;
 
 struct ChunkListInner<T: Clone> {
     frozen: Vec<Chunk<T>>,
-    pending: Chunk<T>,
-    len: usize,
+    pending: Vec<T>,
 }
 
 impl<T: Clone> ChunkListInner<T> {
@@ -22,37 +21,32 @@ impl<T: Clone> ChunkListInner<T> {
         ChunkListInner {
             frozen: Vec::with_capacity(CHUNK_LIST_INIT_CAPACITY),
             pending: Self::new_chunk(),
-            len: 0,
         }
     }
 
-    fn new_chunk() -> Chunk<T> {
-        Arc::new(Vec::with_capacity(CHUNK_SIZE))
+    fn new_chunk() -> Vec<T> {
+        Vec::with_capacity(CHUNK_SIZE)
     }
 
     fn push(&mut self, item: T) {
         if self.pending.capacity() == self.pending.len() {
-            self.frozen.push(self.pending.clone());
-            self.pending = Self::new_chunk();
+            let pending_taken = std::mem::replace(&mut self.pending, Self::new_chunk());
+            self.frozen.push(Arc::new(pending_taken));
         }
-        Arc::make_mut(&mut self.pending)
-            .push(item);
-        self.len += 1;
-    }
-
-    fn len(&self) -> usize {
-        self.len
+        self.pending.push(item);
     }
 }
 
 pub struct ChunkList<T: Clone> {
     inner: Mutex<ChunkListInner<T>>,
+    len: AtomicUsize, // put len here to avoid locking mutex when all we need is length
 }
 
 impl<T: Clone> Default for ChunkList<T> {
     fn default() -> Self {
         ChunkList {
             inner: Mutex::new(ChunkListInner::new()),
+            len: AtomicUsize::new(0),
         }
     }
 }
@@ -65,10 +59,12 @@ impl<T: Clone> ChunkList<T> {
     pub fn push(&self, item: T) {
         let mut inner = self.inner.lock();
         inner.push(item);
+        self.len.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn append_vec(&self, vec: Vec<T>) {
         let mut inner = self.inner.lock();
+        self.len.fetch_add(vec.len(), Ordering::Relaxed);
         for item in vec.into_iter() {
             inner.push(item);
         }
@@ -99,8 +95,7 @@ impl<T: Clone> ChunkList<T> {
     }
 
     pub fn len(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.len()
+        self.len.load(Ordering::Relaxed)
     }
 }
 
