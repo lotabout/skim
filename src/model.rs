@@ -471,7 +471,7 @@ impl Model {
 
         let item_len = query.len();
         let item: Arc<dyn SkimItem> = Arc::new(query);
-        let new_len = self.item_pool.append(vec![item.clone()]);
+        let new_len = self.item_pool.push_item(item.clone());
         let item_idx = (max(new_len, 1) - 1) as u32;
         let matched_item = MatchedItem {
             item,

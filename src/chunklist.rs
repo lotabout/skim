@@ -3,14 +3,18 @@
 // - On the other hand, it could be cheaply cloned so that we could take snapshots while the chunk
 //   list is being pushed.
 
+use std::cmp::{max, min};
 use crate::consts::{CHUNK_LIST_INIT_CAPACITY, CHUNK_SIZE};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use parking_lot::Mutex;
+use crate::spinlock::SpinLock;
 
 pub type Chunk<T> = Arc<Vec<T>>;
 
 struct ChunkListInner<T: Clone> {
     frozen: Vec<Chunk<T>>,
     pending: Chunk<T>,
+    len: usize,
 }
 
 impl<T: Clone> ChunkListInner<T> {
@@ -18,6 +22,7 @@ impl<T: Clone> ChunkListInner<T> {
         ChunkListInner {
             frozen: Vec::with_capacity(CHUNK_LIST_INIT_CAPACITY),
             pending: Self::new_chunk(),
+            len: 0,
         }
     }
 
@@ -30,9 +35,13 @@ impl<T: Clone> ChunkListInner<T> {
             self.frozen.push(self.pending.clone());
             self.pending = Self::new_chunk();
         }
-        Arc::get_mut(&mut self.pending)
-            .expect("could not get mut pointer for pending vec, must be bug")
+        Arc::make_mut(&mut self.pending)
             .push(item);
+        self.len += 1;
+    }
+
+    fn len(&self) -> usize {
+        self.len
     }
 }
 
@@ -54,33 +63,44 @@ impl<T: Clone> ChunkList<T> {
     }
 
     pub fn push(&self, item: T) {
-        let mut inner = self.inner.lock().expect("lock failed? ask the developer");
+        let mut inner = self.inner.lock();
         inner.push(item);
     }
 
     pub fn append_vec(&self, vec: Vec<T>) {
-        let mut inner = self.inner.lock().expect("lock failed? ask the developer");
+        let mut inner = self.inner.lock();
         for item in vec.into_iter() {
             inner.push(item);
         }
     }
 
     pub fn clear(&self) {
-        let mut inner = self.inner.lock().expect("lock failed? ask the developer");
+        let mut inner = self.inner.lock();
         *inner = ChunkListInner::new();
     }
 
-    pub fn snapshot(&self) -> Vec<Chunk<T>> {
-        let inner = self.inner.lock().expect("lock failed? ask the developer");
-        let mut ret = inner.frozen.clone();
+    pub fn snapshot(&self, start: usize) -> Vec<Chunk<T>> {
+        let mut ret = Vec::new();
+        let inner = self.inner.lock();
+
+        let mut scanned = 0;
+        for chunk in inner.frozen.iter() {
+            if scanned > start {
+                ret.push(chunk.clone());
+            } else if scanned + chunk.len() > start {
+                ret.push(Arc::new(Vec::from(&chunk[start - scanned..])))
+            }
+            scanned += chunk.len();
+        }
+
         // copy the last chunk
-        ret.push(Arc::new((*inner.pending).clone()));
+        ret.push(Arc::new(Vec::from(&inner.pending[max(scanned, start) - scanned..])));
         ret
     }
 
     pub fn len(&self) -> usize {
-        let inner = self.inner.lock().expect("lock failed? ask the developer");
-        inner.frozen.iter().map(|c| c.len()).sum::<usize>() + inner.pending.len()
+        let inner = self.inner.lock();
+        inner.len()
     }
 }
 

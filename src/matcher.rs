@@ -9,6 +9,7 @@ use crate::spinlock::SpinLock;
 use crate::{Arc, CaseMatching, MatchEngineFactory};
 use defer_drop::DeferDrop;
 use std::rc::Rc;
+use std::time::Duration;
 use crate::consts::CHUNK_SIZE;
 
 //==============================================================================
@@ -83,6 +84,7 @@ impl Matcher {
         let matched_items_clone = matched_items.clone();
 
         let thread_matcher = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
             let num_taken = item_pool.num_taken();
             let items = item_pool.take();
 

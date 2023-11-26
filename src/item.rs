@@ -98,7 +98,6 @@ impl Ord for MatchedItem {
 const ITEM_POOL_CAPACITY: usize = 1024;
 
 pub struct ItemPool {
-    length: AtomicUsize,
     pool: Arc<ChunkList<Arc<dyn SkimItem>>>,
     /// number of items that was `take`n
     taken: AtomicUsize,
@@ -111,7 +110,6 @@ pub struct ItemPool {
 impl ItemPool {
     pub fn new() -> Self {
         Self {
-            length: AtomicUsize::new(0),
             pool: Arc::new(ChunkList::new()),
             taken: AtomicUsize::new(0),
             reserved_items: SpinLock::new(Vec::new()),
@@ -125,11 +123,11 @@ impl ItemPool {
     }
 
     pub fn len(&self) -> usize {
-        self.length.load(Ordering::SeqCst)
+        self.pool.len()
     }
 
     pub fn num_not_taken(&self) -> usize {
-        self.length.load(Ordering::SeqCst) - self.taken.load(Ordering::SeqCst)
+        self.len() - self.taken.load(Ordering::SeqCst)
     }
 
     pub fn num_taken(&self) -> usize {
@@ -141,7 +139,6 @@ impl ItemPool {
         let mut header_items = self.reserved_items.lock();
         header_items.clear();
         self.taken.store(0, Ordering::SeqCst);
-        self.length.store(0, Ordering::SeqCst);
     }
 
     pub fn reset(&self) {
@@ -164,16 +161,26 @@ impl ItemPool {
         } else {
             self.pool.append_vec(items);
         }
-        self.length.store(self.pool.len(), Ordering::SeqCst);
         trace!("item pool, done append {} items", len);
+        self.pool.len()
+    }
+
+    pub fn push_item(&self, item: Arc<dyn SkimItem>) -> usize {
+        let mut header_items = self.reserved_items.lock();
+        let to_reserve = self.lines_to_reserve - header_items.len();
+        if to_reserve > 0 {
+            header_items.push(item)
+        } else {
+            self.pool.push(item);
+        }
         self.pool.len()
     }
 
     pub fn take(&self) -> Vec<Chunk<Arc<dyn SkimItem>>> {
         // TODO: fix state: taken
-        let ret = self.pool.snapshot();
+        let ret = self.pool.snapshot(self.taken.load(Ordering::SeqCst));
         let num = ret.iter().map(|c| c.len()).sum();
-        let taken = self.taken.swap(num, Ordering::SeqCst);
+        let _taken = self.taken.fetch_add(num, Ordering::SeqCst);
         ret
     }
 
@@ -185,13 +192,13 @@ impl ItemPool {
 
 impl SkimItemPool for ItemPool {
     fn push(&self, item: Arc<dyn SkimItem>) {
-        self.append(vec![item]); // TODO: optimize
+        self.push_item(item); // TODO: optimize
     }
 }
 
 impl SkimItemPool for defer_drop::DeferDrop<ItemPool> {
     fn push(&self, item: Arc<dyn SkimItem>) {
-        self.append(vec![item]); // TODO: optimize
+        self.push_item(item); // TODO: optimize
     }
 }
 

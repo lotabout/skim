@@ -1,14 +1,16 @@
 use std::fs::File;
-use std::io::{BufRead, ErrorKind, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::process::{Child, Command, Stdio};
 use std::{env, thread};
 use std::error::Error;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::JoinHandle;
 use std::time::Duration;
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::unistd::pipe;
 use regex::Regex;
+use memchr::memchr;
 use crate::{Arc, ProviderSource, ReadAndAsRawFd, SkimItemPool, SkimItemProvider, SkimItemProviderControl};
 use crate::field::FieldRange;
 use crate::helper::item::DefaultSkimItem;
@@ -119,7 +121,7 @@ pub struct DefaultSkimProviderControl {
     // for joining
     command: Option<Child>,
     // for killing child process if exists
-    wakeup_buf: File, // send anything to wake up the buf reading thread
+    to_stop: Arc<AtomicBool>, // send anything to wake up the buf reading thread
 }
 
 impl SkimItemProviderControl for DefaultSkimProviderControl {
@@ -127,8 +129,7 @@ impl SkimItemProviderControl for DefaultSkimProviderControl {
         // kill the child process if exists
         let _ = self.command.as_mut().map(|mut child| child.kill());
         // interrupt the buf reading thread
-        let _ = self.wakeup_buf.write_all(b"x");
-        let _ = self.wakeup_buf.flush();
+        let _ = self.to_stop.store(true, Ordering::SeqCst);
         let _ = self.join_handle.take().map(|th| th.join());
     }
 
@@ -168,37 +169,42 @@ impl DefaultSkimProvider {
         unsafe { (File::from_raw_fd(rx), File::from_raw_fd(tx)) }
     }
 
-    fn raw_bufread(&self, source: Box<dyn ReadAndAsRawFd>, item_pool: Arc<dyn SkimItemPool>) -> (File, JoinHandle<()>) {
+    fn raw_bufread(&self, source: Box<dyn ReadAndAsRawFd>, item_pool: Arc<dyn SkimItemPool>) -> (Arc<AtomicBool>, JoinHandle<()>) {
         let line_ending = self.option.line_ending;
-        let (rx_interrupt, tx_interrupt) = Self::generate_pipe();
+        // let (rx_interrupt, tx_interrupt) = Self::generate_pipe();
+        let to_stop = Arc::new(AtomicBool::new(false));
+        let to_stop_clone = to_stop.clone();
         let option = self.option.clone();
         let join_handle = thread::spawn(move || {
-            let mut buffer = Vec::with_capacity(1024);
-            let mut bufreader = InterruptibleBufReader::new(source, Box::new(rx_interrupt));
+            let mut string = String::with_capacity(1024);
+            let mut bufreader = BufReader::new(source);
             loop {
-                buffer.clear();
                 // start reading
-                match bufreader.read_until(line_ending, &mut buffer) {
+                let read_result = unsafe {
+                    let buf = string.as_mut_vec();
+                    bufreader.read_until(line_ending, buf)
+                };
+                match read_result {
                     Ok(n) => {
-                        if n == 0 {
+                        if n == 0 || to_stop_clone.load(Ordering::SeqCst) {
                             break;
                         }
 
-                        if buffer.ends_with(&[b'\r', b'\n']) {
-                            buffer.pop();
-                            buffer.pop();
-                        } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
-                            buffer.pop();
+                        if string.as_bytes()[string.len()-1] == b'\n' {
+                            string.pop();
+                            if string.as_bytes()[string.len()-1] == b'\r' {
+                                string.pop();
+                            }
+                        } else if string.as_bytes()[string.len()-1] == b'\0' {
+                            string.pop();
                         }
 
-                        let buffer_taken = buffer;
-                        buffer = Vec::with_capacity(1024);
-                        let string = String::from_utf8(buffer_taken).expect("");
+                        let string_taken = std::mem::replace(&mut string, String::with_capacity(1024));
                         if option.is_simple() {
-                            item_pool.push(Arc::new(string));
+                            item_pool.push(Arc::new(string_taken));
                         } else {
                             let raw_item = DefaultSkimItem::new(
-                                string,
+                                string_taken,
                                 option.use_ansi_color,
                                 &option.transform_fields,
                                 &option.matching_fields,
@@ -212,7 +218,7 @@ impl DefaultSkimProvider {
                 }
             }
         });
-        (tx_interrupt, join_handle)
+        (to_stop, join_handle)
     }
 }
 
@@ -222,12 +228,12 @@ impl SkimItemProvider for DefaultSkimProvider {
         match source {
             ProviderSource::Pipe(pipe) => {
                 let (tx_interrupt, join_handle) = self.raw_bufread(pipe, pool);
-                Box::new(DefaultSkimProviderControl { join_handle: Some(join_handle), command: None, wakeup_buf: tx_interrupt })
+                Box::new(DefaultSkimProviderControl { join_handle: Some(join_handle), command: None, to_stop: tx_interrupt })
             }
             ProviderSource::Command(cmd) => {
                 let (command, pipe) = get_command_output(&cmd).expect("command not found");
                 let (tx_interrupt, join_handle) = self.raw_bufread(pipe, pool);
-                Box::new(DefaultSkimProviderControl { join_handle: Some(join_handle), command, wakeup_buf: tx_interrupt })
+                Box::new(DefaultSkimProviderControl { join_handle: Some(join_handle), command, to_stop: tx_interrupt })
             }
         }
     }
@@ -252,26 +258,21 @@ fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
     Ok((Some(command), Box::new(stdout)))
 }
 
-struct InterruptibleBufReader {
+struct MyBufReader {
     source: Box<dyn ReadAndAsRawFd>,
-    tx_interrupt: Box<dyn ReadAndAsRawFd>,
-    buf: [u8; 1024],
+    buf: [u8; 4096],
     filled: usize,
     pos: usize,
 }
 
-impl InterruptibleBufReader {
-    fn new(source: Box<dyn ReadAndAsRawFd>, tx_interrupt: Box<dyn ReadAndAsRawFd>) -> Self {
-        Self { source, tx_interrupt, buf: [0; 1024], filled: 0, pos: 0 }
+impl MyBufReader {
+    fn new(source: Box<dyn ReadAndAsRawFd>) -> Self {
+        Self { source, buf: [0; 4096], filled: 0, pos: 0 }
     }
 
+    #[inline]
     fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
         if self.pos >= self.filled {
-            let state = wait_until_ready(self.source.as_raw_fd(), Some(self.tx_interrupt.as_raw_fd()), Duration::from_secs(0));
-            if state == INTERRUPTED {
-                return Err(std::io::Error::new(ErrorKind::Interrupted, "by user signal"));
-            }
-
             self.pos = 0;
             self.filled = self.source.read(&mut self.buf)?;
         }
@@ -279,22 +280,32 @@ impl InterruptibleBufReader {
         Ok(&self.buf[self.pos..self.filled])
     }
 
+    #[inline]
     fn consume(&mut self, amt: usize) {
         self.pos += amt;
     }
 
+    #[inline]
     fn read_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> std::io::Result<usize> {
         let mut read = 0;
         loop {
             let (done, used) = {
                 let available = self.fill_buf()?;
-                match available.iter().position(|&c| c == delim) {
+                match memchr(delim, available) {
                     Some(i) => {
-                        buf.extend_from_slice(&available[..=i]);
+                        let old_len = buf.len();
+                        let new_len = old_len + i + 1;
+                        unsafe {buf.set_len(new_len);}
+                        buf.reserve_exact(i+1);
+                        let _ = memcpy(&mut buf[old_len..new_len], &available[..=i]).expect("memcpy failed");
                         (true, i + 1)
                     }
                     None => {
-                        buf.extend_from_slice(available);
+                        let old_len = buf.len();
+                        let new_len = buf.len() + available.len() + 1;
+                        unsafe {buf.set_len(new_len);}
+                        buf.reserve_exact(available.len() + 1);
+                        let _ = memcpy(&mut buf[old_len..new_len], available).expect("memcpy failed");
                         (false, available.len())
                     }
                 }
@@ -305,5 +316,22 @@ impl InterruptibleBufReader {
                 return Ok(read);
             }
         }
+    }
+}
+
+fn memcpy(dst: &mut [u8], src: &[u8]) -> Result<(), ()> {
+    if dst.len() < src.len() {
+        return Err(());
+    }
+    unsafe {
+        copy_bytes(src.as_ptr(), dst.as_mut_ptr(), src.len());
+    }
+    Ok(())
+}
+
+#[inline]
+unsafe fn copy_bytes(src: *const u8, dst: *mut u8, count: usize){
+    for i in 0..count{
+        *dst.add(i) = *src.add(i);
     }
 }
