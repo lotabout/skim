@@ -75,7 +75,7 @@ impl<T: Clone> ChunkList<T> {
         *inner = ChunkListInner::new();
     }
 
-    pub fn snapshot(&self, start: usize) -> Vec<Chunk<T>> {
+    pub fn snapshot(&self, start: usize) -> ChunkListSnapshot<T> {
         let mut ret = Vec::new();
         let inner = self.inner.lock();
 
@@ -91,11 +91,43 @@ impl<T: Clone> ChunkList<T> {
 
         // copy the last chunk
         ret.push(Arc::new(Vec::from(&inner.pending[max(scanned, start) - scanned..])));
-        ret
+        ChunkListSnapshot::new(ret)
     }
 
     pub fn len(&self) -> usize {
         self.len.load(Ordering::Relaxed)
+    }
+}
+
+pub struct ChunkListSnapshot<T: Sized>{
+    chunks: Vec<Chunk<T>>,
+    item_len: usize,
+
+}
+
+impl<T> ChunkListSnapshot<T> {
+    pub fn new(chunks: Vec<Chunk<T>>) -> Self {
+        let len = chunks.iter().map(|c| c.len()).sum();
+        Self {
+            chunks,
+            item_len: len,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.item_len == 0
+    }
+
+    pub fn len(&self) -> usize {
+        self.item_len
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=&T> {
+        self.chunks.iter().flat_map(|c| c.iter())
+    }
+
+    pub fn chunks(&self) -> &[Chunk<T>] {
+        &self.chunks
     }
 }
 

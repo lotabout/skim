@@ -4,6 +4,7 @@ use std::cmp::min;
 use std::default::Default;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use parking_lot::Mutex;
 
 use crate::spinlock::{SpinLock, SpinLockGuard};
 use crate::{Arc, MatchRange, Rank, SkimItem, SkimItemPool};
@@ -72,7 +73,7 @@ pub struct MatchedItem {
 impl MatchedItem {}
 
 use std::cmp::Ordering as CmpOrd;
-use crate::chunklist::{Chunk, ChunkList};
+use crate::chunklist::{Chunk, ChunkList, ChunkListSnapshot};
 
 impl PartialEq for MatchedItem {
     fn eq(&self, other: &Self) -> bool {
@@ -103,7 +104,7 @@ pub struct ItemPool {
     taken: AtomicUsize,
 
     /// reverse first N lines as header
-    reserved_items: SpinLock<Vec<Arc<dyn SkimItem>>>,
+    reserved_items: Arc<ChunkList<Arc<dyn SkimItem>>>,
     lines_to_reserve: usize,
 }
 
@@ -112,7 +113,7 @@ impl ItemPool {
         Self {
             pool: Arc::new(ChunkList::new()),
             taken: AtomicUsize::new(0),
-            reserved_items: SpinLock::new(Vec::new()),
+            reserved_items: Arc::new(ChunkList::new()),
             lines_to_reserve: 0,
         }
     }
@@ -136,8 +137,7 @@ impl ItemPool {
 
     pub fn clear(&self) {
         self.pool.clear();
-        let mut header_items = self.reserved_items.lock();
-        header_items.clear();
+        self.reserved_items.clear();
         self.taken.store(0, Ordering::SeqCst);
     }
 
@@ -150,13 +150,12 @@ impl ItemPool {
     pub fn append(&self, mut items: Vec<Arc<dyn SkimItem>>) -> usize {
         let len = items.len();
         trace!("item pool, append {} items", len);
-        let mut header_items = self.reserved_items.lock();
 
-        let to_reserve = self.lines_to_reserve - header_items.len();
+        let to_reserve = self.lines_to_reserve - self.reserved_items.len();
         if to_reserve > 0 {
-            let num_to_reserve = min(to_reserve, items.len());
+            let num_to_reserve = min(to_reserve, self.reserved_items.len());
             let to_append = items.split_off(num_to_reserve);
-            header_items.extend(items);
+            self.reserved_items.append_vec(items);
             self.pool.append_vec(to_append);
         } else {
             self.pool.append_vec(items);
@@ -166,27 +165,25 @@ impl ItemPool {
     }
 
     pub fn push_item(&self, item: Arc<dyn SkimItem>) -> usize {
-        let mut header_items = self.reserved_items.lock();
-        let to_reserve = self.lines_to_reserve - header_items.len();
+        let to_reserve = self.lines_to_reserve - self.reserved_items.len();
         if to_reserve > 0 {
-            header_items.push(item)
+            self.reserved_items.push(item);
         } else {
             self.pool.push(item);
         }
         self.pool.len()
     }
 
-    pub fn take(&self) -> Vec<Chunk<Arc<dyn SkimItem>>> {
+    pub fn take(&self) -> ChunkListSnapshot<Arc<dyn SkimItem>> {
         // TODO: fix state: taken
         let ret = self.pool.snapshot(self.taken.load(Ordering::SeqCst));
-        let num = ret.iter().map(|c| c.len()).sum();
+        let num = ret.len();
         let _taken = self.taken.fetch_add(num, Ordering::SeqCst);
         ret
     }
 
-    pub fn reserved(&self) -> ItemPoolGuard<Arc<dyn SkimItem>> {
-        let guard = self.reserved_items.lock();
-        ItemPoolGuard { guard, start: 0 }
+    pub fn reserved(&self) -> ChunkListSnapshot<Arc<dyn SkimItem>> {
+        self.reserved_items.snapshot(0)
     }
 }
 
@@ -202,19 +199,6 @@ impl SkimItemPool for defer_drop::DeferDrop<ItemPool> {
     }
 }
 
-
-pub struct ItemPoolGuard<'a, T: Sized + 'a> {
-    guard: SpinLockGuard<'a, Vec<T>>,
-    start: usize,
-}
-
-impl<'mutex, T: Sized> Deref for ItemPoolGuard<'mutex, T> {
-    type Target = [T];
-
-    fn deref(&self) -> &[T] {
-        &self.guard[self.start..]
-    }
-}
 
 //------------------------------------------------------------------------------
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

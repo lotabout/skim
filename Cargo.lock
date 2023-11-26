@@ -130,15 +130,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
-name = "cpufeatures"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce420fe07aecd3e67c5f910618fe65e94158f6dcc0adf44e00d69ce2bdfe0fd0"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "crossbeam"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -523,15 +514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "memx"
-version = "0.1.30"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "494b592fa2aededee4bae079e13a99a3843d60e19ed8a42cc36b1701061e30c8"
-dependencies = [
- "cpufeatures",
-]
-
-[[package]]
 name = "nix"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -769,8 +751,6 @@ dependencies = [
  "fuzzy-matcher",
  "lazy_static",
  "log",
- "memchr",
- "memx",
  "nix 0.25.0",
  "parking_lot",
  "rayon",

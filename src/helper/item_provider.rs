@@ -10,7 +10,6 @@ use std::time::Duration;
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::unistd::pipe;
 use regex::Regex;
-use memchr::memchr;
 use crate::{Arc, ProviderSource, ReadAndAsRawFd, SkimItemPool, SkimItemProvider, SkimItemProviderControl};
 use crate::field::FieldRange;
 use crate::helper::item::DefaultSkimItem;
@@ -176,35 +175,32 @@ impl DefaultSkimProvider {
         let to_stop_clone = to_stop.clone();
         let option = self.option.clone();
         let join_handle = thread::spawn(move || {
-            let mut string = String::with_capacity(1024);
-            let mut bufreader = BufReader::new(source);
+            let mut buffer = Vec::with_capacity(option.buf_size);
+            let mut bufreader = BufReader::with_capacity(option.buf_size, source);
             loop {
+                buffer.clear();
+
                 // start reading
-                let read_result = unsafe {
-                    let buf = string.as_mut_vec();
-                    bufreader.read_until(line_ending, buf)
-                };
-                match read_result {
+                match bufreader.read_until(option.line_ending, &mut buffer) {
                     Ok(n) => {
-                        if n == 0 || to_stop_clone.load(Ordering::SeqCst) {
+                        if n == 0 {
                             break;
                         }
 
-                        if string.as_bytes()[string.len()-1] == b'\n' {
-                            string.pop();
-                            if string.as_bytes()[string.len()-1] == b'\r' {
-                                string.pop();
-                            }
-                        } else if string.as_bytes()[string.len()-1] == b'\0' {
-                            string.pop();
+                        if buffer.ends_with(&[b'\r', b'\n']) {
+                            buffer.pop();
+                            buffer.pop();
+                        } else if buffer.ends_with(&[b'\n']) || buffer.ends_with(&[b'\0']) {
+                            buffer.pop();
                         }
 
-                        let string_taken = std::mem::replace(&mut string, String::with_capacity(1024));
+                        let line = String::from_utf8_lossy(&buffer).to_string();
+
                         if option.is_simple() {
-                            item_pool.push(Arc::new(string_taken));
+                            item_pool.push(Arc::new(line));
                         } else {
                             let raw_item = DefaultSkimItem::new(
-                                string_taken,
+                                line,
                                 option.use_ansi_color,
                                 &option.transform_fields,
                                 &option.matching_fields,
@@ -213,7 +209,6 @@ impl DefaultSkimProvider {
                             item_pool.push(Arc::new(raw_item));
                         }
                     }
-                    Err(ref e) if e.kind() == ErrorKind::Interrupted=> break,
                     Err(_err) => {} // String not UTF8 or other error, skip.
                 }
             }
@@ -256,82 +251,4 @@ fn get_command_output(cmd: &str) -> Result<CommandOutput, Box<dyn Error>> {
         .ok_or_else(|| "command output: unwrap failed".to_owned())?;
 
     Ok((Some(command), Box::new(stdout)))
-}
-
-struct MyBufReader {
-    source: Box<dyn ReadAndAsRawFd>,
-    buf: [u8; 4096],
-    filled: usize,
-    pos: usize,
-}
-
-impl MyBufReader {
-    fn new(source: Box<dyn ReadAndAsRawFd>) -> Self {
-        Self { source, buf: [0; 4096], filled: 0, pos: 0 }
-    }
-
-    #[inline]
-    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-        if self.pos >= self.filled {
-            self.pos = 0;
-            self.filled = self.source.read(&mut self.buf)?;
-        }
-
-        Ok(&self.buf[self.pos..self.filled])
-    }
-
-    #[inline]
-    fn consume(&mut self, amt: usize) {
-        self.pos += amt;
-    }
-
-    #[inline]
-    fn read_until(&mut self, delim: u8, buf: &mut Vec<u8>) -> std::io::Result<usize> {
-        let mut read = 0;
-        loop {
-            let (done, used) = {
-                let available = self.fill_buf()?;
-                match memchr(delim, available) {
-                    Some(i) => {
-                        let old_len = buf.len();
-                        let new_len = old_len + i + 1;
-                        unsafe {buf.set_len(new_len);}
-                        buf.reserve_exact(i+1);
-                        let _ = memcpy(&mut buf[old_len..new_len], &available[..=i]).expect("memcpy failed");
-                        (true, i + 1)
-                    }
-                    None => {
-                        let old_len = buf.len();
-                        let new_len = buf.len() + available.len() + 1;
-                        unsafe {buf.set_len(new_len);}
-                        buf.reserve_exact(available.len() + 1);
-                        let _ = memcpy(&mut buf[old_len..new_len], available).expect("memcpy failed");
-                        (false, available.len())
-                    }
-                }
-            };
-            self.consume(used);
-            read += used;
-            if done || used == 0 {
-                return Ok(read);
-            }
-        }
-    }
-}
-
-fn memcpy(dst: &mut [u8], src: &[u8]) -> Result<(), ()> {
-    if dst.len() < src.len() {
-        return Err(());
-    }
-    unsafe {
-        copy_bytes(src.as_ptr(), dst.as_mut_ptr(), src.len());
-    }
-    Ok(())
-}
-
-#[inline]
-unsafe fn copy_bytes(src: *const u8, dst: *mut u8, count: usize){
-    for i in 0..count{
-        *dst.add(i) = *src.add(i);
-    }
 }

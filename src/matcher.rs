@@ -94,7 +94,8 @@ impl Matcher {
 
             trace!("matcher start, total: {}", items.len());
             let result_chunks: Result<Vec<Vec<_>>, _> = items
-                .into_par_iter()
+                .chunks()
+                .par_iter()
                 .enumerate()
                 .filter_map(|(chunk_index, chunk)| {
                     let mut ret_chunk = Vec::with_capacity(chunk.len());
