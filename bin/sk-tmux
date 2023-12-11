@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -p*|-w*|-h*|-x*|-y*|-d*|-u*|-r*|-l*)
       if [[ "$arg" =~ ^-[pwhxy] ]]; then
-        [[ "$opt" =~ "-K -E" ]] || opt="-K -E"
+        [[ "$opt" =~ "-E" ]] || opt="-E"
       elif [[ "$arg" =~ ^.[lr] ]]; then
         opt="-h"
         if [[ "$arg" =~ ^.l ]]; then
@@ -165,7 +165,7 @@ fi
 args=("${args[@]}" "--no-height")
 
 # Handle zoomed tmux pane without popup options by moving it to a temp window
-if [[ ! "$opt" =~ "-K -E" ]] && tmux list-panes -F '#F' | grep -q Z; then
+if [[ ! "$opt" =~ "-E" ]] && tmux list-panes -F '#F' | grep -q Z; then
   zoomed_without_popup=1
   original_window=$(tmux display-message -p "#{window_id}")
   tmp_window=$(tmux new-window -d -P -F "#{window_id}" "bash -c 'while :; do for c in \\| / - '\\;' do sleep 0.2; printf \"\\r\$c sk-tmux is running\\r\"; done; done'")
@@ -207,7 +207,7 @@ trap 'cleanup 1' SIGUSR1
 trap 'cleanup' EXIT
 
 envs="export TERM=$TERM "
-[[ "$opt" =~ "-K -E" ]] && SKIM_DEFAULT_OPTIONS="--margin 0,1 $SKIM_DEFAULT_OPTIONS"
+[[ "$opt" =~ "-E" ]] && SKIM_DEFAULT_OPTIONS="--margin 0,1 $SKIM_DEFAULT_OPTIONS"
 [[ -n "$SKIM_DEFAULT_OPTIONS"    ]] && envs="$envs SKIM_DEFAULT_OPTIONS=$(printf %q "$SKIM_DEFAULT_OPTIONS")"
 [[ -n "$SKIM_DEFAULT_COMMAND" ]] && envs="$envs SKIM_DEFAULT_COMMAND=$(printf %q "$SKIM_DEFAULT_COMMAND")"
 echo "$envs;" > "$argsf"
@@ -221,7 +221,7 @@ close="; trap - EXIT SIGINT SIGTERM $close"
 
 export TMUX=$(cut -d , -f 1,2 <<< "$TMUX")
 mkfifo -m o+w $fifo2
-if [[ "$opt" =~ "-K -E" ]]; then
+if [[ "$opt" =~ "-E" ]]; then
   cat $fifo2 &
   if [[ -n "$term" ]] || [[ -t 0 ]]; then
     cat <<< "\"$sk\" $opts > $fifo2; out=\$? $close; exit \$out" >> $argsf
@@ -230,7 +230,7 @@ if [[ "$opt" =~ "-K -E" ]]; then
     cat <<< "\"$sk\" $opts < $fifo1 > $fifo2; out=\$? $close; exit \$out" >> $argsf
     cat <&0 > $fifo1 &
   fi
-  tmux popup -d "$PWD" "${tmux_args[@]}" $opt -R "bash $argsf" > /dev/null 2>&1
+  tmux popup -d "$PWD" "${tmux_args[@]}" $opt "bash $argsf" > /dev/null 2>&1
   exit $?
 fi
 
