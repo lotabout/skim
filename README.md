@@ -67,6 +67,7 @@ The skim project contains several components:
 | Alpine         | apk               | `apk add skim`               |
 | Arch           | pacman            | `pacman -S skim`             |
 | Gentoo         | Portage           | `emerge --ask app-misc/skim` |
+| Void           | XBPS              | `xbps-install -Su skim`      |
 
 See [repology](https://repology.org/project/skim/versions) for a comprehensive overview of package availability.
 
