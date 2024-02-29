@@ -122,9 +122,9 @@ while [[ $# -gt 0 ]]; do
       elif [[ "$size" =~ %$ ]]; then
         size=${size:0:((${#size}-1))}
         if [[ -n "$swap" ]]; then
-          opt="$opt -p $(( 100 - size ))"
+          opt="$opt -l $(( 100 - size ))"
         else
-          opt="$opt -p $size"
+          opt="$opt -l $size"
         fi
       else
         if [[ -n "$swap" ]]; then
@@ -182,6 +182,7 @@ fifo2="${TMPDIR:-/tmp}/sk-fifo2-$id"
 fifo3="${TMPDIR:-/tmp}/sk-fifo3-$id"
 tmux_win_opts=( $(tmux show-window-options remain-on-exit \; show-window-options synchronize-panes | sed '/ off/d; s/^/set-window-option /; s/$/ \\;/') )
 cleanup() {
+  kill $(jobs -p) 2>/dev/null
   \rm -f $argsf $fifo1 $fifo2 $fifo3
 
   # Restore tmux window options
